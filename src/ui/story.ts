@@ -74,6 +74,7 @@ function draw() {
 // milestones that need no debt: the first 大货 pulled, and each set newly unlocked (baseline taken at start, so old saves don't replay)
 function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const b = debtBeat(ev, G), id = sceneFor(b, seen);
+  if (id === 'branch') { seen.sets = unlockedSets().length; save(); } // the new shop relocks the later sets: each unlock plays again
   if (b && id) play(id, b.kind === 'story' ? storyCtx() : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);
   const big = ev?.open?.flat().filter(c => c.price >= BIG_PULL).sort((a, c) => c.price - a.price)[0];
   if (big && !seen.bigpull) play('bigpull', { card: big.name, price: money(big.price) });

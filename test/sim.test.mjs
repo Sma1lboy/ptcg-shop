@@ -571,6 +571,7 @@ console.log('ok luck percentile');
   const L1 = G.luck(); assert.deepEqual([L1.packs, L1.value, L1.pct, Object.keys(st().dexSeen).length, st().ach.x, st().branch.fame, st().branch.n], [L0.packs, L0.value, L0.pct, dex0, 1, 3, 0], 'what you learned stays');
   assert.deepEqual([st().branch.broke, G.loanRate()], [1, G.LOAN_RATE + G.LOAN_MARK]); assert.ok(!G.canBranch(), 'a bankrupt shop cannot branch');
   G.ackWreck(); assert.equal(st().wreck, null);
+  assert.equal(D.debtBeat({ type: 'bill_due', week: 1 }, G).key, 'due:0.1:1', 'after a bankruptcy week 1 is a new run for the story');
   // Closed shop: however long, one stretch moves the bill clock one week at most (and without a clerk only an hour is credited).
   st().cash = 1e6; T += 8 * 3600e3; G.tick(); assert.equal(st().week, 2, 'eight hours closed = one visit from 九姐');
   // Soft-lock guard with no credit left is a bankruptcy, not a free top-up.
