@@ -24,7 +24,8 @@ export interface State {
   shown: Shown[]; casePct?: number; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
-  offline: { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number } | null; // bills / borrowed: paid to 九姐 / borrowed while away
+  offline: Receipt | null; // the 打烊小票 still on screen: what absences of AWAY seconds or more took in, added up until put away
+  away: (Receipt & { at: number }) | null; // the absence going on now (at = when the player left), null while they are here
   ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
   branch: Branch;
   // 债务 (GAMEPLAY.md): owe = what is left of the opening debt (paid in weekly installments, no interest), loan = what was
@@ -37,6 +38,8 @@ export interface State {
   debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
   overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
 }
+// secs = seconds the shop traded (up to offlineCap), sales = paying visits; bills / borrowed: paid to 九姐 / borrowed meanwhile
+export interface Receipt { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number }
 export interface Loan { at: number; week: number; amount: number; forced: boolean }
 export interface Wreck { at: number; week: number; shop: number; debt: number; cash: number; goods: number; cards: number; revenue: number }
 // 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
@@ -117,6 +120,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop time credited on return, with a clerk minding the shop (看店 adds more)
   const NOCLERK_CAP = 3600;               // without a clerk nobody minds the shop: at most an hour is credited (sales and the bill clock alike)
+  // 离开 (game setting): the page hidden (another tab, a locked screen, a closed lid) or closed is one absence, from the moment
+  // the player left to the moment they are back, however the browser spaced the ticks in between. An absence trades for at most
+  // offlineCap() and moves the bill clock at most one WEEK, both counted from when it began; a bill short of cash waits (grace
+  // only runs while the player is here). The UI reports leaving and coming back (leave / back); without it (node, a machine that
+  // slept with the page open) a gap between two ticks longer than AWAY is an absence of its own. Absences of AWAY or longer
+  // print a 打烊小票; shorter ones are just the shop carrying on.
+  const AWAY = 120;
   // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time while the page is open; a closed stretch
   // (sales credited up to offlineCap) moves the bill clock one week at most: 九姐 calls once while you are away. Shop n (0 = the first) owes
   // DEBT0 × (1 + DEBT_STEP·n); week w's bill is BILL0 × (1 + DEBT_STEP·n) × BILL_G^(w−1), capped at what is left, plus whatever
@@ -249,7 +259,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
   const rate = () => ARRIVAL * (street().crowd ?? 1) * (1 + REG_STEP * perk('regulars')) * (1 + SKILLS.crowd.step * skill('crowd')) * crowdMult(); // walk-ins per second; 老主顾 and 人气 sit outside the cap (each has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, away: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
     debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null });
 
   let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
@@ -607,34 +617,54 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     borrow(BAILOUT, true); log('货架空了、钱也花光了：九姐借你进货钱，记在账上', 'loss', BAILOUT); return true;
   }
 
-  // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up.
-  function tick() {
-    const now = clock(), dt = Math.min((now - lastTick) / 1000, offlineCap()); lastTick = now;
+  // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up. While the
+  // player is away (see AWAY) the shop trades until offlineCap() after they left and the bill clock runs until one WEEK after.
+  // busy = the player is watching packs being revealed (the UI holds the ledger and the story until it is done, up to ~3 minutes
+  // of 连开): the shop and the bill clock run as usual, only an overdue bill's grace waits, as it does while they are away.
+  function tick(busy = false) {
+    const now = clock(), from = lastTick; lastTick = now;
+    const gap = !state.away && now - from > AWAY * 1000; // nobody said the player left, but the page did not run: that was an absence
+    if (gap) state.away = { at: from, secs: 0, sales: 0, revenue: 0, lost: 0 };
+    const a = state.away, end = a ? Math.min(now, a.at + offlineCap() * 1000) : now, billEnd = a ? a.at + WEEK * 1000 : Infinity, dt = (end - from) / 1000;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0, short: 0 }, lost0 = state.lost, slice = CLERK_SLICE, away = dt > 30;
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0, short: 0 }, lost0 = state.lost, slice = CLERK_SLICE;
     let n = 0, revenue = 0, sales = 0;
     for (let left = dt; left > 0; left -= slice) {
-      const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
+      const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = end - left * 1000, t1 = t0 + len * 1000;
       n += m;
       for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
-      clerkWork(acc, now - (left - len) * 1000);
-      debtWork(away ? len * Math.min(1, WEEK / dt) : len, away); // a closed stretch moves the bill clock one week at most
+      clerkWork(acc, t1);
+      debtWork(Math.max(0, Math.min(t1, billEnd) - t0) / 1000, !!a || busy); // past the week, still called: a bill that fell due is paid once sales cover it
     }
-    if (away && state.overdue) state.overdue.until = Math.max(state.overdue.until, state.shopT + GRACE); // what could not be covered while away gets its grace from the return
     if (acc.packs || acc.short) log(`店员进货 ${acc.packs} 包${acc.short ? `，钱不够，货架还差 $${Math.round(acc.short).toLocaleString('en-US')} 的货` : ''}`, acc.short ? 'loss' : '', acc.packs ? -acc.spent : undefined);
     if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
     if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
-    if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
-      const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
-      o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
-      for (const e of pending) { if (e.type === 'bill_paid') o.bills = (o.bills || 0) + e.amount!; if (e.type === 'loan_taken') o.borrowed = (o.borrowed || 0) + e.amount!; }
-      log(`打烊期间成交 ${sales} 位顾客`, 'gain', revenue);
+    if (a) {
+      a.secs += dt; a.sales += sales; a.revenue += revenue; a.lost += state.lost - lost0;
+      for (const e of pending) { if (e.type === 'bill_paid') a.bills = (a.bills || 0) + e.amount!; if (e.type === 'loan_taken') a.borrowed = (a.borrowed || 0) + e.amount!; }
     }
-    const rescued = bailout();
+    if (gap) home(now);
+    const rescued = !state.away && bailout(); // nobody is lent money, or goes bankrupt, while away
     if (flush()) return;
-    if (n || dt > 30 || acc.packs || acc.short || acc.bulk || acc.listed || rescued) emit(); else save();
+    if (n || a || acc.packs || acc.short || acc.bulk || acc.listed || rescued) emit(); else save();
   }
+  // The player is back: the absence ends. One of AWAY or longer goes on the 打烊小票 (added to one still on screen) and gets one
+  // line in 店内动态 saying how long they were gone and, if longer than the shop could trade, for how long it did.
+  function home(at: number) {
+    const a = state.away; if (!a) return;
+    state.away = null;
+    const gone = (at - a.at) / 1000, dur = (s: number) => s >= 3600 ? `${(s / 3600).toFixed(1)} 小时` : `${Math.round(s / 60)} 分钟`;
+    if (gone < AWAY || !a.secs) return;
+    const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
+    o.secs += a.secs; o.sales += a.sales; o.revenue += a.revenue; o.lost += a.lost;
+    if (a.bills) o.bills = (o.bills || 0) + a.bills;
+    if (a.borrowed) o.borrowed = (o.borrowed || 0) + a.borrowed;
+    const cut = gone - a.secs > 60 ? `，店开了 ${dur(a.secs)}（${lvl('clerk') ? `店员看店最多 ${offlineCap() / 3600} 小时` : '没雇店员，最多开 1 小时'}）` : '';
+    log(`离开 ${dur(gone)}${cut}：成交 ${a.sales} 位顾客`, 'gain', a.revenue);
+  }
+  function leave() { if (state.away) return; tick(); state.away = { at: clock(), secs: 0, sales: 0, revenue: 0, lost: 0 }; save(); }
+  function back() { if (!state.away) return; tick(); home(clock()); if (!flush()) emit(); }
   // ---------- 债务: weekly bills, loans, bankruptcy (numbers at WEEK above) ----------
   const debtScale = () => 1 + DEBT_STEP * state.branch.n;
   const debt0 = () => Math.round(DEBT0 * debtScale());
@@ -674,7 +704,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const inst = installment(w), amount = cents(inst + Math.max(0, state.loan - creditLimit()));
     if (amount <= 0) return;
     pending.push({ type: 'bill_due', week: w, amount });
-    if (state.overdue) { state.overdue = { ...state.overdue, week: w, amount: cents(state.overdue.amount + amount), inst: state.overdue.inst + inst }; return; } // piled up while away
+    if (state.overdue) { state.overdue = { week: w, amount: cents(state.overdue.amount + amount), inst: state.overdue.inst + inst, until: Math.max(state.overdue.until, state.shopT + GRACE) }; return; } // piled up while away: the new bill gets its own grace
     if (state.cash >= amount) settle({ week: w, amount, inst });
     else {
       state.overdue = { week: w, amount, inst, until: state.shopT + GRACE };
@@ -682,19 +712,20 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       pending.push({ type: 'bill_missed', week: w, amount });
     }
   }
-  // Grace is over (or the shop is away and cannot be asked): borrow what cash does not cover, or go bankrupt.
+  // Grace is over: borrow what cash does not cover, or go bankrupt.
   function lapse() {
     const o = state.overdue!, short = cents(o.amount - state.cash);
     if (short > credit()) { bankrupt(); return; }
     borrow(short, true); log(`宽限到了：九姐替你把第 ${o.week} 周的账垫上，借 $${short.toFixed(0)}`, 'loss', short);
     settle(o);
   }
-  function debtWork(len: number, away: boolean) {
+  function debtWork(len: number, away: boolean) { // away: the player is gone or busy (tick): grace only runs while they can see it, whatever is left of it waits
+    if (away && state.overdue) state.overdue.until += len;
     state.shopT += len;
     while (state.shopT >= state.week * WEEK) weekEnd();
     const o = state.overdue; if (!o) return;
     if (state.cash >= o.amount) settle(o);
-    else if (state.shopT >= o.until || (away && o.amount - state.cash <= credit())) lapse();
+    else if (!away && state.shopT >= o.until) lapse();
   }
   // Pays an overdue bill now (if cash covers it).
   function payBill() { const o = state.overdue; if (!o || state.cash < o.amount) return false; settle(o); flush(); return true; }
@@ -804,9 +835,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
-    WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
+    WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,

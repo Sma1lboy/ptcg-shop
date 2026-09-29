@@ -30,8 +30,12 @@ function renderAll() { if (hold) { renderShelf(); renderRail(); return; } render
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);
 G.on(renderAll);
-setInterval(() => G.tick(), 1000);
+setInterval(() => G.tick(hold), 1000); // mid-reveal the grace of an overdue bill waits (the ledger and the story wait too)
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
+// Another tab, a locked screen, a closed lid: the player is away (game.ts AWAY) until the page is seen again, however the browser
+// throttles the timer meanwhile. A page opened in a background tab starts away.
+const seen = () => { if (document.hidden) G.leave(); else G.back(); };
+document.addEventListener('visibilitychange', seen); seen();
 
 renderBasis(); bindLayout(); initLedger();
 initSound(); // after the boot tick: the hours the shop was closed ring nothing; before the story, which sets the opening's first scene
