@@ -45,6 +45,6 @@ export function bindLayout() {
   // or the table would be sized against a hidden (0×0) host.
   document.addEventListener('click', e => {
     const b = (e.target as Element).closest<HTMLElement>('[data-act]');
-    if (b && /^(open1|open10|buyopen)$/.test(b.dataset.act!)) go('open');
+    if (b && /^(open1|open10|fill10|buyopen)$/.test(b.dataset.act!)) go('open');
   }, true);
 }

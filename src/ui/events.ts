@@ -20,6 +20,7 @@ export function bindEvents() {
       case 'buyopen': if (G.buy(id, 1)) startPack(id); break;
       case 'open1': startPack(id); break;
       case 'open10': openBatch(id); break;
+      case 'fill10': if (G.buy(id, 10 - (G.state.stock[id] || 0))) openBatch(id); break;
       case 'tear': tear(b); break;
       case 'advance': advance(); break;
       case 'peek': peek(+b.dataset.i!); break;

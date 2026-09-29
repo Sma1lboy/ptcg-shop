@@ -33,4 +33,10 @@ export function toShelf(id: string) {
   const st = G.state.stock[id] || 0;
   return Math.min(room, st > 1 ? st - 1 : st);
 }
+// The batch button: with 2–9 packs in the back room and cash for the rest, it tops up to 10 first — only a batch of exactly 10 is
+// a 十连 (the achievement and the 十连 stats count those), and a player reading 「开 9 包」 takes it for one.
+export function batchBtn(id: string, again = false) {
+  const n = G.state.stock[id] || 0, fill = n > 1 && n < 10 && G.state.cash >= G.wholesale(id) * (10 - n) ? 10 - n : 0;
+  return { act: fill ? 'fill10' : 'open10', text: fill ? `补 ${fill} 包，开十连` : `${again ? '再开' : '开'} ${Math.min(10, n)} 包` };
+}
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };

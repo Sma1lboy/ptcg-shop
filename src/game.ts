@@ -57,6 +57,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const ARRIVAL = 0.5;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
   const WAREHOUSE = 200;         // packs per set the back room holds; only shelf packs are for sale
   const MIN_PCT = 0.6, MAX_PCT = 1.6, PCT_STEP = 0.05; // asking price as a share of market, for shelf packs and case singles
+  const DEFAULT_PCT = 0.95; // a set's tag before you touch it: under market, because the cheapest-shopping set (sv08, mean ceiling 100%) loses half its buyers at 100% on a cold day
   // Customer types. tol = the most a customer will pay, as a share of market (mean; sd is the spread between individuals).
   const TYPES: Record<string, { name: string; w: number; tol: number; sd: number }> = {
     opener:    { name: '拆包玩家', w: 50, tol: 1.06, sd: 0.08 }, // buys 1–5 packs of a set to open; budget-limited
@@ -126,7 +127,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640].map(c => c * COST_X) },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map(c => c * COST_X) },
-    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}：加成叠到 ×${CROWD_KNEE} 以上时才用得上`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100 * COST_X) },
+    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100 * COST_X) },
     clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
   };
   // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
@@ -176,7 +177,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
   const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
   const facings = (id: string) => shelves().filter(s => s.id === id && s.qty > 0).length;
-  const pctOf = (id: string) => state.price[id] ?? 1;
+  const pctOf = (id: string) => state.price[id] ?? DEFAULT_PCT;
   const ask = (id: string) => Math.round(sealedPrice(id) * pctOf(id) * 100) / 100;
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
@@ -523,7 +524,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
       for (const e of pending) { if (e.type === 'bill_paid') o.bills = (o.bills || 0) + e.amount!; if (e.type === 'loan_taken') o.borrowed = (o.borrowed || 0) + e.amount!; }
-      log(`打烊期间卖出 ${sales} 件`, 'gain', revenue);
+      log(`打烊期间成交 ${sales} 位顾客`, 'gain', revenue);
     }
     const rescued = bailout();
     if (flush()) return;
@@ -702,6 +703,6 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT,
   };
 }

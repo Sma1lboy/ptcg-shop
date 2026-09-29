@@ -90,7 +90,7 @@ export function renderUpgrades() {
   renderBranch();
   render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
     <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
-      blocked: G.canUpgrade(k) ? '' : `客流加成叠到 ×${G.CROWD_KNEE} 以上才用得上（现在 ×${G.crowdRaw().toFixed(2)}）` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
+      blocked: G.canUpgrade(k) ? '' : `客流加成到 ×${G.CROWD_KNEE} 才能扩建（现在 ×${G.crowdRaw().toFixed(2)}）· 首级 ${money(G.upgradeCost(k)!)}` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
 }
 
 // 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
