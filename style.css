@@ -461,7 +461,7 @@ button:disabled { cursor: not-allowed; }
 .tally { width: 100%; border-collapse: collapse; font-size: var(--fs-cap); }
 .tally th { text-align: left; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); padding: 6px 0; }
 .tally td { padding: 6px 0; border-bottom: 1px solid var(--line); }
-.tally td:nth-child(n+2), .tally th:nth-child(n+2) { text-align: right; width: 3.5em; }
+.tally td:nth-child(n+2), .tally th:nth-child(n+2) { text-align: right; width: 3.5em; padding-left: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; } /* five-digit counts (late saves) touched the next column */
 .tally tr.up td:nth-child(2) { font-weight: 700; }
 
 /* binder + singles */
