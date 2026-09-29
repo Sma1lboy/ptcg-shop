@@ -919,3 +919,31 @@ console.log('ok luck percentile');
   assert.ok(plan.got >= 5 && G.payBill() && !st().overdue, 'and the bill is paid on the spot');
   console.log(`ok 凑钱: cheapest cards first, just enough; ${plan.pick.length} kinds sold for $${plan.got.toFixed(2)} against a $${o.amount} bill`);
 }
+
+// 闲钱 and 退回 (the first weeks): the 成长 badge counts only what cash beyond the next bill buys (G.spare); a level bought in the week
+// whose bill the till can't cover goes back at REFUND of its price (never full: a buy-after-the-bill, return-before-the-next loop
+// would be a free rental). And the lesson itself, measured: a player who buys growth whenever the till covers it borrows every
+// week; the same player buying only out of 闲钱 borrows nothing.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(5), storage: null }), st = () => G.state, bill = () => G.nextBill().amount;
+  assert.equal(G.spare(), Math.max(0, st().cash - bill()), '闲钱 = cash − the next bill');
+  assert.equal(G.REFUND, 1 - G.LOAN_RATE);
+  st().cash = bill() + 1000; assert.ok(G.upgrade('signage') && G.upgrade('depth') && G.refundable().length === 0, 'cash still covers the bill: nothing to return');
+  st().stock.sv08 = 2 * G.DEPTH_BASE; G.shelve('sv08', 2 * G.DEPTH_BASE); const onShelf = G.shelfQty('sv08');
+  assert.ok(onShelf > G.DEPTH_BASE, 'the new layer is in use');
+  st().cash = 10; assert.deepEqual(G.refundable().map(x => x.k).sort(), ['depth', 'signage'], 'short of the bill: this week\'s buys can go back');
+  const c0 = st().cash, cost = G.UPGRADES.depth.costs[0]; assert.ok(G.refund('depth') && G.lvl('depth') === 0);
+  assert.ok(Math.abs(st().cash - c0 - cost * G.REFUND) < 1e-6, 'back at 90% of the price');
+  assert.ok(G.shelfQty('sv08') === G.depth() && st().stock.sv08 === onShelf - G.depth(), 'the packs over the lost layer go to the back room');
+  assert.ok(!G.refund('depth'), 'one level, once');
+  st().cash = 0; st().shelves.forEach(s => { s.qty = 0; }); for (let i = 0; i < G.WEEK + 20; i += 20) { T += 20e3; G.tick(); }
+  assert.ok(st().overdue && G.spare() === 0, 'overdue: no 闲钱');
+  assert.deepEqual(G.refundable().map(x => x.k), ['signage'], 'the overdue week\'s buy can still go back');
+  G.refund('signage'); assert.ok(G.lvl('signage') === 0);
+  st().cash = st().overdue ? st().overdue.amount + 5 : st().cash; G.payBill(); assert.ok(!st().overdue);
+  st().cash = 0; assert.equal(G.refundable().length, 0, 'last week\'s buys are yours to keep');
+  const { KINDS } = await import('../scripts/autoplay.mjs'), runs = k => [1, 2, 3].map(seed => KINDS[k]({ hours: 3, seed }).debt);
+  const rash = runs('冲动新手'), calm = runs('冲动新手·看闲钱'), loans = r => r.reduce((a, d) => a + d.loans, 0);
+  assert.ok(loans(rash) >= 3 && loans(calm) === 0, `growth bought with the bill's money borrows (${loans(rash)} loans in 3 × 3 h), out of 闲钱 none`);
+  console.log(`ok 闲钱/退回: badge counts cash beyond the bill, this week's buys go back at ${G.REFUND * 100}% while short; 冲动新手 ${loans(rash)} loans, 看闲钱 0`);
+}
