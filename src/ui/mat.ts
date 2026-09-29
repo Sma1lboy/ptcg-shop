@@ -11,6 +11,7 @@ import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
 import { mountTable, packFront, ready as threeReady } from '../table3d.js';
 import { bill } from '../debt.ts';
+import { toBook } from './binder.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -52,6 +53,14 @@ function shareSpec() {
 }
 export type ShareSpec = ReturnType<typeof shareSpec>;
 
+// Where the pull went: the cards new to the binder since the player last looked at it, how full the set is, and the way there.
+// named: false after a 连开 that stopped on a new card (its end line already names it)
+function bookLine(id: string, named = true) {
+  const b = toBook(id), n = b.names.length;
+  if (!n) return '';
+  return `<p class="to-bk">卡册新插进 <b>${n}</b> 张${named ? `：${b.names.slice(0, 3).map(esc).join('、')}${n > 3 ? ' 等' : ''}` : ''} · 入册 ${b.count}/${b.total}${b.next ? `，${b.next}` : ''}
+      <a href="#luck" data-bk-set="${id}">看卡册</a></p>`;
+}
 function packSummary(cards: Pull[], set: { id: string }) {
   const v = S.packValue(cards), cost = G.wholesale(set.id), d = v - cost;
   const best = cards.reduce((a, b) => (b.price > a.price ? b : a));
@@ -59,6 +68,7 @@ function packSummary(cards: Pull[], set: { id: string }) {
   return `<div class="summary">
       <p>这包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。最值钱：${esc(best.name)}。</p>
       <p class="rank">${rankText(set.id, v).text}。</p>
+      ${bookLine(set.id)}
       <div class="btns">
         ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>` : ''}
         ${shareBtn()}
@@ -315,6 +325,7 @@ function batchSummary() {
       <p>${r ? `连开 ${r.rounds} 轮 ${n} 包${r.bought ? `（其中现进 ${r.bought} 包）` : ''}` : `${n} 包`}开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。</p>
       ${r ? `<p class="run-end">${runEnd(r, set.id)}</p>` : ''}
       <p class="rank">${r ? '最后一轮' : ''}最好的一包 ${money(sp.bestPack)}，${sp.rank}。</p>
+      ${bookLine(set.id, r?.end !== 'new')}
       <div class="btns">${stock ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}${again}${shareBtn()}</div></div>`;
 }
 
