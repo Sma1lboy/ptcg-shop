@@ -21,7 +21,7 @@ export interface State {
   log: { t: number; text: string; tone: string; amt?: number }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: Visit[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
-  shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
+  shown: Shown[]; casePct?: number; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   offline: { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number } | null; // bills / borrowed: paid to 九姐 / borrowed while away
@@ -57,6 +57,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const ARRIVAL = 0.5;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
   const WAREHOUSE = 200;         // packs per set the back room holds; only shelf packs are for sale
   const MIN_PCT = 0.6, MAX_PCT = 1.6, PCT_STEP = 0.05; // asking price as a share of market, for shelf packs and case singles
+  // The case's tag before you touch it (a card's asking price, share of market). Case browsers outnumber the hits a shop pulls
+  // by far (late game ~30 a minute against ~4 from 10 packs a minute), so a card sells whatever it is listed at: 110% sits under
+  // the mean ceiling of seekers (112%) and collectors (122%). Game setting.
+  const CASE_PCT = 1.1;
   const DEFAULT_PCT = 0.95; // a set's tag before you touch it: under market, because the cheapest-shopping set (sv08, mean ceiling 100%) loses half its buyers at 100% on a cold day
   // Customer types. tol = the most a customer will pay, as a share of market (mean; sd is the spread between individuals).
   const TYPES: Record<string, { name: string; w: number; tol: number; sd: number }> = {
@@ -144,7 +148,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
     crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300 * COST_X, grow: 1.75, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
     watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久（要先雇店员，没店员一律 1 小时）', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
-    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+    apprentice: { name: '带徒弟', group: '经营', desc: '店员随时把单卡库存里最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 0, fx: lv => lv ? '柜位一空就补，按展示柜标价' : '不上柜' },
   };
 
   // 开分店 (prestige), game setting: once this shop's debt is paid (九姐 has no claim left) you can start over in a new shop for
@@ -186,6 +190,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const pctOf = (id: string) => state.price[id] ?? DEFAULT_PCT;
   const ask = (id: string) => Math.round(sealedPrice(id) * pctOf(id) * 100) / 100;
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
+  const casePct = () => state.casePct ?? CASE_PCT;
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
   const dexTotal = (id: string) => DATA[id].cards.length;
   const dexCount = (id: string) => (dexN ||= Object.keys(state.dexSeen).reduce((a, k) => { const s = k.split('|')[0]; a[s] = (a[s] || 0) + 1; return a; }, {} as Record<string, number>))[id] || 0;
@@ -382,7 +387,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   // ---------- shop: customers, display case, trophy, upgrades ----------
-  function toCase(key: string, pct = 1) { // one copy of a hit from singles into the case, no log or save
+  function toCase(key: string, pct = casePct()) { // one copy of a hit from singles into the case, no log or save
     const c = state.singles[key];
     if (!c || state.shown.length >= slots() || !S.HITS.includes(c.kind)) return false;
     if (!--c.count) delete state.singles[key];
@@ -391,6 +396,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return true;
   }
   function list(key: string) { if (!toCase(key)) return false; emit(); return true; }
+  // 补满柜位 (and 带徒弟, every tick): hits from singles into the free case slots, priciest first, at the case tag. Returns how many.
+  // Which card goes first hardly matters: case browsers outnumber the hits, so every listed card sells (measured, see CASE_PCT).
+  function stockCase() {
+    let n = 0; if (state.shown.length >= slots()) return 0;
+    const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
+    for (const [k] of hits) { while (toCase(k)) n++; if (state.shown.length >= slots()) break; }
+    return n;
+  }
+  function fillCase() { const n = stockCase(); if (n) emit(); return n; }
   function unlist(i: number) {
     const c = state.shown.splice(i, 1)[0]; if (!c) return;
     const { key, pct, ...card } = c;
@@ -398,6 +412,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit();
   }
   function setCardPrice(i: number, pct: number) { if (state.shown[i]) { state.shown[i].pct = clampPct(pct); emit(); } }
+  // The case tag: every card in the case and every card listed from now on. commit = false while its rail is dragged.
+  function setCasePct(pct: number, commit = true) { state.casePct = clampPct(pct); for (const c of state.shown) c.pct = state.casePct; if (commit) emit(); }
   function setTrophy(key: string) {
     const c = state.singles[key]; if (!c) return false;
     const old = state.trophy;
@@ -519,10 +535,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // so a back room the player keeps full is what keeps the shelves from standing empty until the next round. Game setting.
   function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }, t: number) {
     const L = lvl('clerk'); if (!L) return;
-    if (skill('apprentice')) { // 带徒弟: priciest hits first into the free case slots
-      const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
-      for (const [k] of hits) { while (toCase(k, SKILLS.apprentice.step)) acc.listed++; if (state.shown.length >= slots()) break; }
-    }
+    if (skill('apprentice')) acc.listed += stockCase(); // 带徒弟: 补满柜位 on every tick
     for (const id of new Set(shelves().filter(sh => sh.id && state.auto[sh.id] && sh.qty < depth() && state.stock[sh.id] > CLERK_KEEP).map(sh => sh.id!))) fill(id, state.stock[id] - CLERK_KEEP);
     if (t >= state.clerkT) {
       state.clerkT = t + CLERK_ROUND * 1000;
@@ -740,11 +753,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,
   };
 }

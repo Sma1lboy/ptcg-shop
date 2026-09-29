@@ -14,7 +14,7 @@ export function renderSources() {
       整包市价（${packsUpdated}）：${SETS.map((s, i) => html`${i ? '、' : ''}<a href="${s.priceSource}" target="_blank" rel="noopener">PriceCharting ${s.name}</a>`)}。</p>
       <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%。
       进货先进仓库（每系列 ${G.WAREHOUSE} 包），摆上货架才会卖。店里起始 ${G.RACK_BASE} 个货架（「货架」每级 +1，最多每个系列一个），每个货架摆一个系列、放 ${G.DEPTH_BASE} 包（「加层」每级 +${G.DEPTH_STEP}）；想买的系列不在架上，一半拆包玩家会改买架上别的（占货架多的系列更常被挑中），另一半直接走。
-      标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，展示柜 ${G.CASE_BASE} 格起。
+      标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，展示柜 ${G.CASE_BASE} 格起；柜里的卡按各自市价的同一个比例标价（全柜标价，开店时 ${Math.round(G.CASE_PCT * 100)}%，单张可以再调），「补满柜位」和带徒弟都先挂最贵的闪卡。
       平均每 ${Math.round(1 / G.ARRIVAL)} 秒进来一位顾客，每位都有来意和预算：${Object.values(G.TYPES).map(t => `${t.name}最多肯付约 ${Math.round(t.tol * 100)}% 市价`).join('，')}（每人不同，招牌每级 +${G.SIGN_STEP * 100} 个百分点，倒爷不受影响；收藏党还看镇店之宝，只看柜里 $${G.BIG_CARD} 以上的卡）。热销的系列顾客多一倍、滞销的少一半。
       每个系列来买整包的人不一样：${SETS.map(x => { const d = G.DEMAND[x.id], pp = (v: number) => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`; return `${x.name}「${d.tag}」（肯付上限 ${pp(d.tol)} 个百分点${d.budget !== 1 ? `、预算 ×${d.budget}` : ''}${d.w !== 1 ? `、来的人 ×${d.w}` : ''}${d.crowd ? `、解锁后全店进店人数 +${Math.round(d.crowd * 100)}%` : ''}）`; }).join('，')}。倒爷扫过一个系列后 ${G.FLIP_COOLDOWN / 60} 分钟内不再收它（手上的要先出掉）。
       图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）。

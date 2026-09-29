@@ -8,12 +8,14 @@ import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
 import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
-import { hold } from './mat.ts';
+import { hold, huntable } from './mat.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
 // "$9.80、$10.20" for a few, "$9.80–$11.40" for many
-const spread = (xs: number[]) => { xs = [...xs].sort((a, b) => a - b); return xs.length > 3 ? `${money(xs[0])}–${money(xs.at(-1)!)}` : xs.map(money).join('、'); };
+const spread = (xs: number[]) => spreadOf(xs.map(money), xs);
+// labels of values in value order: "a、b" for a few, "lo–hi" for many
+const spreadOf = (ls: string[], xs: number[]) => { const o = xs.map((x, i) => [x, ls[i]] as const).sort((a, b) => a[0] - b[0]).map(p => p[1]); return o.length > 3 ? `${o[0]}–${o.at(-1)}` : o.join('、'); };
 const tally = (parts: [string, number][]) => parts.filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(' · ');
 
 // The shelf-edge price rail, MIN_PCT…MAX_PCT of market in the shelf's PCT_STEP steps: customers stacked as dots on the step
@@ -22,24 +24,27 @@ const tally = (parts: [string, number][]) => parts.filter(([, n]) => n).map(([k,
 // Within a step the ones who would balk sit below the ones who would buy (a step can hold both: ceilings are not on the 5% grid).
 // The rail is also the price control: a see-through range input over it (whole percents, so steps match the shelf's clampPct),
 // click a step or drag the tag and the shelf price moves there; arrow keys step by 5%.
+// id = the set whose shelf tag it moves; '' = the display case's tag (case browsers' ceilings are shares of each card's own market price,
+// so that rail prints percents where a set's prints dollars).
 const DOT = 7, STACK = 8; // px per stacked dot, most dots in a stack
 function priceRail(id: string, vs: Visit[], flip: number) {
   const steps = Math.round((G.MAX_PCT - G.MIN_PCT) / G.PCT_STEP), step = (p: number) => Math.min(steps, Math.max(0, Math.round((p - G.MIN_PCT) / G.PCT_STEP)));
-  const at = (p: number) => `${step(p) / steps * 100}%`, pct = G.pctOf(id), mkt = G.sealedPrice(id), near = (p: number) => Math.abs(p - pct) < 0.13;
+  const pct = id ? G.pctOf(id) : G.casePct(), at = (p: number) => `${step(p) / steps * 100}%`, near = (p: number) => Math.abs(p - pct) < 0.13;
+  const mkt = id ? G.sealedPrice(id) : 0, cash = (x: number) => (id ? money(x * mkt) : pc(x)), spread = (xs: number[]) => spreadOf(xs.map(cash), xs), tag = id ? money(G.ask(id)) : `标 ${pc(pct)}`;
   const cols: { buy: number[]; no: number[] }[] = Array.from({ length: steps + 1 }, () => ({ buy: [], no: [] }));
   for (const v of vs) cols[step(v.max!)][v.max! >= pct - 1e-9 ? 'buy' : 'no'].push(v.max!);
   const per = Math.ceil(Math.max(...cols.map(c => c.buy.length + c.no.length)) / STACK), dots = (n: number) => (n ? Math.max(1, Math.round(n / per)) : 0);
   const buy = vs.filter(v => v.max! >= pct - 1e-9).length, h = Math.max(2, ...cols.map(c => Math.min(STACK, dots(c.buy.length) + dots(c.no.length)))) * DOT;
   const lo = Math.round(G.MIN_PCT * 100), hi = Math.round(G.MAX_PCT * 100), at100 = Math.round(pct * 100);
-  const who = (xs: number[], b: boolean) => `${xs.length} 位最多肯出 ${spread(xs.map(x => x * mkt))}，按现在的标价${b ? '会买' : '不买'}`;
-  return html`<div class="c-rule" style="--h:${h}px" role="group" aria-label="${vs.length} 位顾客最多肯出 ${spread(vs.map(v => v.max! * mkt))}，你标 ${money(G.ask(id))}，其中 ${buy} 位会买">
+  const who = (xs: number[], b: boolean) => `${xs.length} 位最多肯出${id ? '' : '市价的'} ${spread(xs)}，按现在的标价${b ? '会买' : '不买'}`;
+  return html`<div class="c-rule" style="--h:${h}px" role="group" aria-label="${vs.length} 位顾客最多肯出${id ? '' : '市价的'} ${spread(vs.map(v => v.max!))}，你标 ${tag}，其中 ${buy} 位会买">
       <input class="c-set" type="range" min="${lo}" max="${hi}" step="${Math.round(G.PCT_STEP * 100)}" .value=${live(String(at100))} data-id="${id}"
-        aria-label="${G.setById(id).name}标价" aria-valuetext="${money(G.ask(id))}，市价的 ${at100}%，${buy} 位会买">
+        aria-label="${id ? G.setById(id).name : '展示柜'}标价" aria-valuetext="${id ? `${money(G.ask(id))}，` : ''}市价的 ${at100}%，${buy} 位会买">
       ${flip ? html`<span class="c-flip" style="width:${at(flip)}"></span>` : ''}<span class="c-mkt" style="left:${at(1)}"></span>
       ${cols.map((c, i) => { const nn = dots(c.no.length), nb = dots(c.buy.length), left = `${i / steps * 100}%`;
         return [...Array.from({ length: nn }, (_, k) => [k, false, c.no] as const), ...Array.from({ length: nb }, (_, k) => [nn + k, true, c.buy] as const)]
           .filter(([k]) => k < STACK).map(([k, b, xs]) => html`<i class=${b ? 'buy' : ''} style="left:${left};bottom:calc(100% - var(--h) + ${k * DOT}px)" title="${who(xs, b)}"></i>`); })}
-      <span class="sticker" style="left:clamp(26px, ${(pct - G.MIN_PCT) / (G.MAX_PCT - G.MIN_PCT) * 100}%, calc(100% - 26px))">${money(G.ask(id))}</span>
+      <span class="sticker" style="left:clamp(30px, ${(pct - G.MIN_PCT) / (G.MAX_PCT - G.MIN_PCT) * 100}%, calc(100% - 30px))">${tag}</span>
       ${flip && !near(G.MIN_PCT + 0.08) ? html`<small class="c-lo">倒爷 ≤${pc(flip)}</small>` : ''}${near(1) ? '' : html`<small class="c-m" style="left:${at(1)}">市价</small>`}
       ${per > 1 && pct < 1.2 ? html`<small class="c-per">一个点 ≈ ${per} 位</small>` : ''}
     </div>`;
@@ -92,27 +97,36 @@ function packs(rec: Visit[]) {
     })}</ul>`;
 }
 
-// What seekers of each rarity tier and collectors asked the case for, and the hit on hand that would answer them.
+// The case browsers: one rail for the whole case (seekers' and collectors' ceilings against the case tag: every card is priced as a
+// share of its own market price, so one tag moves them all), a verdict on supply against demand, then what each rarity tier and the
+// collectors asked for, and the hit on hand that would answer them.
 function showcase(rec: Visit[]) {
-  const s = G.state, full = s.shown.length >= G.slots(), mine = Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind));
+  const s = G.state, free = G.slots() - s.shown.length, mine = Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind));
   const rows = [...G.SEEK.map((kinds, tier) => ({ label: `找 ${kinds.join('/')}`, vs: rec.filter(v => v.t === 'seeker' && v.tier === tier), fit: (c: { kind: string; price: number }) => kinds.includes(c.kind) })),
     { label: `收藏党（$${G.BIG_CARD} 以上）`, vs: rec.filter(v => v.t === 'collector'), fit: (c: { kind: string; price: number }) => c.price >= G.BIG_CARD }].filter(r => r.vs.length)
     // a tier left empty-handed that a card in stock would answer goes first: its 上柜 is the cheapest fix on the page
     .map(r => ({ ...r, ready: count(r.vs, 'none') && mine.some(([, c]) => r.fit(c)) ? 1 : 0 })).sort((a, b) => b.ready - a.ready);
   if (!rows.length) return '';
-  if (!s.shown.length && !rows.some(r => mine.some(([, c]) => r.fit(c))))
-    return html`<h3 class="c-h">来翻展示柜的</h3><p class="c-note c-empty"><b>柜里空着</b>：${rows.map(r => `${r.label} ${r.vs.length} 人`).join('、')}，都空手走了。开包开出闪卡，在单卡库存里点「上柜」。</p>`;
-  return html`<h3 class="c-h">来翻展示柜的</h3>
+  const all = rows.flatMap(r => r.vs), onHand = mine.reduce((a, [, c]) => a + c.count, 0), cards = s.shown.length + onHand;
+  const pct = G.casePct(), would = all.filter(v => v.max! >= pct - 1e-9).length, none = count(all, 'none');
+  const fill = free > 0 && onHand ? html`<button type="button" data-act="fillcase">补满柜位（${Math.min(free, onHand)} 张）</button>` : '';
+  // supply against demand: who would buy at the tag against every hit the shop has, in the case and in stock
+  const verdict = !cards ? html`<b>柜里和单卡库存都没有闪卡</b>：${none} 位空手走了。开包开出来的闪卡（RR 以上）才能上柜`
+    : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加单卡库存只有 ${cards} 张：卡比人少，标价往上调也卖得完`
+    : html`按 ${pc(pct)} ${would} 位会买，柜里加单卡库存 ${cards} 张`;
+  return html`<h3 class="c-h">来翻展示柜的 <small>点是顾客最多肯出市价的几成：实的按现在的标价会买。点轨上哪一档，全柜标价就改到哪一档</small></h3>
+    ${cards ? priceRail('', all, 0) : ''}
+    <p class="c-note">${verdict}。${free > 0 ? `柜里空 ${free} 格${onHand ? '' : '，单卡库存没有闪卡了'}` : `柜位满了（${G.slots()} 格）`}。${fill}</p>
     <ul class="c-case">${rows.map(({ label, vs, fit }) => {
       const none = count(vs, 'none'), dear = vs.filter(v => v.r === 'pricey' && v.why !== 'budget'), broke = count(vs, 'pricey', 'budget');
-      const have = none ? mine.filter(([, c]) => fit(c)).sort((a, b) => b[1].price - a[1].price)[0] : undefined;
+      const have = none ? mine.filter(([, c]) => fit(c)).sort((a, b) => b[1].price - a[1].price)[0] : undefined, big = label.startsWith('收藏');
       const byCard = [...new Set(dear.map(v => v.card!))].map(card => { const d = dear.filter(v => v.card === card); return html`<b>${card}</b> 标 ${money(d[0].pct! * d[0].price!)}，${d.length} 人嫌贵，最多肯出 ${spread(d.map(v => v.max! * v.price!))}`; });
       const notes = [
-        none ? (have ? `柜里没有，单卡库存里有 ${have[1].name}` : s.shown.length ? '柜里没有，开包出了再上柜' : '柜里空着，开包出了闪卡再上柜') : '',
+        none ? (have ? `柜里没有，单卡库存里有 ${have[1].name}` : big ? `单卡库存里没有 $${G.BIG_CARD} 以上的卡，只能等开包开出大卡` : '单卡库存里也没有，开包出了再上柜') : '',
         ...byCard, broke ? `${broke} 人看中了但钱不够` : '',
       ].filter(Boolean);
       return html`<li><div class="c-row"><b>${label}</b><span class="c-n">${tally([['来了', vs.length], ['买走', count(vs, 'sold')], ['嫌贵', dear.length + broke], ['没找到', none]])}</span></div>
-          ${notes.length ? html`<p class="c-note">${notes.map((n, i) => html`${i ? '；' : ''}${n}`)}。${have && !full ? html`<button type="button" data-act="list" data-key="${have[0]}">上柜</button>` : have ? html`<span class="muted">展示柜满了</span>` : ''}</p>` : ''}</li>`;
+          ${notes.length ? html`<p class="c-note">${notes.map((n, i) => html`${i ? '；' : ''}${n}`)}。${have && free > 0 ? html`<button type="button" data-act="list" data-key="${have[0]}">上柜</button>` : have ? html`<span class="muted">展示柜满了</span>` : ''}</p>` : ''}</li>`;
     })}</ul>`;
 }
 
@@ -124,7 +138,7 @@ function customers() {
       <div class="cust-bar" role="img" aria-label="${lately()} ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
         <span class="c-sold" style="flex:${sold}"></span><span class="c-pricey" style="flex:${pricey}"></span><span class="c-none" style="flex:${none}"></span></div>
       <p class="cust-sum"><b>买走 ${sold}</b> · 嫌贵 ${pricey} · <span class="muted">没找到 ${none}${none && atCase ? `（整包 ${none - atCase} · 展示柜 ${atCase}）` : ''}</span></p>
-      ${packs(rec)}${showcase(rec)}`;
+      ${none && atCase > none - atCase ? [showcase(rec), packs(rec)] : [packs(rec), showcase(rec)]}`; // the group that lost more customers first
 }
 
 function dex() {
@@ -161,7 +175,8 @@ function hand(id: string) {
   const left = Object.entries(by).sort((a, b) => (S.RANK[b[0]] ?? 0) - (S.RANK[a[0]] ?? 0)), top = miss[0];
   return html`<div class="dx-hand"><div class="dx-h"><span>亲手开出</span><b>${h}/${tot}</b></div>
       <div class="dx-bar" role="img" aria-label="${G.setById(id).name} 亲手开出 ${h}/${tot}"><i style="width:${h / tot * 100}%"></i></div>
-      <small class="muted">${h ? html`还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small></div>`;
+      <small class="muted">${h ? html`还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
+      ${G.unlocked(id) && huntable(id) ? html`<div class="btns"><button type="button" data-act="autorun" data-id="${id}" title="十包一轮自动开，出一张没亲手开出过的卡就停；仓库不够按进货价补">连开到出新卡</button></div>` : ''}</div>`;
 }
 
 function clerk() {
@@ -190,8 +205,9 @@ function handSum() {
 export function initGoals() {
   document.addEventListener('change', e => { const b = (e.target as Element).closest<HTMLInputElement>('[data-act="auto"]'); if (b) G.setAuto(b.dataset.id!, b.checked); });
   // dragging the rail only redraws this panel; letting go (change) commits: every panel re-renders and the save is written once
-  document.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) { G.setPrice(r.dataset.id!, +r.value / 100, false); renderGoals(); } });
-  document.addEventListener('change', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) G.setPrice(r.dataset.id!, +r.value / 100); });
+  const tag = (r: HTMLInputElement, commit: boolean) => (r.dataset.id ? G.setPrice(r.dataset.id, +r.value / 100, commit) : G.setCasePct(+r.value / 100, commit));
+  document.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) { tag(r, false); renderGoals(); } });
+  document.addEventListener('change', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) tag(r, true); });
   document.addEventListener('ptcg:release', renderGoals);
   G.on(renderGoals); renderGoals();
 }

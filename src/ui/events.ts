@@ -2,7 +2,7 @@
 // Works the same for lit-rendered panels and the mat's innerHTML, since it never holds element references.
 import * as FX from '../fx.ts';
 import { G } from './common.ts';
-import { startPack, openBatch, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
+import { startPack, openBatch, startRun, stopRun, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
 import { branchClick } from './upgrades.ts';
@@ -21,6 +21,8 @@ export function bindEvents() {
       case 'open1': startPack(id); break;
       case 'open10': openBatch(id); break;
       case 'fill10': if (G.buy(id, 10 - (G.state.stock[id] || 0))) openBatch(id); break;
+      case 'autorun': startRun(id); break;
+      case 'runstop': stopRun(); break;
       case 'tear': tear(b); break;
       case 'advance': advance(); break;
       case 'peek': peek(+b.dataset.i!); break;
@@ -31,6 +33,8 @@ export function bindEvents() {
       case 'sell': G.sell(b.dataset.key!); break;
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key!); break;
+      case 'fillcase': G.fillCase(); break;
+      case 'caseprice': G.setCasePct(G.casePct() + +b.dataset.d! * G.PCT_STEP); break;
       case 'unlist': G.unlist(+b.dataset.i!); break;
       case 'trophy': G.setTrophy(b.dataset.key!); break;
       case 'untrophy': G.clearTrophy(); break;

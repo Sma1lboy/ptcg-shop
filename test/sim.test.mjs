@@ -701,3 +701,25 @@ console.log('ok luck percentile');
   assert.ok(P.peek('expand', P.rate) / P.rate() - 1 > gain, '扩建 is the level that moves a capped shop');
   console.log(`ok 成长 peek: no trace in the save; past the cap 人气 +10% = +${(gain * 100).toFixed(1)}% walk-ins`);
 }
+
+// 展示柜标价 + 补满柜位: one tag for the case (listings, 补满, 带徒弟 all use it), 补满 fills the free slots from singles hits only.
+{
+  let T = 1_700_000_000_000; const mem = {}, store = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } };
+  const C = createGame({ now: () => T, random: S.rng(12), storage: store });
+  assert.equal(C.casePct(), C.CASE_PCT, 'a new shop (and an old save without the field) lists at CASE_PCT');
+  C.state.cash = 1e6; C.state.stock.sv10 = 60; C.open('sv10', 60);
+  const hitsOf = () => Object.values(C.state.singles).reduce((a, c) => a + (S.HITS.includes(c.kind) ? c.count : 0), 0), h0 = hitsOf();
+  assert.ok(h0 > C.slots(), `60 packs pull more hits (${h0}) than the case holds`);
+  const top = Object.values(C.state.singles).filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price)[0];
+  assert.equal(C.fillCase(), C.slots()); assert.equal(C.state.shown.length, C.slots()); assert.equal(hitsOf(), h0 - C.slots());
+  assert.ok(C.state.shown.every(c => S.HITS.includes(c.kind) && c.pct === C.CASE_PCT), 'hits only, at the case tag');
+  assert.equal(C.state.shown[0].name, top.name, 'priciest first'); assert.equal(C.fillCase(), 0, 'a full case takes nothing');
+  C.setCasePct(1.33); assert.equal(C.casePct(), 1.35, 'snapped to the 5% grid');
+  assert.ok(C.state.shown.every(c => c.pct === 1.35), 'the tag reprices the whole case'); assert.equal(C.cardAsk(C.state.shown[0]), Math.round(top.price * 135) / 100);
+  C.unlist(0); C.list(Object.keys(C.state.singles).find(k => S.HITS.includes(C.state.singles[k].kind))); assert.equal(C.state.shown.at(-1).pct, 1.35, '上柜 lists at the tag');
+  assert.equal(createGame({ now: () => T, random: S.rng(1), storage: store }).casePct(), 1.35, 'the tag is saved');
+  // 带徒弟 refills every tick at the tag
+  C.state.up.clerk = 1; C.state.skills.apprentice = 1; C.state.shown.length = 0; T += 1000; C.tick();
+  assert.equal(C.state.shown.length, C.slots()); assert.ok(C.state.shown.every(c => c.pct === 1.35), '带徒弟 lists at the case tag');
+  console.log(`ok 展示柜: one tag (default ${Math.round(C.CASE_PCT * 100)}%) for 上柜 / 补满柜位 / 带徒弟, 补满 fills free slots with hits, priciest first`);
+}
