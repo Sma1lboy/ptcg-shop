@@ -541,7 +541,7 @@ console.log('ok luck percentile');
   let T = 1_700_000_000_000; const store = {};
   const env = { now: () => T, random: S.rng(21), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
   const G = createGame(env), st = () => G.state, evs = []; G.on(ev => { if (ev?.type) evs.push(ev); });
-  const run = secs => { for (let i = 0; i < secs; i += 20) { T += 20e3; G.tick(); } }, week = () => run(G.WEEK); // page open: a tick every 20 s (over 30 s is a closed stretch)
+  const run = secs => { for (let i = 0; i < secs; i += 20) { T += 20e3; G.tick(); } }, week = () => run(G.WEEK); // page open: a tick every 20 s (a gap over G.AWAY is an absence)
   // Bills: week 1's bill exists from the start (the opening scene prints it), each week's is ×BILL_G the last, and they add up to the debt.
   assert.deepEqual([st().debt, st().owe, st().loan, st().week], [G.DEBT0, G.DEBT0, 0, 1]);
   assert.deepEqual([G.nextBill().week, G.nextBill().amount], [1, G.BILL0], 'week 1 bill at start');
@@ -839,9 +839,10 @@ console.log('ok luck percentile');
 
 // 店员没本钱 (GAMEPLAY.md §12.2): the clerk buys with the cash in the till at his round. A round that cannot fill the shelves is
 // recorded (clerkRound, clerkShort) and logged; 现在补货 (clerkNow) is his buying now and does not move his next round. The
-// 普通 player on seed 1 falls into it on the third shop (夜市, 2 级店员 bought with the last $10.4k before a round): shelves stay
-// empty for hours and the loan snowballs. The same player heeding the two notes (no upgrade that leaves less than a round needs;
-// 现在补货 when a round came up short) clears that shop and the next.
+// 普通 player on seed 1 falls into it on the third shop (夜市, 2 级店员 bought with the last $10.4k before a round) and borrows
+// twice what the same player heeding the two notes does (no upgrade that leaves less than a round needs; 现在补货 when a round
+// came up short). (Before 离开 was one absence per hidden stretch, this 90-s player's every tick counted as closed and its short
+// bills were borrowed with no grace, which left it stuck on that shop's loan.)
 {
   let T = 1_700_000_000_000; const Z = createGame({ now: () => T, random: S.rng(5), storage: null });
   Z.state.up.clerk = 2; Z.state.cash = 50; Z.place(0, 'sv10'); Z.state.clerkT = T;
@@ -854,7 +855,34 @@ console.log('ok luck percentile');
   assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
   const { play } = await import('../scripts/autoplay.mjs'), run = heed => play({ hours: 30, seed: 1, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
   const [blind, heeds] = [run(false), run(true)];
-  assert.ok(blind.G.state.branch.n === 2 && blind.G.state.loan > 20000, `without the notes the 3rd shop is stuck: loan ${blind.G.state.loan | 0}`);
-  assert.ok(heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed / 2, `heeding them clears it: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0}`);
-  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seed 1, 30 h: 3rd shop stuck on a $${Math.round(blind.G.state.loan / 1000)}k loan → heeding the notes reaches shop ${heeds.G.state.branch.n + 1}, borrowed $${Math.round(blind.debt.borrowed / 1000)}k → $${Math.round(heeds.debt.borrowed / 1000)}k`);
+  assert.ok(blind.G.state.branch.n >= 3 && heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed / 2, `heeding them halves the borrowing: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0} vs ${blind.debt.borrowed | 0}`);
+  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seed 1, 30 h: borrowed $${Math.round(blind.debt.borrowed / 1000)}k → $${Math.round(heeds.debt.borrowed / 1000)}k heeding the notes (shop ${blind.G.state.branch.n + 1} / ${heeds.G.state.branch.n + 1})`);
+}
+
+// 离开 (GAMEPLAY.md §3.1): a hidden page is one absence from the moment it was hidden, however the browser spaces the ticks (a
+// background tab ticks once a minute). It trades for offlineCap() and moves the bill clock one week, both from when the player left;
+// a bill short of cash is never borrowed while away, and its grace waits for them; short absences leave no receipt.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(8), storage: null }), st = () => G.state, evs = []; G.on(ev => { if (ev?.type) evs.push(ev); });
+  const live = secs => { for (let i = 0; i < secs; i += 20) { T += 20e3; G.tick(); } }, bg = secs => { for (let i = 0; i < secs; i += 60) { T += 60e3; G.tick(); } };
+  st().cash = 1e6; st().earned.sealed = 1; G.buy('sv08', 40); G.shelve('sv08', 40); // no clerk: an hour at most
+  G.leave(); bg(3 * 3600); assert.equal(st().week, 2, 'three hours in a background tab = one visit from 九姐');
+  assert.equal(st().away.secs, G.NOCLERK_CAP, 'and no sales after the first hour'); assert.equal(st().offline, null, 'the receipt waits for the return');
+  G.back(); assert.equal(st().offline.secs, G.NOCLERK_CAP); assert.match(st().log[0].text, /^离开 3\.0 小时，店开了 1\.0 小时（没雇店员/);
+  G.ackOffline(); G.leave(); T += 90e3; G.tick(); G.back(); assert.equal(st().offline, null, 'a minute and a half away: no receipt');
+  // Short of cash when the bill falls due while away: no loan, and the full grace is there on return, however long that took.
+  live(G.dueIn() - 30); st().cash = 10; st().stock.sv08 = 50; evs.length = 0;
+  G.leave(); bg(5 * 3600);
+  assert.ok(st().overdue && !evs.some(e => e.type === 'loan_taken'), 'overdue, not borrowed'); G.back();
+  assert.ok(Math.abs(st().overdue.until - st().shopT - G.GRACE) < 60, `grace on return: ${st().overdue.until - st().shopT} s`);
+  // Leaving (or watching a 连开, tick(busy)) pauses a grace that is running; it does not restart it. Back and still short, it runs out.
+  st().cash = 1e6; live(20); assert.equal(st().overdue, null, 'paid as soon as cash is there'); st().shelves.forEach(s => { s.qty = 0; });
+  live(G.dueIn() - 30); st().cash = 10; live(60); assert.ok(st().overdue); const left = st().overdue.until - st().shopT, w0 = st().week;
+  G.leave(); bg(600); G.back(); assert.ok(Math.abs(st().overdue.until - st().shopT - left) < 1e-6, 'leaving pauses the grace');
+  for (let i = 0; i < 120; i++) { T += 1e3; G.tick(true); } assert.ok(Math.abs(st().overdue.until - st().shopT - left) < 1e-6 && st().week === w0, 'so does a reveal in progress');
+  evs.length = 0; live(left + 20); assert.ok(!st().overdue && evs.some(e => e.type === 'loan_taken' && e.forced), 'grace runs out while here: borrowed');
+  // A page ticking every 90 s while visible (autoplay's 普通) is live: grace runs, a lapse borrows.
+  st().cash = 10; st().shelves.forEach(s => { s.qty = 0; }); evs.length = 0; for (let i = 0; i < G.WEEK + G.GRACE + 180; i += 90) { T += 90e3; G.tick(); }
+  assert.ok(evs.some(e => e.type === 'bill_missed') && evs.some(e => e.type === 'loan_taken' && e.forced), '90-s ticks are not an absence');
+  console.log('ok 离开: a background tab is one absence (1 week, offlineCap of sales), grace waits for the return and for a reveal, short absences print nothing');
 }
