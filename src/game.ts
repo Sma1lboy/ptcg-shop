@@ -40,14 +40,14 @@ export interface Wreck { at: number; week: number; shop: number; debt: number; c
 // shops before this one; perks = 名气 perk levels. Survives every branch; only 清空存档 clears it.
 export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number>; broke?: number; hands?: number } // broke = bankruptcies, ever (征信); hands = 亲手开齐 sets already paid in 名气
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
-export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
+export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> | null } // storage null = never saved (autoplay: stringifying the save was 70% of its time)
 export type Game = ReturnType<typeof createGame>;
 // type = a debt event for the story (bill_due / bill_paid / bill_missed / loan_taken / bankrupt / story), with the bill's week and amount.
 export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean; set?: string } // what happened, for listeners that need more than the new state (achievements.ts)
 
 export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
-  const store = storage ?? { getItem: (k: string) => localStorage.getItem(k), setItem: (k: string, v: string) => localStorage.setItem(k, v) };
+  const store = storage === null ? { getItem: () => null, setItem() {} } : storage ?? { getItem: (k: string) => localStorage.getItem(k), setItem: (k: string, v: string) => localStorage.setItem(k, v) };
   const SAVE_KEY = 'ptcg-shop-v1';
   // Game settings (invented, not market data — shown as such in the UI footer):
   const WHOLESALE = 0.72;        // distributor price as a share of the current market pack price (supplier upgrades lower it)
@@ -259,7 +259,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     used.forEach(([id, o], i) => { const k = i < n ? Math.min(o.qty, deep) : 0; if (k) st.shelves.push({ id, qty: k }); st.stock[id] = (st.stock[id] || 0) + o.qty - k; });
     delete st.shelf;
   }
-  function save() { state.savedAt = clock(); try { store.setItem(SAVE_KEY, JSON.stringify(state)); } catch {} }
+  function save() { state.savedAt = clock(); if (storage === null) return; try { store.setItem(SAVE_KEY, JSON.stringify(state)); } catch {} }
   function log(text: string, tone = '', amt?: number) { state.log.unshift({ t: clock(), text, tone, amt }); state.log.length = Math.min(state.log.length, 40); }
 
   // Moves cash into stock (back room, or straight onto a shelf for the clerk) without logging or saving; returns the cost.
