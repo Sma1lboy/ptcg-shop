@@ -1,6 +1,28 @@
 # public/gen 的出图记录
 
-UI 皮肤素材（DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--quality high --background transparent`）按**同一段模板 + 各自的 SUBJECT** 出成整张 sprite sheet，再切成小图：同一张 sheet 里的部件光源、边、螺丝天然一致，这是「像同一个美术出的」的主要保证，模板只管跨 sheet 的一致。
+## BW 像素图标（i-* u-* p-*，界面在用）
+
+顶栏读数、页签、现金框、成长页等级、成长树和名气加成的徽章（DESIGN.md「图标」）。三张 sheet，同一段模板，`gpt-image-2 --quality high`，纯品红 #FF00FF 底（色键抠图，模型出的透明底边缘带软光晕，像素图不能要）。草稿 low 出过 i 那张验证了像素画和切法：草稿的卡背徽记画成了上下两半加中间一个圆（像精灵球），顾客戴的是红白鸭舌帽蓝外套（像官方主角），定稿提示词改成四角星和毛线帽，模板加了 no ball-shaped emblems。草稿没提交。
+
+**切法**（`cut.py`，没进仓库，要重出时照做）：品红键（R>170、B>170、G<110）抠掉背景；按网格切格子、各自裁到前景包围盒；从颜色边缘的位置反推模型画的像素格距（在 6–24 px 之间找让边缘最贴整数倍的那个），但格距至少取「包围盒长边 ÷ 24」，保证不超过 24×24；每一格取中间 40% 的前景像素的中位色，前景不到一半的格子透明；居中放进 24×24 透明画布，存无损 webp（每个几百字节）。u-watch 的月亮被画成了黄色，切完把黄像素换成浅灰 / 中灰（黄只给能按的东西）。页面上一律按 24 或 48 px、`image-rendering: pixelated` 显示。
+
+> Original pixel-art game menu icons in the style of a 2010 handheld monster-collecting RPG menu (original designs, not copied from any existing game, no logos, no text, no letters, no ball-shaped emblems). A sprite sheet of exactly N icons in a GRID grid, evenly spaced with wide gaps, each icon centered in its own cell and the same size. Every icon is true pixel art drawn on a 24 by 24 pixel grid and scaled up with hard nearest-neighbour edges: every pixel is a crisp solid square, no anti-aliasing, no gradients, no blur, no dithering noise. Style: chunky readable silhouette that still reads at 24 pixels, a 1-pixel dark charcoal outline (#262B33) all around, flat cel shading with one lighter highlight tone on the upper-left and one darker shade tone on the lower-right, light from the upper-left. Palette limited to about 12 colours shared by all icons: charcoal #262B33, white #FFFFFF, light grey #C8CED8, mid grey #8C97A8, sky blue #52B6F2, deep blue #2A74D0, leaf green #3EC06E, coral red #E8483A, and their one-step darker shades. No yellow, no gold, no brown. Background: completely flat pure magenta #FF00FF filling the whole sheet, no shadows on the background.
+
+### sheet-i（landscape，N = eight，4-column by 2-row）→ i-coin i-pack i-shelf i-customer / i-receipt i-card i-rank i-trophy
+
+> Subjects: Row 1: (1) a silver shop token coin seen straight on with a small rectangular card shape stamped in the middle; (2) a sealed trading-card booster pack with crimped top and bottom edges, plain blue foil front with no artwork; (3) a small shop shelf rack with two boards holding tiny coloured packs; (4) a customer: head-and-shoulders bust of a friendly person in a green knit beanie and a grey scarf. Row 2: (5) a paper receipt slip with a zig-zag torn bottom edge and a few grey lines; (6) a single trading card seen face-on, deep blue back with a white border and a simple white four-point star in the middle; (7) an upward double chevron rank badge in green; (8) a silver trophy cup on a small blue base.
+
+### sheet-u（1536x1152，N = twelve，4-column by 3-row）→ u-signage u-racks u-depth u-case / u-supplier u-expand u-clerk u-luck / u-talk u-crowd u-watch u-apprentice
+
+> Subjects: Row 1: (1) a hanging shop signboard on two short chains, blank blue face; (2) a freestanding shop shelf rack with two boards holding tiny packs; (3) three thin shelf boards stacked one above another with a small green upward arrow beside them; (4) a small glass display case cabinet on legs with two blank cards standing inside. Row 2: (5) a small delivery van seen from the side with a closed crate on its roof; (6) a small shopfront with a rolled-up shutter and two outward-pointing arrows on either side showing it widening; (7) a shop clerk bust wearing a blue apron; (8) a green four-leaf clover. Row 3: (9) a white speech bubble with three dots; (10) a group of three overlapping head-and-shoulders bust silhouettes in different colours; (11) a round wall clock with a small crescent moon beside it; (12) a hand placing a single blank trading card upright into a small clear card stand.
+
+### sheet-p（landscape，N = six，3-column by 2-row）→ p-seed p-fit p-regulars / p-access p-hire p-luck
+
+> Subjects: Row 1: (1) a small closed grey cash tin strongbox with a coin slot in its lid and a little latch; (2) a two-wheeled hand truck dolly carrying a small folded shop shelf rack strapped to it; (3) a punched loyalty stamp card, a white rectangle with a row of round punched holes along it and one blank circle, no writing. Row 2: (4) an old-fashioned silver key on a ring with a small blank luggage tag tied to it; (5) a blue shop apron hanging from a single wall hook; (6) a green four-leaf clover with exactly four leaves standing on a small stepped grey plinth.
+
+## 上一版：铝框皮肤（btn-* tab* frame plate well divider crest，图还在仓库里，界面已不引用）
+
+UI 皮肤素材（上一版 DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--quality high --background transparent`）按**同一段模板 + 各自的 SUBJECT** 出成整张 sprite sheet，再切成小图：同一张 sheet 里的部件光源、边、螺丝天然一致，这是「像同一个美术出的」的主要保证，模板只管跨 sheet 的一致。
 
 草稿轮用 `--quality low` 出过按钮、边框、页签三张，套到页面上验证了材质方向，再出 high 定稿（草稿没有提交）。
 
@@ -30,10 +52,6 @@ UI 皮肤素材（DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--qualit
 
 > a sprite sheet of exactly three separate horizontal pieces stacked vertically with generous transparent space between them. Piece 1: a panel name-plate bar about 8:1, raised navy anodized aluminium with brushed grain, 45-degree chamfered ends, a thin bright aluminium bevel along the top edge and a darker bevel along the bottom, face flat and even for a label. Piece 2: a recessed display window about 4:1: an inset near-black navy glass well (#07101F) set into a navy aluminium bezel with a chamfered inner edge, like the digit window of a shop till; the glass is flat and dark with a faint top reflection. Piece 3: a thin ornamental divider rule about 12:1: a fine aluminium line that thickens toward the center into a small chamfered navy-aluminium diamond boss with a tiny lemon-yellow (#FFD500) enamel dot in its middle; the line tapers to nothing at both ends.
 
-### f-icons（1536x1024）→ i-coin i-pack i-shelf / i-customer i-receipt i-card (3×2 grid, each fitted to 64px)
-
-> a sprite sheet of exactly six small game HUD icons in a 3-column by 2-row grid, evenly spaced with generous transparent gaps, each icon the same size and centered in its cell, all in one consistent style: embossed badges made of satin aluminium with navy enamel inlay, chunky readable silhouettes that still read at 20 pixels, thin dark outline. Row 1: (1) a thick shop token coin seen straight on, aluminium rim, navy enamel center embossed with a simple playing-card outline; (2) a sealed trading-card booster pack, crimped top and bottom edges, blank foil front with no artwork; (3) a small shop display shelf rack with two boards holding tiny blank packs. Row 2: (4) a customer: simple head-and-shoulders bust silhouette; (5) a till receipt slip curling slightly with a torn zigzag bottom edge and blank lines; (6) a single trading card inside a rigid clear top-loader sleeve, the card face blank navy.
-
 ### f-crest（1536x1024）→ crest (×0.3)
 
 > a single horizontal shop sign crest plate about 3:1, centered with transparent space around it: a navy anodized aluminium plaque with chamfered corners and a raised bevelled aluminium border, two small fanned blank trading cards (navy card backs with a plain aluminium border, no symbols) tucked behind its left end, and a thin lemon-yellow (#FFD500) enamel pinstripe running just inside the border like the yellow frame of a card. The plaque face is flat, dark and empty, reserved for a shop name to be added later. Lit by the warm shop lamp from above.
@@ -44,18 +62,6 @@ UI 皮肤素材（DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--qualit
 按下态。为了和平时的底逐像素对齐，走编辑模式：把三张 `btn-*.webp` 放大 2 倍、竖排在 1024x1536 透明画布上（各自中心在 y = 256 / 768 / 1280）当 `-i` 参照，`--quality high --background transparent`。草稿 low 出过一版：参照图上的黄被压成了芥末黄（读成金卡），定稿提示词里给每个键面写死了颜色。九宫格 slice 量出来上下都是 34（没有下唇），写在 style.css 的 `:active` 里。
 
 > （模板）+ Redraw exactly these three buttons in their PRESSED state, same size, same position, same rim, same screws, same outline as the reference: the enamel key is pushed down into the aluminium rim. The coloured lower lip strip under each button is gone (the key sits flush, no visible thickness). Each enamel face keeps its hue and is only slightly darker and flatter: button 1 stays clean lemon yellow (#EBC400, never mustard or gold), button 2 deep navy lacquer (#172647), button 3 dark oxide red (#5E1915). A thin dark inner shadow runs along the top and left inner edges of each face where the rim now overhangs it; no bright highlight on the face. The aluminium rim is unchanged. Empty flat face for a label. Fully transparent background, no checkerboard.
-
-### i-rank / i-trophy（来自落选皮肤 #1，分支 ui-skin-card-shop-hud）
-
-那一轮的 3×3 图标 sheet（1024²，切成 72²），材质同是铝 + 深蓝珐琅浮雕，和上面 f-icons 放在一起看不出两套，所以直接拿来用，没有重出。提示词：
-
-> a 3 by 3 grid of nine separate small game HUD icons, evenly spaced with generous empty space between them, each icon the same size, same material (brushed steel emboss with navy enamel inlay and a thin dark outline): 1 a stack of coins, 2 a sealed foil trading-card booster pack, 3 a person silhouette bust, 4 a small store shelf rack, 5 a storage crate box, 6 a handshake, 7 a single trading card in a sleeve (blank face), 8 an upward chevron rank badge, 9 a trophy cup. No text.
-
-### u-icons（1536x1152）→ u-signage u-racks u-depth u-case / u-supplier u-expand u-clerk u-luck / u-talk u-crowd u-watch u-apprentice（4×3 grid，每格 384²，按上面的切法裁到不透明包围盒、放进 96² 透明方块，PIL webp q84）
-
-成长树的徽章图标（DESIGN.md「成长」），每个店铺升级 / 技能一枚。模板同上，但把「only where stated, POP-label lemon yellow」换成 **no yellow anywhere, no brown**：草稿 low 自己给四叶草、月亮、箭头上了黄，而黄只给能按的东西。草稿没提交。
-
-> （模板，黄色一句替换如上）Subject: a sprite sheet of exactly twelve small game HUD icons in a 4-column by 3-row grid, evenly spaced with generous transparent gaps, each icon the same size and centered in its cell, all in one consistent style: embossed badges made of satin aluminium with navy enamel inlay, chunky readable silhouettes that still read at 24 pixels, thin dark outline, no background plate behind each icon. Row 1: (1) a hanging shop signboard on two short chains, blank face; (2) a freestanding shop shelf rack with two boards holding tiny blank packs; (3) three thin shelf boards stacked one above another with a small upward arrow chevron beside them; (4) a small glass display case cabinet on legs with two blank cards standing inside. Row 2: (5) a small delivery van seen from the side with a closed navy crate on its roof; (6) a small shopfront with a rolled-up shutter and two outward-pointing arrow chevrons on either side showing it widening; (7) a shop clerk bust wearing an apron; (8) a four-leaf clover. Row 3: (9) a speech bubble with three dots; (10) a group of three overlapping head-and-shoulders bust silhouettes; (11) a round wall clock with a small crescent moon beside it; (12) a hand placing a single blank trading card upright into a small acrylic card stand. Every icon uses only navy enamel and satin aluminium; the clover, clock and moon are aluminium with navy inlay. Fully transparent background around every icon, no dark backdrop, no vignette, no checkerboard.
 
 # 剧情插画（public/gen/story/，src/ui/story.ts）
 
@@ -71,12 +77,6 @@ PORTRAIT：
 
 ## SUBJECT
 
-
-### p-icons（1536x1024，high）→ p-seed p-fit p-regulars / p-access p-hire p-luck（3×2 grid，切法同上：按不透明投影切块、裁包围盒、放进 96² 透明方块，cwebp q84）
-
-名气加成的徽章（DESIGN.md「成长」开分店），六项各一枚。模板同 u-icons（「no yellow anywhere, no brown」那版）。high 那张的四叶草画成了六瓣，p-luck 用的是同一提示词 low 草稿里切出来的（四瓣）；其余五枚是 high。
-
-> （模板，黄色一句替换如 u-icons）Subject: a sprite sheet of exactly six small game HUD icons in a 3-column by 2-row grid, evenly spaced with generous transparent gaps, each icon the same size and centered in its cell, all in one consistent style: embossed badges made of satin aluminium with navy enamel inlay, chunky readable silhouettes that still read at 24 pixels, thin dark outline, no background plate behind each icon. Row 1: (1) a small closed cash tin strongbox with a coin slot in its lid and a little latch; (2) a two-wheeled hand truck dolly carrying a small folded shop shelf rack strapped to it; (3) a punched loyalty stamp card, a rectangle with a row of round punched holes along it and one blank circle, no writing. Row 2: (4) an old-fashioned key on a ring with a small blank luggage tag tied to it; (5) a shop apron hanging from a single wall hook; (6) a four-leaf clover standing on a small raised stepped plinth base. Every icon uses only navy enamel and satin aluminium; the clover is aluminium with navy inlay. Fully transparent background around every icon, no dark backdrop, no vignette, no checkerboard.
 
 ### street.webp（landscape 1536x1024，high）
 
