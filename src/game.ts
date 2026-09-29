@@ -147,9 +147,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const DEBT0 = 40000, BILL0 = 300, BILL_G = 1.12, DEBT_STEP = 0.5;
   const LOAN_RATE = 0.1, LOAN_MARK = 0.05, LOAN_K = 1, LOAN_FLOOR = 3000;
   // 顺手还 (game setting, GAMEPLAY §4.5): once a week's bill is paid, 九姐 also takes LOAN_PAY of the loan (at least LOAN_MIN × the
-  // shop's scale, or all of it) out of the till — only from cash beyond what the clerk needs for a round (at least LOAN_FLOAT),
+  // shop's scale, or all of it) out of the till — only from cash beyond the money to fill the shelves plus next week's installment (loanFloat),
   // never making the bill late, never borrowed for, never a bankruptcy. A loan left alone used to climb to the credit line and sit
-  // there for good, a tenth of it paid every week as interest (autoplay 冲动新手: ~$50k at 16 h, 0/20 ever cleared; now 14/20).
+  // there for good, a tenth of it paid every week as interest (autoplay 冲动新手: ~$50k at 16 h, 0/20 ever cleared; now 10/20).
   const LOAN_PAY = 1 / 3, LOAN_MIN = 1000, LOAN_FLOAT = 1000;
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
   // 图鉴: each set's Pokédex fills as you pull new card numbers (selling a card never un-collects it).
@@ -776,9 +776,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const inst = installment(state.week), grown = state.loan * (1 + loanRate()), hard = Math.max(0, Math.round(grown - creditLimit()));
     return { week: state.week, amount: inst + hard, inst, loanPay: Math.max(0, Math.round(loanDue(grown) - hard)), dueAt: clock() + dueIn() * 1000 };
   }
-  // What 顺手还 leaves in the till: a clerk round's restock money (at least LOAN_FLOAT) plus the installment of the week after the
-  // bill being paid (w; before it falls due that is state.week + 1). Without the installment 普通 borrowed a fifth more (§4.5).
-  const loanFloat = (w = state.week + 1) => Math.max(LOAN_FLOAT, clerkBudget()) + installment(w);
+  // What 顺手还 leaves in the till: the money to fill every shelf (a clerk's round, or the shelves' gap for a player restocking by
+  // hand; at least LOAN_FLOAT) plus the installment of the week after the bill being paid (w; before it falls due, state.week + 1).
+  // Without the installment 普通 borrowed a fifth more; without the shelves' gap a clerkless shop's restock money went to the loan (§4.5).
+  const loanFloat = (w = state.week + 1) => Math.max(LOAN_FLOAT, clerkBudget(), shelfGap()) + installment(w);
+  // what filling every shelf to the top would cost at the wholesale price (a player without a clerk restocks by hand from the same till)
+  const shelfGap = () => cents(shelves().reduce((a, sh) => a + (sh.id && unlocked(sh.id) ? Math.max(0, depth() - sh.qty) * wholesale(sh.id) : 0), 0));
   const loanDue = (L: number) => Math.min(L, Math.max(L * LOAN_PAY, LOAN_MIN * debtScale())); // this week's 顺手还 of a loan grown to L, hard part included
   // Weeks until the loan is gone if every 顺手还 is taken in full and nothing more is borrowed (账本 prints it).
   function loanWeeks() { let L = state.loan, w = 0; for (; L >= 1 && w < 99; w++) { const g = L * (1 + loanRate()); L = g - Math.max(loanDue(g), g - creditLimit()); } return w; }
