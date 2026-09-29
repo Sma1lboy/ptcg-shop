@@ -22,6 +22,7 @@
 - **TypeScript 只写可擦除语法**（tsconfig 开了 `erasableSyntaxOnly`）。测试和 autoplay 让 node 直接跑 `src/*.ts`，所以不许用 enum、namespace、构造函数参数属性；import 带 `.ts` 后缀；只导入类型写 `import type`。唯一的例外是 `src/table3d.js`：3D 场景保持纯 JS（tsconfig 的 `allowJs`，引用方拿到推断出的类型，文件本身不做类型检查）。
 - **three.js 只用于开包台的 3D 场景（`src/table3d.js`），一律动态 `import('three')` / `import('three/addons/…')`，写字面量路径。** 构建时它不进包（压缩后约 800 KB，会撑爆 pen），由 `vite.config.ts` 注入的 import map 从 jsdelivr 加载和 node_modules 同一版本（package.json 钉死 0.176.0，3D 场景就是按这个版本做的，升级要重新看一遍效果）；dev 用 node_modules 里的。动态加载保证 CDN 挂了只丢 3D，页面照常能玩。WebGL 不可用、`prefers-reduced-motion`、three 还没加载到或加载失败时，`mountTable` 返回 null，`mat.ts` 退回 2D 开包台。
 - **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 2D 的 `#stage` 和 3D 的 `#scene3d` 画布）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入、WebGL），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
+- **需要图片素材时可以生成（用户已同意，走 OpenAI）**：用 `gpt-image` skill（先查它的 gallery / craft 提示词库），或 `uvx --from git+https://github.com/wuyoscar/gpt_image_2_skill gpt-image -p "…" -f out.png`（key 在 `~/.env` 的 `OPENAI_API_KEY`）。用途：桌面/柜台/胶垫等 3D 贴图、道具、成就徽章、插画、背景这类 UI 素材。规矩：只在开发时生成，游戏运行时不调任何 API；草稿 `--quality low`，定稿才 `high`，不要 `-n` 批量刷；转成体积小的 webp 放进 `public/gen/`（或各自模块旁）并提交，文件名旁写一行生成用的提示词（`public/gen/PROMPTS.md`）；不生成仿冒宝可梦官方卡面、卡背、logo 或角色的图；pen 仍须 < 1,000,000 字符，大图不内联，pen 里缺图要有降级。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
   - `data/cards-*.json` 由 `node scripts/fetch-data.mjs [系列 id…]` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。整包价 `data/packs.json` 由 `node scripts/fetch-packs.mjs` 从各系列的 `priceSource`（PriceCharting）抓，同样不许手改。
@@ -44,7 +45,9 @@
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客（货柜页）/图鉴含补卡（欧气页）/店员（货柜页），`upgrades` + `skills` 是成长页（店铺等级、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
-| `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, onHold, reducedMotion })` → `{ showPack, showBatch, flip, flipAll, resize, dispose }`；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
+| `src/table3d.js` | 开包台的 three.js 3D 场景：柜台（层压台面、铝包边、胶垫印刷、后面的玻璃展示柜/卡册/硬卡膜）、铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的包和卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onPick, onLost, onHold, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, flip, flipAll, resize, dispose }`；`showShelf(items)` 是闲置时的「今天拆哪包？」（每个系列一叠仓库里的包，`{ set, n, off }` 由 mat.ts 的 `shelfItems()` 算，标签按钮也是 mat.ts 的），点包回调 `onPick(k)`，从这里开的包从那叠上拿起来进手里；`ready` 是 three 加载完的 promise；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
+| `src/achievements.ts` | 成就：43 个成就的定义、奖金（游戏设定）和判定。`note(G, packs)` 在每次开包事件记计数（`state.feat`），`check(G)` 按状态判定、记进 `state.ach`、用 `G.bonus` 一次性发奖金。不改任何概率和数值 |
+| `src/ui/ach.ts` | 成就页 `#ach`（每个成就一张评级标签）和解锁提示；翻牌没翻完（`hold`）不判成就 |
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |

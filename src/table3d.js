@@ -2,9 +2,12 @@
 // slide the front card aside to uncover the next, foil shaders on the cards, a show scaled to the pull's rarity.
 // Pure presentation: it renders exactly the cards it is handed (one pack, or up to ten plus which of their cards to show), and
 // reports progress through callbacks. It never reads the game or src/sim.ts and has no say in what a pack contains.
+// Before the first pack it shows every set's sealed packs on the mat (showShelf); which ones and how many is mat.ts's call.
 // Plain JS (tsconfig allowJs, not type-checked). Interface, used by src/ui/mat.ts:
-//   mountTable(el, { onTear, onFlip(i, card), onDone, onLost?, onHold?, reducedMotion }) → { showPack(set, cards), showBatch(set, packs, picks), flip(i), flipAll(), resize(), dispose() } | null
-//   (onHold: a batch's best card is being lifted face down, the caption of the previous one should go)
+//   mountTable(el, { onTear, onFlip(i, card), onDone, onPick?(k), onLost?, onHold?, reducedMotion })
+//     → { showShelf(items), hover(k), showPack(set, cards), showBatch(set, packs, picks), flip(i), flipAll(), resize(), dispose() } | null
+//   (onHold: a batch's best card is being lifted face down, the caption of the previous one should go;
+//    onPick(k): shelf item k's pack was tapped. showShelf items: [{ set, n (packs in the stack), off (can't be opened) }])
 // three.js: node_modules in dev, the import map vite.config.ts injects in builds (CDN, same pinned version). mountTable returns
 // null while three is still loading, if it failed to load, or without WebGL; mat.ts then keeps the 2D mat.
 import * as fx from './fx.ts';
@@ -14,10 +17,11 @@ import { SETS } from './sets.ts';
 const FX = () => fx;
 let T, M;
 // Literal specifiers so Vite resolves them: node_modules in dev, the CDN import map in builds (still lazy: a failed CDN only costs the 3D mat).
-Promise.all([import('three'), import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'), import('three/addons/postprocessing/UnrealBloomPass.js'),
-  import('three/addons/postprocessing/OutputPass.js'), import('three/addons/environments/RoomEnvironment.js')])
-  .then(([three, ...addons]) => { T = three; M = Object.assign({}, ...addons); })
-  .catch(e => console.warn('[table3d] three.js did not load; the 2D mat stays', e));
+// ready: true once three.js is in (mountTable can then run), false if it failed; ui/mat.ts waits on it to swap the idle mat to 3D.
+export const ready = Promise.all([import('three'), import('three/addons/postprocessing/EffectComposer.js'), import('three/addons/postprocessing/RenderPass.js'), import('three/addons/postprocessing/UnrealBloomPass.js'),
+  import('three/addons/postprocessing/OutputPass.js'), import('three/addons/environments/RoomEnvironment.js'), import('three/addons/utils/BufferGeometryUtils.js')])
+  .then(([three, ...addons]) => { T = three; M = Object.assign({}, ...addons); return true; })
+  .catch(e => { console.warn('[table3d] three.js did not load; the 2D mat stays', e); return false; });
 // Rarity tier drives the show: 0 bulk, 1 reverse/holo rare, 2 RR/ACE/Poké Ball/foil energy, 3 UR, 4 IR/Master Ball, 5 SIR/HR/MHR.
 const TIER = { R: 1, REV: 1, RR: 2, ACE: 2, PB: 2, FE: 2, UR: 3, IR: 4, MB: 4, SIR: 5, HR: 5, MHR: 5 };
 const tierOf = c => TIER[c.kind] || 0;
@@ -29,7 +33,8 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 
 // Real sizes in cm: a card is 63×88 mm with 3 mm corners; an SV booster is about 74×128 mm with ~9.5 mm crimps.
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
-const MW = 76, MH = 68, MZ = -6; // playmat size and where its centre sits (deep enough that the ten-pack shots never see past its front edge)
+const MW = 64, MH = 54, MZ = -8; // playmat size and where its centre sits: the shelf, the single-pack spread and the fan stay on it; a ten-pack deal's back row reaches the counter
+const CZ0 = 34, CZ1 = -60, CX = 72; // the counter top: near edge (under the player's hands), back edge, half width
 const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
@@ -67,9 +72,12 @@ function canvasTex(c, color = true) {
   t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
 }
 const loadImg = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.decoding = 'async'; i.onload = () => res(i); i.onerror = () => res(null); i.src = url; });
-const fonts = () => Promise.race([
-  Promise.all(['400 90px "ZCOOL QingKe HuangYou"'].map(f => document.fonts?.load(f, '欧气卡铺超电突围命运对决棱镜进化宝可梦151草火水雷超斗恶钢能量') || null)),
-  new Promise(r => setTimeout(r, 1500))]).catch(() => {});
+// The display face (--font-display, Noto Sans SC 900 from Google Fonts) is split into unicode-range slices: load the slices
+// for every glyph painted with it before painting, or the canvas silently keeps the system fallback. Offline: give up after 2.5 s.
+let fontsP = null;
+const fonts = () => (fontsP ||= Promise.race([
+  document.fonts?.load(`900 100px ${DISP()}`, '欧气卡铺' + SETS.map(s => s.name).join('')) || null,
+  new Promise(r => setTimeout(r, 2500))]).catch(() => {}));
 const DISP = () => css('--font-display'), BODY = () => css('--font-body');
 
 // Height field → tangent-space normal map (used for foil crinkles and the rubber mat grain).
@@ -149,7 +157,7 @@ function drawFront(x, look, set, logo, art) {
   if (logo) { const lh = Math.min(W * .8 * logo.height / logo.width, 250), lw = lh * logo.width / logo.height; x.save(); x.shadowColor = 'rgba(0,0,0,.4)'; x.shadowBlur = 20; x.shadowOffsetY = 6; x.drawImage(logo, (W - lw) / 2, cr + 64, lw, lh); x.restore(); } // tall logos (151) are capped so the art still shows
   gr = x.createLinearGradient(0, H - cr - 360, 0, H - cr); gr.addColorStop(0, rgba(c2, 0)); gr.addColorStop(.55, rgba(c2, .85)); gr.addColorStop(1, c2);
   x.fillStyle = gr; x.fillRect(0, H - cr - 360, W, 360);
-  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `400 108px ${DISP()}`;
+  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `900 100px ${DISP()}`;
   x.save(); x.shadowColor = 'rgba(0,0,0,.45)'; x.shadowBlur = 14; x.fillText(set.name, W / 2, H - cr - 118); x.restore();
   x.font = `500 30px ${BODY()}`; x.fillStyle = 'rgba(255,255,255,.82)'; x.fillText('补充包 · 每包 11 张', W / 2, H - cr - 58);
   crimps(x, W, H, c2, 'rgba(255,255,255,.16)');
@@ -164,7 +172,7 @@ function drawBack(x, look, set, logo) {
   x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(W / 2 - 24, 0, 48, H); // the glued seam down the back
   x.fillStyle = 'rgba(255,255,255,.14)'; x.fillRect(W / 2 - 24, 0, 3, H); x.fillRect(W / 2 + 21, 0, 3, H);
   if (logo) { const lh = Math.min(W * .5 * logo.height / logo.width, 200), lw = lh * logo.width / logo.height; x.drawImage(logo, (W - lw) / 2, cr + 70, lw, lh); }
-  x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `400 70px ${DISP()}`; x.fillText('欧气卡铺', 70, 560);
+  x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `900 66px ${DISP()}`; x.fillText('欧气卡铺', 70, 560);
   x.font = `400 28px ${BODY()}`; x.fillStyle = 'rgba(255,255,255,.78)';
   [`${set.name} · 补充包`, '每包 11 张卡：', '1 张能量 · 4 张普通 · 3 张非普通', '2 张反闪位 · 1 张稀有位', '', '开包概率：TCGplayer 实开统计', '单卡价格：TCGplayer 市价'].forEach((l, i) => x.fillText(l, 70, 630 + i * 44));
   const bx = W - 70 - 250, by = H - cr - 230; // barcode
@@ -195,7 +203,8 @@ function packArt(setId) {
   Promise.all([loadImg(ASSETS.logo(setId)).then(i => { logo = i; }), loadImg(ASSETS.card(setId, look.chase, 'high')).then(i => { art = i; }), fonts()]).then(paint);
   const mk = (map, orm) => new T.MeshPhysicalMaterial({ map, metalnessMap: orm, roughnessMap: orm, metalness: 1, roughness: 1,
     normalMap: shared.crinkle, normalScale: new T.Vector2(.5, .5), clearcoat: .35, clearcoatRoughness: .22 });
-  return (artCache[setId] = { front: mk(tx[0], tx[2]), back: mk(tx[1], tx[3]) });
+  const dim = mk(tx[0], tx[2]); dim.color.set(0x4B5264); dim.clearcoat = .1; // a pack on the shelf that can't be opened yet: in the lamp's shadow
+  return (artCache[setId] = { front: mk(tx[0], tx[2]), back: mk(tx[1], tx[3]), dim });
 }
 
 // Pillow shape: flat crimps top and bottom, flat side seams, puffed in the middle.
@@ -265,8 +274,11 @@ const CARD_VS = `
     gl_Position = projectionMatrix * viewMatrix * wp;
   }`;
 // uKind: 0 plain, 1 reverse holo (all but the art box), 2 holo art box, 3 full holo, 4 etched full art, 5 gold, 6 ball pattern reverse, 7 cosmos
+// uLit 0…1: 1 for the card in hand (held to the eye, or the front of the pack being revealed). Its light is then a neutral
+// hand light, not the room's: away from the lamp's cone and under the dimmed show moods it still shows the printed colours.
+// Foil only ADDS reflection (a spectral sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
 const CARD_FS = `
-  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uTime, uCone0, uCone1; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
+  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
   varying vec2 vUv; varying float vFront; varying vec3 vN, vP, vR, vU;
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -280,16 +292,18 @@ const CARD_FS = `
     vec3 Lk = normalize(uKey - vP); // the lamp is a spot: outside its cone a card only gets the room fill
     vec3 lamp = uKeyCol * smoothstep(uCone0, uCone1, dot(-Lk, uKeyDir));
     vec3 gd = uGlowAt - vP; vec3 wash = uWash * 40.0 / (dot(gd, gd) + 4.0); // the show light sits just in front of the held card and falls off
-    vec3 col = base * (uAmb + lamp * max(dot(N, Lk), 0.0) + wash);
-    col += lamp * pow(max(dot(N, normalize(Lk + V)), 0.0), 90.0) * 0.16;
+    vec3 light = mix(uAmb + lamp * max(dot(N, Lk), 0.0) + wash, vec3(0.97), uLit);
+    vec3 shine = mix(uAmb + lamp + wash, vec3(0.9), uLit); // what the laminate and the foil reflect
+    vec3 col = base * light;
+    col += lamp * pow(max(dot(N, normalize(Lk + V)), 0.0), 90.0) * 0.16 * (1.0 - uLit);
     vec2 ang = vec2(dot(V, vR), dot(V, vU));
     float gl = (vUv.x + vUv.y) * 0.5 - 0.5 - ang.x * 1.7 - ang.y * 1.2; // laminate glare sliding across as the card tilts
-    col += exp(-gl * gl * 28.0) * 0.06 * (uAmb + lamp);
+    col += exp(-gl * gl * 28.0) * 0.06 * shine;
     if (front && uKind > 0.5) {
       float k = uKind, luma = dot(base, vec3(0.299, 0.587, 0.114));
       float art = step(0.075, vUv.x) * step(vUv.x, 0.925) * step(0.525, vUv.y) * step(vUv.y, 0.903);
       float mask = k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
-      vec3 rb = spectrum(vUv.x * 0.8 + vUv.y * 1.2 + ang.x * 2.6 + ang.y * 1.9);
+      vec3 rb = mix(vec3(1.0), spectrum(vUv.x * 0.8 + vUv.y * 1.2 + ang.x * 2.6 + ang.y * 1.9), 0.75);
       float tx = 1.0;
       if (k > 3.5 && k < 5.5) tx = 0.45 + 0.8 * vnoise(vUv * vec2(64.0, 90.0)) * vnoise(vUv * vec2(9.0, 12.6) + 3.0);
       if (k > 5.5 && k < 6.5) { float r = length(fract(vUv * vec2(8.0, 11.2)) - 0.5); tx = 0.25 + smoothstep(0.35, 0.31, r) - 0.6 * smoothstep(0.25, 0.21, r); }
@@ -297,9 +311,9 @@ const CARD_FS = `
       if (k > 4.5 && k < 5.5) rb = mix(vec3(1.0, 0.8, 0.36), rb, 0.22);
       float h = hash(floor(vUv * vec2(84.0, 118.0)));
       float spark = step(0.9, h) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
-      float amt = mask * uFoil;
-      col = mix(col, col * (0.55 + rb * 1.25), amt * (k > 3.5 ? 0.38 : 0.55) * tx);
-      col += rb * amt * tx * (0.06 + 0.28 * luma) + spark * amt * (k > 3.5 ? 1.1 : k < 1.5 ? 0.35 : 0.7) * (uAmb + lamp + wash);
+      float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
+      float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
+      col += rb * shine * amt * tx * sheen * (0.4 + 0.6 * luma) + spark * amt * (k > 3.5 ? 1.1 : k < 1.5 ? 0.35 : 0.7) * shine;
     }
     gl_FragColor = vec4(col, 1.0);
     #include <tonemapping_fragment>
@@ -388,14 +402,14 @@ async function loadFace(c) {
 function cardMesh(c) {
   const [kind, foil] = foilOf(c), u = shared.u;
   const cap = new T.ShaderMaterial({ vertexShader: CARD_VS, fragmentShader: CARD_FS,
-    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
+    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
   const m = new T.Mesh(shared.cardGeo, [cap, shared.edge]); m.castShadow = true;
   m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; m.userData.face = t; });
   return m;
 }
 const HALO_FS = `uniform vec3 uCol; uniform float uAmt; varying vec2 vP;
   float sdr(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
-  void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}); gl_FragColor = vec4(uCol * uAmt * exp(-max(d, 0.0) * 1.5) * smoothstep(-0.3, 0.0, d), 1.0); }`;
+  void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}); gl_FragColor = vec4(uCol * uAmt * exp(-max(d, 0.0) * 2.0) * smoothstep(-0.3, 0.0, d) * smoothstep(2.4, 0.6, d), 1.0); }`; // gone well before the plane's edge: no box of light
 function halo(card, col, amt, ms = 500) {
   let h = card.userData.halo;
   if (!h) {
@@ -475,7 +489,7 @@ const MOODS = {
   silver: { hemi: .22, key: .75, cone: .5, glow: 1.2, bloom: .6, rays: .22, col: '--fx-silver' },
   gold: { hemi: .08, key: .3, cone: .5, glow: 1.9, bloom: .8, rays: .5, col: '--fx-gold' }, // room lights down, the pull lit from the front
   glow: { hemi: .16, key: .6, cone: .5, glow: 1.5, bloom: .6, rays: .16, col: '--fx-gold' },
-  look: { hemi: .3, key: 1.2, cone: .5, glow: .5, bloom: .15, rays: 0, col: '--fx-silver' },
+  look: { hemi: .2, key: .75, cone: .5, glow: .2, bloom: .15, rays: 0, col: '--fx-silver' }, // the table steps back behind the card in hand
 };
 const moodNow = { hemi: .5, key: 1.6, cone: .5, glow: 0, bloom: .12, rays: 0 };
 function mood(name, ms = 500) {
@@ -507,6 +521,28 @@ function onTable(nx, ny, st) {
   const v = new V3(nx, ny, .5).unproject(probe).sub(probe.position).normalize();
   return probe.position.clone().addScaledVector(v, -probe.position.y / v.y);
 }
+// The shot at pitch p that holds every point inside mx/my of the frame's half size, centred on them: distance by bisection on
+// the probe camera (exact for the perspective, unlike fit()), then the target moved along the table to centre the points.
+// y0…y1: the part of the frame's height (NDC, −1 bottom … 1 top) the points should fill; the rest shows what's behind them.
+function frameOn(pts, t, p, mx = .9, y0 = -.86, y1 = .86) {
+  probe.aspect = camera.aspect; probe.updateProjectionMatrix();
+  const st = { t: t.clone(), p, d: 50 }, v = new V3();
+  const ext = () => {
+    placeCam(probe, st); probe.updateMatrixWorld(); const e = [1e9, -1e9, 1e9, -1e9];
+    for (const q of pts) {
+      v.copy(q).applyMatrix4(probe.matrixWorldInverse); if (v.z > -1) return null; // behind the lens: too close
+      v.applyMatrix4(probe.projectionMatrix); e[0] = Math.min(e[0], v.x); e[1] = Math.max(e[1], v.x); e[2] = Math.min(e[2], v.y); e[3] = Math.max(e[3], v.y);
+    }
+    return e;
+  };
+  const solve = () => {
+    let lo = 4, hi = 600;
+    for (let k = 0; k < 22; k++) { st.d = (lo + hi) / 2; const e = ext(); if (!e || Math.max(-e[0], e[1]) > mx || e[3] - e[2] > y1 - y0) lo = st.d; else hi = st.d; }
+    st.d = hi; return ext();
+  };
+  for (let it = 0; it < 4; it++) { const e = solve(); st.t.x += (e[0] + e[1]) / 2 * st.d * TAN * camera.aspect; st.t.z -= ((e[2] + e[3]) - (y0 + y1)) / 2 * st.d * TAN / Math.sin(p); }
+  solve(); return st;
+}
 const FOCUS = () => new V3(0, 7, 0);
 const GLOW0 = () => FOCUS().add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6));
 const stages = () => ({ pack: { t: FOCUS(), p: PITCH, d: fit(PW / .62, PH / .66) }, reveal: { t: FOCUS(), p: PITCH, d: fit(CW / .56, CH / .58) } });
@@ -537,10 +573,22 @@ function build(set, cards) {
   run.faces = Promise.all(run.cards.map(m => m.userData.ready));
   return run;
 }
-async function enter(run) {
-  camTo(stages().pack, 700);
-  const p = run.pack; p.position.y = 17;
-  await tween(800, k => { p.position.y = 17 * (1 - k); p.rotation.set(.5 * (1 - k), -.4 * (1 - k), .25 * (1 - k)); }, E.back);
+// from: the world matrix of the shelf pack it was picked from; that pack rises off the mat into the hand, else one drops in.
+async function enter(run, from) {
+  const p = run.pack;
+  if (from) {
+    camTo(stages().pack, 850);
+    grip.updateMatrixWorld(true);
+    const p0 = new V3(), q0 = new T.Quaternion(), q1 = new T.Quaternion();
+    grip.matrixWorld.clone().invert().multiply(from).decompose(p0, q0, new V3());
+    p.position.copy(p0); p.quaternion.copy(q0); FX().slide(); run.stack.visible = false; // the cards are in the pack, which isn't in the hand yet
+    await tween(850, k => { p.position.copy(p0).multiplyScalar(1 - k); p.position.z += Math.sin(k * Math.PI) * 4; p.quaternion.slerpQuaternions(q0, q1, k); }, E.io);
+    run.stack.visible = true;
+  } else {
+    camTo(stages().pack, 700);
+    p.position.y = 17;
+    await tween(800, k => { p.position.y = 17 * (1 - k); p.rotation.set(.5 * (1 - k), -.4 * (1 - k), .25 * (1 - k)); }, E.back);
+  }
   if (R !== run) return;
   run.stage = 'pack';
   if (run.wantTear) autoTear(run);
@@ -552,23 +600,29 @@ async function autoTear(run) {
   await tween(460 * (1 - p0) + 60, k => { const p = p0 + (1 - p0) * k; setTear(run, p); if (p - lastC > .14) { lastC = p; FX().crinkle(); } }, E.in);
   if (R === run) rip(run);
 }
+// Where the torn strip lands, the empty pack rests and the seen cards pile, for this aspect (relayout() moves them on resize).
+function spots() {
+  const st = stages().reveal, wide = camera.aspect > 1;
+  return { strip: onTable(small() ? .45 : .5, small() ? .8 : .62, st).setY(.06),
+    pile: onTable(wide ? .7 : .84, wide ? -.08 : -.18, st), // portrait: half off the side edges, clear of the caption
+    rest: onTable(wide ? -.72 : -.86, wide ? .02 : -.12, st).setY(PUFF + .05) };
+}
 function rip(run) {
   run.stage = 'extract';
-  const s = run.pack.userData.strip, st = stages().reveal, land = onTable(small() ? .45 : .5, small() ? .8 : .62, st);
-  flyTo(s, land.setY(.06), flatQ(Math.random() * 2 - 1), 950, 7, Math.PI * 4);
+  const s = run.pack.userData.strip;
+  flyTo(s, spots().strip, flatQ(Math.random() * 2 - 1), 950, 7, Math.PI * 4);
   opts.onTear();
   extract(run);
 }
 async function extract(run) {
   await Promise.race([run.faces, wait(1500)]); if (R !== run) return;
-  const st = stages(), wide = camera.aspect > 1;
+  const st = stages();
   camTo({ ...st.pack, d: st.pack.d * 1.12 }, 800);
   FX().slide(); opts.onFlip(0, run.data[0]);
   await tween(800, k => { run.stack.position.y = -.4 + 7.2 * k; run.pack.position.y = -5 * k; }, E.io);
   if (R !== run) return;
-  run.pileAt = onTable(wide ? .7 : .84, wide ? -.08 : -.18, st.reveal); // portrait: half off the side edges, clear of the caption
-  const rest = onTable(wide ? -.72 : -.86, wide ? .02 : -.12, st.reveal).setY(PUFF + .05);
-  flyTo(run.pack, rest, flatQ(-.35 + Math.random() * .2), 850, 3);
+  const sp = spots(); run.pileAt = sp.pile;
+  flyTo(run.pack, sp.rest, flatQ(-.35 + Math.random() * .2), 850, 3);
   tween(700, k => { run.stack.position.y = 6.8 * (1 - k); run.stack.position.z = -.14 * (1 - k); }, E.io);
   await camTo(st.reveal, 850);
   if (R !== run) return;
@@ -595,8 +649,8 @@ async function uncover(run) {
 }
 function toss(run, card) {
   const k = run.pile++, j = () => (Math.random() - .5) * .8;
-  const at = run.pileAt.clone().add(new V3(j(), .06 + k * CT * 1.1, j()));
-  flyTo(card, at, flatQ(-.2 + (Math.random() - .5) * .5), 480, 2.5);
+  card.userData.off = new V3(j(), .06 + k * CT * 1.1, j()); // its place in the pile, kept for relayout()
+  flyTo(card, run.pileAt.clone().add(card.userData.off), flatQ(-.2 + (Math.random() - .5) * .5), 480, 2.5);
   if (card.userData.halo) halo(card, card.userData.halo.material.uniforms.uCol.value.getStyle(), .35);
 }
 async function reveal(run, i) {
@@ -618,10 +672,10 @@ function celebrate(run, i, t) {
   if (t === 0) { mood('base', 300); push(1, 400); return 40; }
   run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1) };
   if (t === 1) { mood('base', 300); push(1, 400); return 160; }
-  if (t === 2) { mood('lift', 300); halo(card, silver, .5); burst(at, 50, silver, 14); push(.96, 500); return 420; }
-  if (t === 3) { mood('silver', 400); halo(card, silver, .7); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
+  if (t === 2) { mood('lift', 300); halo(card, silver, .3); burst(at, 50, silver, 14); push(.96, 500); return 420; }
+  if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
   mood('gold', 450).then(() => wait(1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
-  halo(card, gold, .9); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
+  halo(card, gold, .6); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
   embers(run, card, gold, t === 5 ? 4200 : 2600);
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
   return t === 5 ? 1700 : 1300;
@@ -646,7 +700,7 @@ async function toSpread(run) {
   const q = flatQ(0);
   run.cards.forEach((c, k) => setTimeout(() => { if (R === run) flyTo(c, G.pos[k], q, 620, 3); }, k * 55));
   await wait(700 + run.n * 55); if (R !== run) return;
-  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .45); });
+  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); });
   run.busy = false; tags(run);
 }
 function tags(run) {
@@ -691,22 +745,24 @@ async function look(run, card) {
 const BATCH_PITCH = 1.05, FAN_R = 34, FAN_Z = 1;
 const qY = a => new T.Quaternion().setFromAxisAngle(new V3(0, 1, 0), a);
 const faceDown = q => q.clone().multiply(qY(Math.PI));
-function packGrid(n) {
+// jit: each pack's [x, z] offset in -.5….5, rolled once per batch so a relayout keeps the hand-dealt look.
+function packGrid(n, jit) {
   const cols = Math.min(camera.aspect < .8 ? 4 : 5, n), rows = Math.ceil(n / cols); // portrait: 4-4-2, bigger packs
   const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, over = gx < PW + .3;
   const gz = over ? PH * .74 : PH + 1.5, front = FAN_Z - CH / 2 - 2 - PH / 2, zc = front - (rows - 1) / 2 * gz; // front row 2 cm behind the fan; crowded rows shingle
-  const pos = [], col = [];
+  const pos = [], col = [], js = over ? .5 : 1.1;
   for (let k = 0; k < n; k++) { // dealt by hand: not quite on the grid
-    const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), j = () => (Math.random() - .5) * (over ? .5 : 1.1);
-    pos.push(new V3((c - (inRow - 1) / 2) * gx + j(), PUFF + .05 + (over ? c * .45 + r * .55 : 0), front - (rows - 1 - r) * gz + j())); col.push(c);
+    const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols);
+    pos.push(new V3((c - (inRow - 1) / 2) * gx + jit[k][0] * js, PUFF + .05 + (over ? c * .45 + r * .55 : 0), front - (rows - 1 - r) * gz + jit[k][1] * js)); col.push(c);
   }
   const w = (cols - 1) * gx + PW, h = (rows - 1) * gz + PH;
   const p = BATCH_PITCH + .1, box = [w * 1.12, h * Math.sin(p) * 1.12 + 3]; // a little more top-down than the fan: the mat's far edge stays out of shot
   return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p, d: fit(...box), box } };
 }
 // The fan: an arc whose pivot is toward the player, cheapest on the left, the best on top at the right. Few picks lie
-// side by side; many overlap, the fan never gets wider than the view.
-function fanOf(n) {
+// side by side; many overlap, the fan never gets wider than the view. Behind it the np emptied packs lie flattened in one
+// shingled row as wide as the fan, and the shot frames both: the wrappers stay on the mat instead of off its top edge.
+function fanOf(n, np) {
   const tall = camera.aspect < .8, wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, (tall ? 32 : 46) * wide); // phones: overlap sooner, bigger cards
   const sp = n > 1 ? 2 * Math.asin(clamp((avail - CW) / (2 * FAN_R), 0, 1)) : 0, poses = [];
   for (let i = 0; i < n; i++) {
@@ -714,14 +770,20 @@ function fanOf(n) {
     poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, FAN_Z + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
   }
   const tight = n > 1 && 2 * FAN_R * Math.sin(sp / (n - 1) / 2) < CW + .3;
-  const sag = FAN_R * (1 - Math.cos(sp / 2)), p = 1.08, box = [Math.max(avail, 3 * CW) + 4, (CH + sag) * Math.sin(p) + 12]; // one or two picks: framed as if three, so the packs don't loom
-  return { poses, tight, cam: { t: new V3(0, 0, FAN_Z + sag / 2 - (tall ? 4 : 1.2)), p, d: fit(...box), box } }; // fan below centre: the packs show above it
+  const sag = FAN_R * (1 - Math.cos(sp / 2)), W = Math.max(avail, 3 * CW); // one or two picks: framed as if three, so the wrappers don't loom
+  const dx = np > 1 ? Math.min(PW + .6, (W - PW) / (np - 1)) : 0, zw = FAN_Z - CH / 2 - 1.4 - PH / 2, wrap = [];
+  for (let k = 0; k < np; k++) wrap.push(new V3((k - (np - 1) / 2) * dx, .1 + k * .12, zw)); // each a little above the last: shingles
+  // the shot: every card's corners and the price tag under it, and the wrappers' corners; the bottom kept clear for the caption
+  const pts = [], corner = (P, x, y) => pts.push(new V3(x, y, 0).applyQuaternion(P.q).add(P.p));
+  for (const P of poses) { for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) corner(P, x * CW / 2, y * CH / 2); corner(P, 0, -CH / 2 - 2); }
+  for (const w of wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2)));
+  return { poses, tight, wrap, pts, cam: frameOn(pts, new V3(0, 0, 0), 1.08, .94, tall ? -.66 : -.74, .92) };
 }
 function buildBatch(set, packs, picks) {
-  const grid = packGrid(packs.length), data = picks.map(([p, i]) => packs[p][i]);
-  const run = { batch: true, data, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, fan: fanOf(data.length) };
+  const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]);
+  const run = { batch: true, data, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
   run.shot = run.grid.cam;
-  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; p.userData.col = grid.col[k]; p.userData.yaw = (Math.random() - .5) * .2; scene.add(p); return p; });
+  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; Object.assign(p.userData, { col: grid.col[k], yaw: (Math.random() - .5) * .2, wy: (Math.random() - .5) * .12 }); scene.add(p); return p; });
   const inPack = {};
   run.cards = picks.map(([p, i]) => {
     const m = cardMesh(packs[p][i]), k = inPack[p] = (inPack[p] || 0) + 1;
@@ -731,12 +793,13 @@ function buildBatch(set, packs, picks) {
   run.faces = Promise.all(run.cards.map(m => m.userData.ready));
   return run;
 }
-async function enterBatch(run) {
+// froms: world poses ({ p, q }) of shelf packs of this set; the first packs of the batch are dealt from there, the rest drop in.
+async function enterBatch(run, froms = []) {
   camTo(run.grid.cam, 700);
   await Promise.all(run.packs.map((p, k) => wait(k * 60).then(() => {
     if (R !== run) return;
-    const home = run.grid.pos[k], q = flatQ(p.userData.yaw), from = home.clone().add(new V3((Math.random() - .5) * 4, 15, 7));
-    const q0 = q.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(.5, -.35, .6)));
+    const home = run.grid.pos[k], q = flatQ(p.userData.yaw), f = froms[k], from = f ? f.p : home.clone().add(new V3((Math.random() - .5) * 4, 15, 7));
+    const q0 = f ? f.q : q.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(.5, -.35, .6)));
     p.visible = true; p.position.copy(from); p.quaternion.copy(q0);
     if (k % 3 === 0) FX().slide();
     return tween(520, e => { p.position.lerpVectors(from, home, e); p.position.y += Math.sin(e * Math.PI) * 2; p.quaternion.slerpQuaternions(q0, q, e); }, E.out);
@@ -763,14 +826,19 @@ async function extractBatch(run) {
   run.stage = 'extract';
   await Promise.race([run.faces, wait(1500)]); if (R !== run) return;
   run.shot = run.fan.cam; camTo(run.shot, 1000);
+  // the packs are pushed back into the row behind the fan; one flattens once nothing is left in it
+  const empty = p => !p.children.some(c => run.cards.includes(c)), flatten = p => { if (!p.userData.flat) { p.userData.flat = true; tween(380, e => { p.scale.z = 1 - .62 * e; }, E.out); } };
+  run.packs.forEach((p, k) => wait(k * 35).then(() => { if (R === run) flyTo(p, run.fan.wrap[k], flatQ(p.userData.wy), 620, 1).then(() => { if (R === run && empty(p)) flatten(p); }); }));
+  await wait(480); if (R !== run) return;
   const step = Math.min(160, 1100 / Math.max(1, run.n));
   await Promise.all(run.cards.map((m, i) => wait(200 + i * step).then(async () => {
     if (R !== run) return;
     FX().slide();
-    const y0 = m.position.y;
+    const y0 = m.position.y, pack = m.parent;
     await tween(240, e => { m.position.y = y0 + e * CH * .8; }, E.out); if (R !== run) return; // out through the torn top
-    const P = run.fan.poses[i];
-    await flyTo(m, P.p, faceDown(P.q), 640, 6);
+    const P = run.fan.poses[i], fly = flyTo(m, P.p, faceDown(P.q), 640, 6);
+    if (empty(pack)) flatten(pack);
+    await fly;
   })));
   if (R !== run) return;
   run.stage = 'cards';
@@ -805,7 +873,7 @@ async function flipPick(run, i) {
 async function flipBest(run, i) {
   const m = run.cards[i], t = run.tiers[i], f = camBasis().f, P = run.fan.poses[i];
   const at = camera.position.clone().addScaledVector(f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6), q = camera.quaternion.clone();
-  mood('hush', 500); FX().slide(); opts.onHold?.();
+  mood('hush', 500); FX().slide(); opts.onHold?.(); run.hero = m;
   await flyTo(m, at, faceDown(q), 600, 2); if (R !== run) return;
   FX().swell(1700);
   await tween(900, e => { m.position.copy(at); m.position.x += Math.sin(e * 70) * .035 * e; m.position.y += Math.sin(e * 53) * .025 * e; }, E.lin); // the face-down pause trembles a little
@@ -836,9 +904,115 @@ async function batchSpread(run) {
   const L0 = run.look; run.look = null;
   camTo(run.shot, 700);
   if (L0) await flyTo(L0.card, L0.p, L0.q, 560, 2); // the best card goes back on top of the fan
+  run.hero = null;
   if (R !== run) return;
-  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .45); });
+  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); });
   run.busy = false; tags(run);
+}
+
+// ---------- the shelf: 今天拆哪包？ ----------
+// Until the first pack of a session every set lies on the mat: a stack of what the warehouse holds (up to SHELF_MAX packs;
+// the label has the count), one pack when it's out, in the lamp's shadow when it can't be opened. Labels are mat.ts's buttons
+// (.s3-shelf, index-aligned with the items), placed under each stack every frame. Pointing at a stack lifts its top pack;
+// tapping it calls onPick(k). The pack that gets opened rises from its stack into the hand (enter / enterBatch).
+const SHELF_MAX = 12, SHELF_PITCH = .74, SGX = PW + 2.8, LIFT = 1.1;
+// The column count that shows the packs biggest at this aspect; item 0 front left. The packs fill the lower part of the shot;
+// the top shows the back of the counter (showcase, binder), so the table reads as a place and not a black box.
+function shelfGrid(n) {
+  let best = null;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 7.5 : 4.4); // portrait: the labels need more room between rows
+    const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2)); // the front row's near edge stays on the mat
+    for (let k = 0; k < n; k++) {
+      const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
+      pos.push(at);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * (PW / 2 + .6), 0, dz * PH / 2)));
+      pts.push(at.clone().add(new V3(0, 0, PH / 2 + 3.2))); // the label under it
+    }
+    const cam = frameOn(pts, new V3(0, 0, 0), SHELF_PITCH, .92, -.9, camera.aspect < .8 ? .4 : .22);
+    if (!best || cam.d < best.cam.d - .01) best = { pos, cam };
+  }
+  return best;
+}
+const idleGeo = () => (shared.idleGeo ||= sheet(-PH / 2, PH / 2, () => 0, () => 0, 1, 24, 20)); // an untorn front face; lying flat, nothing else shows
+// A set's stack: new stock is squared up (packs a few mm off each other), the top one a little askew as if just put back.
+// Everything under the top pack is one InstancedMesh, so a tall stack costs two draw calls (and two for its shadow).
+function stackOf(item, g) {
+  g.clear(); g.userData.item = item;
+  const mat = item.off ? packArt(item.set).dim : packArt(item.set).front, n = Math.max(1, Math.min(SHELF_MAX, item.n)), rest = [];
+  for (let k = 0; k < n; k++) rest.push({ p: new V3((Math.random() - .5) * .3, .08 + k * .34, (Math.random() - .5) * .24), q: flatQ((Math.random() - .5) * (k === n - 1 ? .16 : .06)) });
+  if (n > 1) {
+    const im = new T.InstancedMesh(idleGeo(), mat, n - 1), m = new T.Matrix4(), one = new V3(1, 1, 1);
+    for (let k = 0; k < n - 1; k++) im.setMatrixAt(k, m.compose(rest[k].p, rest[k].q, one));
+    im.computeBoundingSphere(); im.castShadow = true; g.add(im); g.userData.under = im;
+  } else g.userData.under = null;
+  const top = new T.Mesh(idleGeo(), mat); top.userData.rest = rest[n - 1]; top.castShadow = true;
+  top.position.copy(rest[n - 1].p); top.quaternion.copy(rest[n - 1].q); g.add(top); g.userData.top = top;
+}
+function buildShelf(items, sig) {
+  const L = shelfGrid(items.length), run = { shelf: true, stage: 'enter', items, sig, hot: -1, cards: [], cam: L.cam, lift: items.map(() => 0) };
+  run.group = new T.Group(); scene.add(run.group);
+  run.stacks = items.map((it, k) => { const g = new T.Group(); g.position.copy(L.pos[k]); stackOf(it, g); g.visible = false; run.group.add(g); return g; });
+  return run;
+}
+async function enterShelf(run) {
+  camTo(run.cam, 900);
+  await Promise.all(run.stacks.map((g, k) => wait(120 + k * 70).then(() => {
+    if (R !== run) return;
+    g.visible = true; if (k % 2 === 0) FX().slide();
+    const home = g.position.clone(), from = home.clone().add(new V3((Math.random() - .5) * 3, 14, 6)), q0 = new T.Quaternion().setFromEuler(new T.Euler(.4, -.3, .5));
+    return tween(560, e => { g.position.lerpVectors(from, home, e); g.position.y += Math.sin(e * Math.PI) * 2; g.quaternion.slerpQuaternions(q0, new T.Quaternion(), e); }, E.out);
+  })));
+  if (R === run) run.stage = 'shelf';
+}
+// Same sets and counts: nothing to do (mat.ts calls this on every game tick). A changed stack is rebuilt; a new top pack drops on.
+function updateShelf(run, items, sig) {
+  run.sig = sig;
+  items.forEach((it, k) => {
+    const old = run.items[k], g = run.stacks[k];
+    if (!g || (old.n === it.n && old.off === it.off)) return;
+    const grew = it.n > old.n && !it.off; stackOf(it, g);
+    if (grew) { const r = g.userData.top.userData.rest, y = r.p.y; tween(420, e => { r.p.y = y + 6 * (1 - e); }, E.out); } // tickShelf places the top pack from rest
+  });
+  run.items = items;
+}
+function shelfHit(e) {
+  const r = canvas.getBoundingClientRect(), ray = new T.Raycaster();
+  ray.setFromCamera(new T.Vector2((e.clientX - r.left) / r.width * 2 - 1, 1 - (e.clientY - r.top) / r.height * 2), camera);
+  const hit = ray.intersectObjects(R.stacks.map(g => g.userData.top), false)[0];
+  return hit ? R.stacks.findIndex(g => g.userData.top === hit.object) : -1;
+}
+function shelfHover(run, k) {
+  if (k >= 0 && run.items[k].off) k = -1;
+  if (run.hot === k) return;
+  run.hot = k; canvas.style.cursor = k >= 0 ? 'pointer' : ''; wake(IDLE);
+}
+// Every frame while awake: the hovered top pack rises and tips toward the eye; labels follow their stacks on screen.
+function tickShelf(run, dt) {
+  let moving = false;
+  run.stacks.forEach((g, k) => {
+    const want = run.hot === k ? 1 : 0, l = run.lift[k] += (want - run.lift[k]) * Math.min(1, dt * 10), t = g.userData.top, rest = t.userData.rest;
+    if (Math.abs(want - l) > 1e-3) moving = true;
+    t.position.copy(rest.p).setY(rest.p.y + l * LIFT); t.quaternion.copy(rest.q).multiply(qX(l * .22));
+  });
+  const els = host.querySelectorAll('.s3-shelf > *'), w = canvas.clientWidth, h = canvas.clientHeight;
+  run.stacks.forEach((g, k) => {
+    const el = els[k]; if (!el) return;
+    const p = g.localToWorld(new V3(0, 0, PH / 2 + .5)).project(camera);
+    el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px, ${((1 - p.y) / 2 * h).toFixed(1)}px) translate(-50%, 0)`;
+    el.classList.toggle('hot', run.hot === k); el.classList.toggle('in', run.stage === 'shelf');
+  });
+  return moving;
+}
+const qX = a => new T.Quaternion().setFromAxisAngle(new V3(1, 0, 0), a);
+// A shelf pack leaves for the hand: its world pose, and it's gone from the stack. null if the set isn't on the shelf.
+function takeFromShelf(run, set, n) {
+  const g = run.stacks.find(s => s.userData.item.set === set); if (!g) return [];
+  const out = [], top = g.userData.top, im = g.userData.under, m = new T.Matrix4(), take = w => { const p = new V3(), q = new T.Quaternion(); w.decompose(p, q, new V3()); out.push({ m: w, p, q }); };
+  g.updateMatrixWorld(true);
+  if (top.visible) { take(top.matrixWorld.clone()); top.visible = false; }
+  while (im && im.count > 0 && out.length < n) { im.getMatrixAt(im.count - 1, m); take(im.matrixWorld.clone().multiply(m)); im.count--; }
+  return out;
 }
 
 // ---------- input on the canvas ----------
@@ -863,6 +1037,7 @@ function onDown(e) {
 }
 function onMove(e) {
   setPtr(e); if (ptr.in) wake(IDLE);
+  if (R?.shelf) { if (R.stage === 'shelf' && e.pointerType === 'mouse') shelfHover(R, shelfHit(e)); return; }
   if (!drag || e.pointerId !== drag.id || !R) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y, run = R;
   if (!drag.mode && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
@@ -898,6 +1073,7 @@ function onCancel(e) {
 }
 function tap(e) {
   const run = R;
+  if (run.shelf) { const k = run.stage === 'shelf' ? shelfHit(e) : -1; if (k >= 0 && !run.items[k].off) opts.onPick?.(k); return; }
   if (run.stage === 'pack' || run.stage === 'enter') return run.batch ? tearAll(run) : autoTear(run);
   if (run.stage === 'cards') return advance(run);
   if (run.stage === 'spread') {
@@ -919,21 +1095,34 @@ function tick(t) {
   renderer.info.reset();
   const dt = Math.min(.05, Math.max(0, (t - last) / 1000)); last = t; now = t;
   stepTweens();
+  if (relay && !tws.length && !drag && now >= relay) relayout();
+  placeCam(camera, cam);
   const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
   tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
   const s = t / 1000; let sway = 0;
   if (run && run.show) { const a = (t - run.show.t0) / 1000; sway = Math.sin(a * 3.4) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
   lean += (leanTo - lean) * k; // a sealed pack is held at a slight angle so its pillow shows
   const sh = shake.amp * Math.max(0, 1 - (t - shake.t0) / shake.ms);
-  const busy = tws.length > 0 || !!drag || sh > 0 || now < aliveUntil || !!(run && (run.show || run.embers)) ||
+  const shelfMoving = run?.shelf ? tickShelf(run, dt) : false;
+  let litMoving = false; // the card in hand fades onto its hand light (uLit), the rest back to the room's
+  if (run?.cards?.length) {
+    const hero = run.look?.card || run.hero || (!run.batch && (run.stage === 'cards' || run.stage === 'extract') ? run.cards[run.cur] : null);
+    for (const c of run.cards) {
+      const u = c.material[0].uniforms.uLit, to = c === hero ? 1 : 0;
+      if (Math.abs(to - u.value) > .003) { u.value += (to - u.value) * Math.min(1, dt * 7); litMoving = true; } else u.value = to;
+    }
+  }
+  const busy = tws.length > 0 || !!drag || sh > 0 || now < aliveUntil || !!(run && (run.show || run.embers)) || shelfMoving || litMoving || !!relay ||
     Math.abs(tx - tilt.x) + Math.abs(ty - tilt.y) + Math.abs(leanTo - lean) > 1e-4;
   if (busy) awake = Math.max(awake, now + IDLE);
   breath += ((now < awake ? 1 : 0) - breath) * Math.min(1, dt * 3); // the idle sway fades in on wake and out before the loop parks
   const b = breath;
   grip.rotation.set(-tilt.y * .2 + Math.sin(s * .7) * .02 * b + lean * .05, tilt.x * .3 + Math.sin(s * .45) * .05 * b + sway - lean * .2, Math.sin(s * .6) * .012 * b + lean * .03);
   grip.position.y = Math.sin(s * 1.1) * .07 * b;
-  if (run && run.look && run.look.up) {
-    run.look.card.quaternion.copy(run.look.base).multiply(new T.Quaternion().setFromEuler(new T.Euler(-tilt.y * .35, tilt.x * .45, 0)));
+  if (run && run.look && run.look.up) { // a card held to the eye stays there when the camera moves (a resize reframes the table)
+    const Lk = run.look; Lk.off ||= camera.worldToLocal(Lk.card.position.clone());
+    Lk.card.position.copy(camera.localToWorld(Lk.off.clone()));
+    Lk.card.quaternion.copy(camera.quaternion).multiply(new T.Quaternion().setFromEuler(new T.Euler(-tilt.y * .35, tilt.x * .45, 0)));
   }
   if (run && run.embers) run.embers();
   parts.update(dt);
@@ -942,7 +1131,6 @@ function tick(t) {
   }
   applyMood();
   shared.u.time.value = s; rays.material.uniforms.uTime.value = s;
-  placeCam(camera, cam);
   if (sh > 0) { camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   if (seen) { composer.render(dt); frames++; } // off screen (phones scroll the mat in after the click) the motion still runs, undrawn
   if (run && run.stage === 'spread' && run.tagEls) placeTags(run);
@@ -953,39 +1141,182 @@ function park() { if (raf > 0) cancelAnimationFrame(raf); raf = 0; }
 function resize() {
   if (!host) return;
   const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
-  renderer.setSize(w, h, false); composer.setSize(w, h); wake(100);
+  renderer.setSize(w, h, false); composer.setSize(w, h);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   parts.mat.uniforms.uScale.value = h * renderer.getPixelRatio() / (2 * TAN);
-  if (R && !tws.length) { // settle the camera for the new shape (mid-animation the next tween does it)
-    if (R.batch) { const st = R.stage === 'cards' || R.stage === 'spread' ? R.shot : R.grid.cam; st.d = fit(...st.box); cam.d = st.d; }
-    else if (R.stage === 'pack') cam.d = stages().pack.d;
-    else if (R.stage === 'cards') cam.d = stages().reveal.d;
-    else if (R.stage === 'spread') Object.assign(cam, gridOf(R.n).cam);
+  if (R && !tws.length && R.stage !== 'spread') { // keep the shot right while the window is still being dragged
+    const set = st => { cam.t.copy(st.t); cam.d = st.d; };
+    if (R.shelf) set(R.cam = shelfGrid(R.items.length).cam);
+    else if (R.batch && R.stage === 'cards') set(R.shot = (R.fan = fanOf(R.n, R.packs.length)).cam);
+    else if (R.batch) { const st = R.grid.cam; st.d = fit(...st.box); cam.d = st.d; }
+    else if (R.stage === 'pack') cam.d = stages().pack.d; else if (R.stage === 'cards') cam.d = stages().reveal.d;
   }
+  relay = performance.now() + 160; wake(400); // and 160 ms after the last resize, lay the table out again for the new shape
+}
+// The layout depends on the aspect (shelf and grid columns, the fan's width, where the pile goes), so a new shape moves the
+// things on the mat to where they'd have been dealt, and the camera to frame them. Runs from tick() once nothing is tweening.
+let relay = 0;
+function relayout() {
+  relay = 0; const run = R; if (!run) return;
+  const ms = 380, go = (o, p, q) => { const p0 = o.position.clone(), q0 = o.quaternion.clone(); tween(ms, k => { o.position.lerpVectors(p0, p, k); if (q) o.quaternion.slerpQuaternions(q0, q, k); }); };
+  const home = (card, p, q) => { if (run.look?.card === card) { run.look.p = p; run.look.q = q; if (!run.look.up) go(card, p, q); } else go(card, p, q); };
+  if (run.shelf) {
+    const Lg = shelfGrid(run.items.length); run.cam = Lg.cam;
+    run.stacks.forEach((g, k) => go(g, Lg.pos[k])); camTo(run.cam, ms);
+  } else if (run.batch) {
+    if (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') {
+      run.grid = packGrid(run.packs.length, run.jit); run.shot = run.grid.cam;
+      run.packs.forEach((p, k) => { p.userData.col = run.grid.col[k]; go(p, run.grid.pos[k]); });
+    } else {
+      run.fan = fanOf(run.n, run.packs.length); run.shot = run.fan.cam;
+      run.packs.forEach((p, k) => go(p, run.fan.wrap[k]));
+      if (run.stage !== 'extract') run.cards.forEach((c, i) => { const P = run.fan.poses[i]; home(c, P.p, i <= run.cur ? P.q : faceDown(P.q)); });
+    }
+    camTo(run.shot, ms);
+  } else if (run.stage === 'spread') {
+    const Gd = gridOf(run.n), q = flatQ(0);
+    run.cards.forEach((c, k) => home(c, Gd.pos[k], q)); camTo(Gd.cam, ms);
+  } else if (run.stage === 'cards' || run.stage === 'extract') {
+    const sp = spots(); run.pileAt = sp.pile; camD(stages().reveal.d, ms);
+    run.cards.forEach(c => { if (c.parent === scene && c.userData.off) go(c, sp.pile.clone().add(c.userData.off)); });
+    if (run.pack.parent === scene) go(run.pack, sp.rest);
+    const st = run.pack.userData.strip; if (st.parent === scene) go(st, sp.strip);
+  } else camD(stages().pack.d, ms);
 }
 
 // ---------- table, theme ----------
+// The counter the player stands behind (DESIGN.md「题材」): a laminate top with a bevelled edge and an aluminium trim, the shop's
+// rubber playmat on it, and at the back what a card counter holds: a glass countertop showcase with graded slabs and a booster
+// box, a binder, a stack of toploaders, a pack of sleeves. Colours come from tokens (laminate = --bg, binder = card-back navy,
+// aluminium = --foil-1); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
+// None of the props casts a shadow; the whole world is ~16 draw calls.
+let world0 = null; // theme-dependent textures: { laminate canvas, mat canvas, binder canvas, materials }
 function drawMat(c) {
-  const x = c.getContext('2d'), W = c.width, H = c.height, s = W / MW, ink = css('--mat-ink');
+  const x = c.getContext('2d'), W = c.width, H = c.height, s = W / MW, ink = css('--mat-ink'), line = a => rgba(ink, a);
   x.fillStyle = css('--mat'); x.fillRect(0, 0, W, H);
   const img = x.getImageData(0, 0, W, H), d = img.data; // rubber grain
   for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 9; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
   x.putImageData(img, 0, 0);
-  x.strokeStyle = rgba(ink, .08); x.lineWidth = 3; x.beginPath(); x.roundRect(3 * s, 3 * s, W - 6 * s, H - 6 * s, 1.5 * s); x.stroke();
-  x.setLineDash([.5 * s, .35 * s]); x.strokeStyle = rgba(ink, .22); x.lineWidth = .12 * s; x.beginPath(); x.roundRect(.7 * s, .7 * s, W - 1.4 * s, H - 1.4 * s, 2.2 * s); x.stroke(); x.setLineDash([]);
-  // the shop's mark printed where packs get opened: two thin rings, ticks, the name at the near edge
+  x.strokeStyle = line(.08); x.lineWidth = 3; x.beginPath(); x.roundRect(3 * s, 3 * s, W - 6 * s, H - 6 * s, 1.5 * s); x.stroke();
+  x.setLineDash([.5 * s, .35 * s]); x.strokeStyle = line(.22); x.lineWidth = .12 * s; x.beginPath(); x.roundRect(.7 * s, .7 * s, W - 1.4 * s, H - 1.4 * s, 2.2 * s); x.stroke(); x.setLineDash([]);
+  // printed like a play mat: card-sized zones down both sides, named the way a Chinese PTCG mat names them
+  const zone = (cx, cz, label) => { // cx, cz in cm from the mat's centre
+    const px = (MW / 2 + cx) * s, py = (MH / 2 + cz) * s, w = (CW + .6) * s, h = (CH + .6) * s;
+    x.strokeStyle = line(.12); x.lineWidth = .06 * s; x.beginPath(); x.roundRect(px - w / 2, py - h / 2, w, h, .5 * s); x.stroke();
+    if (label) { x.fillStyle = line(.14); x.font = `500 ${.7 * s}px ${BODY()}`; x.textAlign = 'center'; x.fillText(label, px, py + h / 2 + .95 * s); }
+  };
+  for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 2; c2++) zone(-MW / 2 + 5.2 + c2 * 7.4, -MH / 2 + 7.5 + r * 10.3, r === 2 && c2 === 0 ? '奖赏卡' : '');
+  zone(MW / 2 - 5.2, -MH / 2 + 7.5, '牌库'); zone(MW / 2 - 5.2, -MH / 2 + 7.5 + 12.2, '弃牌区');
+  // the shop's mark where packs get opened: two thin rings, ticks, the name at the near edge
   const cx = MW / 2 * s, cy = (MH / 2 + (-5.5 - MZ)) * s, r1 = 11 * s;
-  x.strokeStyle = rgba(ink, .09); x.lineWidth = .08 * s; x.beginPath(); x.arc(cx, cy, r1, 0, Math.PI * 2); x.stroke();
+  x.strokeStyle = line(.1); x.lineWidth = .08 * s; x.beginPath(); x.arc(cx, cy, r1, 0, Math.PI * 2); x.stroke();
   x.lineWidth = .035 * s; x.beginPath(); x.arc(cx, cy, r1 - .5 * s, 0, Math.PI * 2); x.stroke();
   for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2; if (Math.abs(a - Math.PI / 2) < .5) continue; x.beginPath(); x.moveTo(cx + Math.cos(a) * (r1 - .5 * s), cy + Math.sin(a) * (r1 - .5 * s)); x.lineTo(cx + Math.cos(a) * (r1 - (i % 5 ? .8 : 1.2) * s), cy + Math.sin(a) * (r1 - (i % 5 ? .8 : 1.2) * s)); x.stroke(); }
-  x.fillStyle = rgba(ink, .13); x.font = `400 ${1.5 * s}px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', cx, cy + r1 - .15 * s);
+  x.fillStyle = line(.14); x.font = `900 ${1.4 * s}px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', cx, cy + r1 - .15 * s);
+}
+// Laminate: the page colour with a fine paper-fleck print and faint long streaks, as a real laminate top has.
+function drawLaminate(c) {
+  const x = c.getContext('2d'), W = c.width, bg = css('--bg'), ink = css('--ink');
+  x.fillStyle = bg; x.fillRect(0, 0, W, W);
+  for (let i = 0; i < 2600; i++) { x.fillStyle = rgba(Math.random() < .5 ? ink : '#FFFFFF', .02 + Math.random() * .05); x.fillRect(Math.random() * W, Math.random() * W, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5); }
+  for (let i = 0; i < 40; i++) { x.fillStyle = rgba(ink, .012 + Math.random() * .015); x.fillRect(0, Math.random() * W, W, 1 + Math.random() * 4); }
+}
+// The binder's cover: card-back navy with the card back's ring pressed into it and the shop's name.
+function drawBinder(c) {
+  const x = c.getContext('2d'), W = c.width, H = c.height, b1 = css('--back-1'), b2 = css('--back-2');
+  x.fillStyle = b2; x.fillRect(0, 0, W, H);
+  x.strokeStyle = rgba(b1, .9); x.lineWidth = 10; x.beginPath(); x.arc(W / 2, H * .45, W * .26, 0, Math.PI * 2); x.stroke();
+  x.fillStyle = rgba(b1, .9); x.fillRect(W * .24, H * .45 - 5, W * .52, 10); x.beginPath(); x.arc(W / 2, H * .45, 22, 0, Math.PI * 2); x.fill();
+  x.fillStyle = rgba(css('--back-ring'), .55); x.font = `900 44px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', W / 2, H * .82);
+  x.strokeStyle = rgba('#FFFFFF', .08); x.lineWidth = 3; x.strokeRect(14, 14, W - 28, H - 28); // stitched border
+}
+// A graded slab's insert: the grading label over the card, as one texture.
+function slabCanvas(img, grade) {
+  const W = 256, H = 404, c = canvasOf(W, H), x = c.getContext('2d');
+  x.fillStyle = '#EEF1F6'; x.fillRect(0, 0, W, H);
+  x.fillStyle = '#FFFFFF'; x.fillRect(8, 8, W - 16, 58); x.strokeStyle = css('--back-2'); x.lineWidth = 2; x.strokeRect(8, 8, W - 16, 58);
+  x.fillStyle = css('--back-2'); x.font = `900 22px ${DISP()}`; x.textAlign = 'left'; x.fillText('欧气卡铺 鉴定', 18, 44);
+  x.font = `700 40px ${BODY()}`; x.textAlign = 'right'; x.fillText(grade, W - 18, 52);
+  if (img) x.drawImage(img, 22, 80, W - 44, (W - 44) * 88 / 63); else { x.fillStyle = css('--back-1'); x.fillRect(22, 80, W - 44, (W - 44) * 88 / 63); }
+  return c;
+}
+function world() {
+  const merge = M.mergeGeometries, grain = grainTex();
+  const lamC = canvasOf(256, 256), lam = canvasTex(lamC); lam.wrapS = lam.wrapT = T.RepeatWrapping; lam.repeat.set(1 / 24, 1 / 24);
+  const matC = canvasOf(1536, Math.round(1536 * MH / MW)), matMap = canvasTex(matC); matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5);
+  const binC = canvasOf(512, 600), binMap = canvasTex(binC);
+  grain.repeat.set(1 / 5, 1 / 5);
+  const metal = new T.MeshStandardMaterial({ color: css('--foil-1'), metalness: 1, roughness: .3, envMapIntensity: 1.1 });
+  const glass = new T.MeshPhysicalMaterial({ color: 0xFFFFFF, transparent: true, opacity: .1, roughness: .03, metalness: 0, envMapIntensity: 1.6, depthWrite: false });
+  const acrylic = glass.clone(); acrylic.opacity = .22;
+  const place = (m, x, y, z, yaw = 0) => { m.position.set(x, y, z); m.rotation.y = yaw; scene.add(m); return m; };
+  const TOP = -.4; // the counter's top face (the mat lies on it)
+
+  // counter: a bevelled laminate slab, its back edge capped in aluminium
+  const cg = new T.ExtrudeGeometry(roundRect(CX * 2, CZ0 - CZ1, 1.2), { depth: 3.2, bevelEnabled: true, bevelThickness: .4, bevelSize: .4, bevelSegments: 3, curveSegments: 6 });
+  cg.rotateX(-Math.PI / 2); cg.translate(0, TOP - 3.6, (CZ0 + CZ1) / 2);
+  counter = place(new T.Mesh(cg, new T.MeshStandardMaterial({ map: lam, roughness: .42, metalness: 0, envMapIntensity: .5, normalMap: grain, normalScale: new T.Vector2(.04, .04) })), 0, 0, 0);
+  counter.receiveShadow = true;
+  const trim = new T.CylinderGeometry(.55, .55, CX * 2 - 1, 16, 1); trim.rotateZ(Math.PI / 2);
+  place(new T.Mesh(trim, metal), 0, TOP - .3, CZ1 - .15);
+
+  // the rubber playmat: grain, printed zones and the shop's mark
+  const mg = new T.ExtrudeGeometry(roundRect(MW, MH, 2.5), { depth: .3, bevelEnabled: true, bevelThickness: .08, bevelSize: .08, bevelSegments: 2, curveSegments: 8 });
+  mg.rotateX(-Math.PI / 2); mg.translate(0, TOP + .02, MZ);
+  playmat = place(new T.Mesh(mg, new T.MeshStandardMaterial({ map: matMap, normalMap: grain, normalScale: new T.Vector2(.35, .35), roughness: .93, metalness: 0, envMapIntensity: .25 })), 0, 0, 0);
+  playmat.receiveShadow = true;
+
+  // glass countertop showcase, back right: laminate plinth, aluminium frame, glass, a glass shelf, three slabs and a booster box
+  const SW = 30, SH = 15, SD = 12, sx = 24, sz = -46, sy = TOP + 2.2;
+  const plinth = new T.BoxGeometry(SW + 1, 2.2, SD + 1); plinth.translate(0, 1.1, 0);
+  const show = new T.Group(); place(show, sx, TOP, sz, -.12);
+  show.add(new T.Mesh(plinth, counter.material));
+  const bars = [];
+  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const g = new T.BoxGeometry(.5, SH, .5); g.translate(x * SW / 2, 2.2 + SH / 2, z * SD / 2); bars.push(g); }
+  for (const y of [2.2, 2.2 + SH]) for (const z of [-1, 1]) { const g = new T.BoxGeometry(SW, .5, .5); g.translate(0, y, z * SD / 2); bars.push(g); }
+  for (const y of [2.2 + SH]) for (const x of [-1, 1]) { const g = new T.BoxGeometry(.5, .5, SD); g.translate(x * SW / 2, y, 0); bars.push(g); }
+  show.add(new T.Mesh(merge(bars), metal));
+  const pane = new T.BoxGeometry(SW, SH, SD); pane.translate(0, 2.2 + SH / 2, 0);
+  const shelf = new T.BoxGeometry(SW - .6, .3, SD - .6); shelf.translate(0, 2.2 + SH * .52, 0);
+  const led = new T.Mesh(new T.BoxGeometry(SW - 2, .25, .25), new T.MeshBasicMaterial({ color: new T.Color(css('--lamp')).multiplyScalar(2.2) })); led.position.set(0, 2.2 + SH - .5, SD / 2 - .8);
+  const slabs = new T.InstancedMesh(new T.BoxGeometry(7.6, 12, .7), acrylic, 3), m4 = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-.22, 0, 0));
+  const chase = [['sv08', '238', '10'], ['sv10', '231', '10'], ['sv08.5', '161', '9.5']];
+  chase.forEach(([set, n, grade], i) => {
+    const at = new V3((i - 1) * 8.6, 2.2 + 6.2, -1.2), c = slabCanvas(null, grade), t = canvasTex(c);
+    slabs.setMatrixAt(i, m4.compose(at, q, new V3(1, 1, 1)));
+    const ins = new T.Mesh(new T.PlaneGeometry(6.8, 10.7), new T.MeshStandardMaterial({ map: t, roughness: .6, envMapIntensity: .3 }));
+    ins.position.copy(at).add(new V3(0, 0, .02)); ins.quaternion.copy(q); show.add(ins);
+    loadImg(ASSETS.card(set, n, 'low')).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
+  });
+  const boxArt = packArt('sv10').front, box = new T.Mesh(new T.BoxGeometry(12, 5.2, 5.6), [counter.material, counter.material, counter.material, counter.material, boxArt, counter.material]);
+  box.position.set(-6, 2.2 + SH * .52 + 2.75, -1.5); box.rotation.y = .18;
+  show.add(slabs, box, led, new T.Mesh(shelf, glass), new T.Mesh(pane, glass));
+
+  // a 4-pocket binder, back left, with index tabs
+  const bg = new T.ExtrudeGeometry(roundRect(21, 26, 1.1), { depth: 2.6, bevelEnabled: true, bevelThickness: .35, bevelSize: .35, bevelSegments: 3, curveSegments: 6 });
+  bg.rotateX(-Math.PI / 2); bg.translate(0, .35, 0);
+  const cover = new T.MeshStandardMaterial({ map: binMap, roughness: .66, normalMap: grain, normalScale: new T.Vector2(.3, .3), envMapIntensity: .4 });
+  binMap.repeat.set(1 / 21, 1 / 26); binMap.offset.set(.5, .5);
+  const binder = place(new T.Mesh(bg, cover), -25, TOP, -48, .22);
+  const tabs = new T.InstancedMesh(new T.BoxGeometry(1.6, .25, 2.6), new T.MeshStandardMaterial({ color: css('--foil-2'), roughness: .5 }), 3);
+  for (let i = 0; i < 3; i++) tabs.setMatrixAt(i, m4.compose(new V3(11, 1.6, -7 + i * 5), new T.Quaternion(), new V3(1, 1, 1)));
+  binder.add(tabs);
+
+  // toploaders and a pack of penny sleeves, between the binder and the showcase
+  const tops = new T.InstancedMesh(new T.BoxGeometry(7.7, .14, 10.2), acrylic, 7);
+  for (let i = 0; i < 7; i++) tops.setMatrixAt(i, m4.compose(new V3((Math.random() - .5) * .5, .1 + i * .16, (Math.random() - .5) * .5), new T.Quaternion().setFromEuler(new T.Euler(0, (Math.random() - .5) * .12, 0)), new V3(1, 1, 1)));
+  place(tops, -4, TOP, -41, -.3);
+  place(new T.Mesh(new T.BoxGeometry(7.2, 1.3, 9.6), new T.MeshStandardMaterial({ color: 0xF2F4F8, transparent: true, opacity: .62, roughness: .35 })), 5, TOP + .65, -45, .5);
+
+  world0 = { lamC, matC, binC, lam, matMap, binMap, metal, led };
 }
 function theme() {
   const bg = new T.Color(css('--bg'));
-  renderer.setClearColor(bg); scene.fog.color.copy(bg); counter.material.color.copy(bg);
+  renderer.setClearColor(bg); scene.fog.color.copy(bg);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
   shared.back.value.image = backCanvas(); shared.back.value.needsUpdate = true;
-  drawMat(playmat.material.map.image); playmat.material.map.needsUpdate = true;
+  const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC);
+  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = true; w.metal.color.set(css('--foil-1')); w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
   wake(100);
 }
 
@@ -998,7 +1329,7 @@ function init() {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.VSMShadowMap;
   canvas = renderer.domElement; canvas.className = 's3-canvas';
   canvas.setAttribute('role', 'img'); canvas.setAttribute('aria-label', '开包台：桌上的补充包和卡');
-  scene = new T.Scene(); scene.fog = new T.Fog(0x000000, 70, 150);
+  scene = new T.Scene(); scene.fog = new T.Fog(0x000000, 105, 300); // only the room past the counter fades, never the mat
   camera = new T.PerspectiveCamera(FOV, 1, 1, 400); probe = camera.clone(); cam.t = FOCUS();
   const pm = new T.PMREMGenerator(renderer), room = new M.RoomEnvironment();
   scene.environment = pm.fromScene(room, .04).texture; scene.environmentIntensity = .42; pm.dispose(); room.dispose?.();
@@ -1014,16 +1345,6 @@ function init() {
   scene.add(hemi, key, key.target, rim, glow);
   L = { hemi, key, rim, glow };
 
-  const mapC = canvasOf(1520, 1360), matMap = canvasTex(mapC), grain = grainTex();
-  matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5); grain.repeat.set(1 / 5, 1 / 5);
-  const mg = new T.ExtrudeGeometry(roundRect(MW, MH, 2.5), { depth: .3, bevelEnabled: true, bevelThickness: .08, bevelSize: .08, bevelSegments: 2, curveSegments: 8 });
-  mg.rotateX(-Math.PI / 2); mg.translate(0, -.38, MZ);
-  playmat = new T.Mesh(mg, new T.MeshStandardMaterial({ map: matMap, normalMap: grain, normalScale: new T.Vector2(.35, .35), roughness: .93, metalness: 0, envMapIntensity: .25 }));
-  playmat.receiveShadow = true;
-  counter = new T.Mesh(new T.PlaneGeometry(700, 700), new T.MeshStandardMaterial({ roughness: .65, envMapIntensity: .3 }));
-  counter.rotation.x = -Math.PI / 2; counter.position.y = -.45; counter.receiveShadow = true;
-  scene.add(playmat, counter);
-
   hand = new T.Group(); hand.position.copy(FOCUS()); hand.lookAt(FOCUS().add(new V3(0, Math.sin(PITCH), Math.cos(PITCH))));
   grip = new T.Group(); hand.add(grip); scene.add(hand);
 
@@ -1036,6 +1357,7 @@ function init() {
   shared.inner.normalMap = shared.crinkle;
   shared.u = { back: shared.back, time: { value: 0 }, key: { value: new V3() }, keyDir: { value: new V3() }, glowAt: { value: new V3() }, cone0: { value: 0 }, cone1: { value: 1 }, keyCol: { value: new T.Color() }, amb: { value: new T.Color() }, wash: { value: new T.Color() } };
 
+  world(); // after shared: the showcase's booster box wears a pack's material
   parts = makeParticles(900); scene.add(parts.pts);
   rays = new T.Mesh(new T.PlaneGeometry(70, 70), new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending,
     uniforms: { uCol: { value: new T.Color() }, uAmt: { value: 0 }, uTime: { value: 0 } },
@@ -1058,7 +1380,7 @@ function init() {
 
   canvas.addEventListener('pointerdown', onDown); canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', onCancel);
-  canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !drag) { ptr.in = false; wake(); } });
+  canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !drag) { ptr.in = false; wake(); if (R?.shelf) shelfHover(R, -1); } });
   canvas.addEventListener('webglcontextlost', e => { // drop back to the 2D mat; ui/mat.ts keeps the pack's state
     e.preventDefault(); dead = true;
     const o = opts; close?.(); o?.onLost?.();
@@ -1069,14 +1391,15 @@ function init() {
 }
 
 // ---------- teardown ----------
-const packsOf = run => (run.batch ? run.packs : [run.pack]);
+const packsOf = run => (run.batch ? run.packs : run.shelf ? [] : [run.pack]);
 function dispose(run) {
+  run.group?.traverse(o => { if (o.isInstancedMesh) o.dispose(); }); // shelf packs share one geometry and the set's material: only the instance buffers go
   for (const c of run.cards) { c.material[0].dispose(); c.userData.face?.dispose(); if (c.userData.halo) { c.userData.halo.geometry.dispose(); c.userData.halo.material.dispose(); } }
   for (const p of packsOf(run)) for (const o of [p, p.userData.strip]) o.traverse(m => { if (m.isMesh && m.geometry !== shared.cardGeo) m.geometry.dispose(); }); // the strip may have flown off the pack
 }
 function clearRun(run, animate) {
   run.tagEls?.forEach(e => e.remove());
-  const objs = [...packsOf(run).flatMap(p => [p, p.userData.strip]), ...run.cards];
+  const objs = [...packsOf(run).flatMap(p => [p, p.userData.strip]), ...run.cards, ...(run.group ? [run.group] : [])];
   if (!animate) { objs.forEach(o => o.removeFromParent()); dispose(run); return; }
   const old = new T.Group(); scene.add(old); objs.forEach(o => old.attach(o));
   tween(520, k => { old.position.x = -60 * k; }, E.in).then(() => { old.removeFromParent(); dispose(run); });
@@ -1106,7 +1429,7 @@ function mountTable(el, o) {
   ro.observe(el); io.observe(el); el.prepend(canvas); resize();
   for (const k in moodNow) moodNow[k] = MOODS.base[k];
   const fresh = () => {
-    tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0());
+    tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0()); canvas.style.cursor = '';
     if (R) clearRun(R, true);
   };
   const shut = () => {
@@ -1117,25 +1440,36 @@ function mountTable(el, o) {
   };
   close = shut;
   return {
-    showPack(set, cards) { // a new pack drops in; the last one's cards slide off the mat
+    // The idle table: items [{ set, n, off }] in label order. Called on every game tick; unchanged items cost nothing.
+    showShelf(items) {
       if (opts !== o) return;
+      const sig = items.map(i => `${i.set}:${i.n}:${i.off ? 1 : 0}`).join();
+      if (R?.shelf && R.items.length === items.length) { if (R.sig !== sig) updateShelf(R, items, sig); return; }
       fresh();
-      R = build(set, cards); enter(R);
+      R = buildShelf(items, sig); enterShelf(R);
+    },
+    hover(k) { if (opts === o && R?.shelf) shelfHover(R, k); }, // a label under the stack is pointed at or focused (-1: none)
+    showPack(set, cards) { // a new pack drops in (or rises from its stack on the shelf); the last one's cards slide off the mat
+      if (opts !== o) return;
+      const from = R?.shelf ? takeFromShelf(R, set, 1)[0]?.m : null;
+      fresh();
+      R = build(set, cards); enter(R, from);
     },
     // Ten packs (or however many the stock allowed) at once. picks: [packIndex, cardIndex] of the cards that fly to the
     // front, in the order they turn over (cheapest first). onFlip(k, card) then counts picks, not cards.
     showBatch(set, packs, picks) {
       if (opts !== o) return;
+      const froms = R?.shelf ? takeFromShelf(R, set, packs.length) : [];
       fresh();
-      R = buildBatch(set, packs, picks); enterBatch(R);
+      R = buildBatch(set, packs, picks); enterBatch(R, froms);
     },
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {
-      const run = R; if (opts !== o || !run) return false;
+      const run = R; if (opts !== o || !run || run.shelf) return false;
       if (run.stage === 'enter' || run.stage === 'pack') { if (run.batch) tearAll(run); else autoTear(run); return true; }
       return i > run.cur && advance(run);
     },
-    flipAll() { if (opts === o) revealAll(R); },
+    flipAll() { if (opts === o && !R?.shelf) revealAll(R); },
     resize() { if (opts === o) resize(); },
     dispose: shut,
   };

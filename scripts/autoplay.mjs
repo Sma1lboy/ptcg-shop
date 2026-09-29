@@ -17,8 +17,9 @@ export function boot(seed = 1) {
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
 // off = minutes of every hour the player is away (the shop runs on its own; a clerk, if hired, restocks).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, log = 600 } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), st = G.state, rows = []; let spent = 0, pot = 0, rev = 0;
+  const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
   const pctOf = id => typeof pct === 'number' ? pct : pct[id] ?? 1;
   const baseLeft = id => G.dexTotal(id) - G.dexCount(id) - G.missing(id).length; // C/U/R still to pull
   const wants = k => k !== 'watch' && (k !== 'luck' || (luck ?? (openShare > 0 || masterShare > 0)));
@@ -30,7 +31,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     G.sellBulk();
     for (const [k, c] of Object.entries(st.singles)) if (c.price < 25) G.sell(k);
     for (const [k] of Object.entries(st.singles)) if (G.list(k)) st.shown[st.shown.length - 1].pct = cardPct;
-    let best = null; for (const k of Object.keys(G.UPGRADES)) { const c = G.upgradeCost(k); if (c != null && G.lvl(k) < (cap[k] ?? Infinity) && (!best || c < best[1])) best = [k, c]; }
+    let best = null; for (const k of Object.keys(G.UPGRADES)) { const c = G.upgradeCost(k); if (c != null && G.canUpgrade(k) && G.lvl(k) < (cap[k] ?? Infinity) && (!best || c < best[1])) best = [k, c]; }
     for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
     if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
     if (best && st.cash >= best[1]) { spent += best[1]; if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
@@ -56,6 +57,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
       }
     }
     if (!hold) for (const set of SETS) { const n = Math.floor(G.shelfQty(set.id) * openShare); if (n > 0) { G.unshelve(set.id, n); G.open(set.id, n); } }
+    each?.(t);
     if (t % log === 0) rows.push(row(t));
   }
   function row(t) {

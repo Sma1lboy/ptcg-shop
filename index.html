@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Four pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #luck #grow) so switching never loses state (DESIGN.md「布局」).
+<!-- Five pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #luck #grow #ach) so switching never loses state (DESIGN.md「布局」).
      The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
   <h1 class="brand">欧气卡铺</h1>
@@ -20,10 +20,12 @@
     <a href="#shelf">货柜</a>
     <a href="#luck">欧气</a>
     <a href="#grow">成长<b class="tab-n" id="grow-n" hidden></b></a>
+    <a href="#ach">成就</a>
   </nav>
   <div class="stats" id="stats"></div>
 </header>
 <div class="notice" id="notice" role="status" hidden></div>
+<div class="ach-pop" id="ach-pop" role="status" hidden></div>
 <main>
   <section class="page page-open" id="page-open" aria-label="开包">
     <section class="mat" id="mat" aria-live="polite"></section>
@@ -60,6 +62,9 @@
     <div class="grow-top" id="grow-top"></div>
     <section id="upgrades"></section>
     <section id="skills"></section>
+  </section>
+  <section class="page page-ach" id="page-ach" aria-label="成就" hidden>
+    <section id="achs"></section>
   </section>
 </main>
 <footer class="foot">
