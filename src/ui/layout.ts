@@ -18,8 +18,14 @@ function route() {
   document.querySelectorAll<HTMLElement>('.page').forEach(p => { p.hidden = p.id !== `page-${home}`; });
   document.querySelectorAll('.nav a').forEach(a => { if (a.getAttribute('href') === `#${home}`) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.querySelectorAll('.subnav a').forEach(a => { if (a.getAttribute('href') === `#${id}`) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  if (home === 'shelf') seen = Date.now();
+  if (home === 'shelf') { seen = Date.now(); shopLog(id); }
   renderTabs(); scrollTo(0, 0);
+}
+// 店内动态 is the whole till roll, packs and case cards: it follows the player to the bottom of whichever 货柜 view is open, so the
+// 展示柜 view shows its sales too. The <ol> stays lit's render target (log.ts); only its section moves.
+function shopLog(view: string) {
+  const cols = document.querySelectorAll(`.page-shelf > .col[data-view="${view}"]`), sec = $('log').parentElement!;
+  if (cols.length && sec.parentElement !== cols[cols.length - 1]) cols[cols.length - 1].append(sec);
 }
 export const go = (id: string) => { if (current() !== id) { location.hash = id; route(); } };
 

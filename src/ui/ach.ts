@@ -9,6 +9,7 @@ import * as FX from '../fx.ts';
 import { ACH, GROUPS, check, note, watch, type Ach } from '../achievements.ts';
 import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
+import { storyOpen } from './story.ts';
 
 const day = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1} 月 ${d.getDate()} 日`; };
 const cert = (a: Ach, at: number) => String([...a.id + at].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % 1e8).padStart(8, '0');
@@ -60,10 +61,11 @@ export function renderAch() {
 
 // ---------- unlock pop: the label prints out at the counter's edge, one at a time; more than three at once (an old save's
 // first visit) come as one label ----------
-let queue: Ach[] = [], showing = false, timer = 0;
+let queue: Ach[] = [], showing = false, timer = 0, shown: Ach[] | null = null;
+const wait = () => hold || storyOpen(); // a reveal or the story: a label printed now would spoil the card or sit unseen under the dialog
 function next() {
   const el = $('ach-pop');
-  if (!queue.length) { showing = false; el.hidden = true; return; }
+  if (!queue.length || wait()) { showing = false; el.hidden = true; return; }
   showing = true;
   const many = queue.length > 3 ? queue.splice(0) : [queue.shift()!], a = many[0], cash = many.reduce((s, x) => s + x.cash, 0);
   el.hidden = false;
@@ -72,6 +74,7 @@ function next() {
     : html`<a href="#ach"><ul><li class="grade ach pop">
         <div class="g-id"><p class="g-k">欧气卡铺 · 成就</p><p class="a-name">一次解锁 ${many.length} 个成就</p><p>${many.slice(0, 4).map(x => x.name).join('、')}${many.length > 4 ? ' 等' : ''}</p></div>
         <p class="g-grade"><b>${many.length}</b>${cash ? html`<span class="gain">+${money(cash)}</span>` : ''}</p></li></ul></a>`), el);
+  shown = many;
   FX.award();
   clearTimeout(timer); timer = window.setTimeout(next, many.length > 1 ? 6500 : 4800);
 }
@@ -79,13 +82,22 @@ function next() {
 function flush() {
   if (hold) return;
   const got = check(G);
-  if (got.length) { queue.push(...got); if (!showing) next(); }
+  if (got.length) queue.push(...got);
+  if (!showing) next();
   renderAch();
+}
+// the story opened over a label: take it back into the queue, so it prints again with its full time once the dialog closes
+function onStory() {
+  if (!storyOpen()) return flush();
+  if (!showing) return;
+  clearTimeout(timer); showing = false; $('ach-pop').hidden = true;
+  if (shown) queue.unshift(...shown);
 }
 
 export function initAch() {
   G.on(ev => { if (ev?.open) note(G, ev.open); watch(G); flush(); });
   document.addEventListener('ptcg:release', flush);
+  document.addEventListener('ptcg:story', onStory);
   // Tapping anywhere else puts the label away (on a phone it sits over the bottom of the mat); following its link goes to the page.
   document.addEventListener('pointerdown', e => { if (showing && !(e.target as Element).closest('#ach-pop')) next(); });
   $('ach-pop').addEventListener('click', () => { queue = []; next(); });
