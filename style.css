@@ -983,8 +983,9 @@ button:disabled { cursor: not-allowed; }
   .pops:has(> #notice:not([hidden])) { position: absolute; }
   :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 36px + var(--notice-h, 44px)); }
   /* 开包: the slot hangs under the mat's head row (「今天拆哪包？」and 音效, ~60px — it's mat.ts's markup, so the number lives here
-     once), over the display case where nothing is pressed, and scrolls with the page, so the table stays full-height */
-  :root[data-page="open"] .pops { position: absolute; top: calc(var(--top-h) + 72px); }
+     once), over the display case where nothing is pressed; with a receipt it scrolls with the page like anywhere else (above), and
+     the table isn't pushed down */
+  :root[data-page="open"] .pops { top: calc(var(--top-h) + 72px); }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
