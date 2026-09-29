@@ -1,33 +1,47 @@
-// Opening-mat feedback: synthesized sound (WebAudio, unlocked by a user gesture), hit bursts, holo tilt.
-// Pure presentation: never reads game state, never influences what a pack contains.
+// Sound (WebAudio, all synthesized, unlocked by a user gesture), plus the opening mat's hit bursts and holo tilt.
+// Pure presentation: never reads game state, never influences what a pack contains. src/ui/sound.ts decides when the shop,
+// story and interface sounds play; the mat (ui/mat.ts, table3d.js) calls the opening sounds directly.
+// Signal path: every sound → a bus (mat: the opening; shop: customers, bills, the interface; amb: the looping beds) → master
+// (volume, mute) → a compressor, so a burst of sounds on top of each other can't clip.
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-let ctx: AudioContext | null = null, silent = false;
-try { silent = localStorage.getItem('ptcg.mute') === '1'; } catch (e) { /* storage blocked: sound stays on */ }
+type Bus = 'mat' | 'shop' | 'amb';
+let ctx: AudioContext | null = null, master: GainNode, buses: Record<Bus, GainNode>, silent = false, vol = 1, amb = true;
+const get = (k: string) => { try { return localStorage.getItem(k); } catch (e) { return null; } }; // storage blocked: defaults
+const put = (k: string, v: string) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } };
+silent = get('ptcg.mute') === '1'; vol = Math.min(1, Math.max(0, +(get('ptcg.vol') ?? 1) || 0)); amb = get('ptcg.amb') !== '0';
+const level = () => (silent ? 0 : vol * vol); // perceived loudness is roughly the square of the slider
+const changed = () => document.dispatchEvent(new Event('ptcg:sound')); // the sound panel and the mat's 音效 button redraw
 
 // Must be called synchronously from a click/key handler; timers later can't create a running context.
 export function unlock() {
   if (silent) return;
   const A = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext; if (!A) return;
-  ctx ||= new A();
-  if (ctx.state === 'suspended') ctx.resume();
+  if (!ctx) {
+    ctx = new A();
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
+    master = ctx.createGain(); master.gain.value = level(); master.connect(comp);
+    buses = { mat: ctx.createGain(), shop: ctx.createGain(), amb: ctx.createGain() };
+    buses.amb.gain.value = 0; Object.values(buses).forEach(b => b.connect(master));
+  }
+  if (ctx.state === 'suspended' && !document.hidden) ctx.resume().then(bed); else bed();
 }
 const live = () => (!silent && ctx && ctx.state === 'running' ? ctx : null);
 
-function tone(f: number, at: number, dur: number, { type = 'sine' as OscillatorType, gain = .12, to = 0 } = {}) {
+function tone(f: number, at: number, dur: number, { type = 'sine' as OscillatorType, gain = .12, to = 0, bus = 'mat' as Bus } = {}) {
   const c = live(); if (!c) return;
   const t = c.currentTime + at, o = c.createOscillator(), v = c.createGain();
   o.type = type; o.frequency.setValueAtTime(f, t); if (to) o.frequency.exponentialRampToValueAtTime(to, t + dur);
   v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(gain, t + .01); v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(v).connect(c.destination); o.start(t); o.stop(t + dur + .02);
+  o.connect(v).connect(buses[bus]); o.start(t); o.stop(t + dur + .02);
 }
-function noise(at: number, dur: number, { gain = .1, from = 2000, to = 600, q = 1 } = {}) {
+function noise(at: number, dur: number, { gain = .1, from = 2000, to = 600, q = 1, bus = 'mat' as Bus } = {}) {
   const c = live(); if (!c) return;
   const t = c.currentTime + at, len = Math.ceil(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   const s = c.createBufferSource(), f = c.createBiquadFilter(), v = c.createGain();
   s.buffer = buf; f.type = 'bandpass'; f.Q.value = q; f.frequency.setValueAtTime(from, t); f.frequency.exponentialRampToValueAtTime(to, t + dur);
   v.gain.setValueAtTime(0.0001, t); v.gain.exponentialRampToValueAtTime(gain, t + Math.min(.02, dur / 3)); v.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  s.connect(f).connect(v).connect(c.destination); s.start(t);
+  s.connect(f).connect(v).connect(buses[bus]); s.start(t);
 }
 
 const C5 = 523.25, E5 = 659.25, G5 = 783.99, A5 = 880, C6 = 1046.5, E6 = 1318.5, G6 = 1568;
@@ -83,6 +97,125 @@ document.addEventListener('pointerout', e => {
 });
 
 export const muted = () => silent;
-export function setMuted(v: boolean) { silent = !!v; try { localStorage.setItem('ptcg.mute', v ? '1' : '0'); } catch (e) { /* ignore */ } if (!v) unlock(); }
-// 成就: a grading label pressed onto its slab, a dull thud and the paper's slap.
-export const award = () => { tone(110, 0, .18, { gain: .28, to: 45 }); noise(0, .06, { gain: .1, from: 1200, to: 300, q: .6 }); };
+export function setMuted(v: boolean) {
+  silent = !!v; put('ptcg.mute', v ? '1' : '0');
+  if (ctx) master.gain.setTargetAtTime(level(), ctx.currentTime, .05); // a ramp, not a jump: a jump clicks
+  if (!v) unlock(); changed();
+}
+export const volume = () => vol;
+export function setVolume(v: number) { vol = Math.min(1, Math.max(0, v)); put('ptcg.vol', String(vol)); if (ctx) master.gain.setTargetAtTime(level(), ctx.currentTime, .05); changed(); }
+export const ambience = () => amb;
+export function setAmbience(v: boolean) { amb = !!v; put('ptcg.amb', v ? '1' : '0'); bed(); changed(); }
+// The tab hidden: stop the clock (the beds included); back: carry on. Resume needs no gesture once the page has had one.
+export function pause(p: boolean) { if (!ctx || silent) return; if (p) ctx.suspend(); else ctx.resume().then(bed); }
+
+// ---------- shop and interface (bus 'shop'; src/ui/sound.ts calls these and rate-limits them) ----------
+const S = { bus: 'shop' as Bus };
+// an enamel key in its aluminium socket: a dry click on top of a short low thock
+export const press = () => { noise(0, .025, { ...S, gain: .045, from: 3200, to: 1600, q: 2 }); tone(190, 0, .06, { ...S, gain: .05, to: 110 }); };
+// the page's divider tab flipping over: a paper flick and a soft wooden tick
+export const tab = () => { noise(0, .07, { ...S, gain: .035, from: 1200, to: 3200, q: 1 }); tone(640, .03, .09, { ...S, type: 'triangle', gain: .025 }); };
+// the door's wind chime: three random rods of a pentatonic set, each with its inharmonic partial (×2.76), long ring
+const ROD = [1568, 1760, 2093, 2349, 2637];
+export function chime() {
+  for (let i = 0; i < 3; i++) {
+    const f = ROD[Math.floor(Math.random() * ROD.length)], at = i * (.06 + Math.random() * .1);
+    tone(f, at, 1.6, { ...S, gain: .028 }); tone(f * 2.76, at, .6, { ...S, gain: .008 });
+  }
+}
+// the till: drawer thunk, the bell (a high sine and its fifth), a couple of coins settling
+export function till() {
+  noise(0, .06, { ...S, gain: .06, from: 800, to: 350, q: .8 }); tone(120, 0, .08, { ...S, gain: .08, to: 70 });
+  tone(2637, .05, .7, { ...S, gain: .045 }); tone(3951, .05, .35, { ...S, gain: .015 });
+  [.14, .21].forEach(at => noise(at + Math.random() * .04, .03, { ...S, gain: .02, from: 7000, to: 5000, q: 6 }));
+}
+// 倒爷 sweeping a shelf: packs dragged off the shelf into a bag, then one big ring-up
+export function sweep() {
+  for (let i = 0; i < 6; i++) noise(i * .075, .07, { ...S, gain: .04, from: 2400 + Math.random() * 1800, to: 900, q: .7 });
+  setTimeout(till, 480);
+}
+// calculator keys: short plastic clicks with the faint beep a cheap desk calculator gives
+export function calc(n = 4) {
+  for (let i = 0; i < n; i++) { const at = i * (.1 + Math.random() * .05); noise(at, .018, { ...S, gain: .04, from: 4200, to: 2600, q: 3 }); tone(2400, at, .04, { ...S, type: 'square', gain: .006 }); }
+}
+// knocking on the shutter: three knuckle raps on corrugated steel (thud + short rattle)
+export function knock() {
+  [0, .19, .36].forEach((at, i) => { tone(150, at, .09, { ...S, gain: .16 - i * .02, to: 90 }); noise(at, .09, { ...S, gain: .05, from: 1100, to: 400, q: 1.2 }); });
+}
+// 阿豆's hammer on the counter: a heavy thud, the head's crack, the metal ringing on; two blows
+export function hammer() {
+  [0, .5].forEach(at => { tone(95, at, .18, { ...S, gain: .3, to: 42 }); noise(at, .05, { ...S, gain: .1, from: 2600, to: 800, q: .8 }); tone(3100, at + .01, .45, { ...S, gain: .012 }); });
+}
+// the rolling shutter coming down: a rattle (noise chopped by a fast square wave) falling in pitch, then the bottom rail hits
+export function shutter() {
+  const c = live(); if (!c) return;
+  const t = c.currentTime, dur = 1.6, len = Math.ceil(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), v = c.createGain(), chop = c.createGain(), lfo = c.createOscillator(), depth = c.createGain();
+  s.buffer = buf; f.type = 'bandpass'; f.Q.value = 1.4; f.frequency.setValueAtTime(1600, t); f.frequency.exponentialRampToValueAtTime(500, t + dur);
+  lfo.type = 'square'; lfo.frequency.setValueAtTime(22, t); lfo.frequency.linearRampToValueAtTime(14, t + dur); depth.gain.value = .5; chop.gain.value = .5;
+  lfo.connect(depth).connect(chop.gain);
+  v.gain.setValueAtTime(.0001, t); v.gain.exponentialRampToValueAtTime(.09, t + .1); v.gain.setValueAtTime(.09, t + dur - .15); v.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f).connect(chop).connect(v).connect(buses.shop); s.start(t); lfo.start(t); lfo.stop(t + dur);
+  tone(70, dur - .05, .35, { ...S, gain: .3, to: 38 }); noise(dur - .05, .12, { ...S, gain: .08, from: 900, to: 250 });
+}
+// a rubber stamp on paper (the loan's IOU)
+export const stamp = () => { tone(160, 0, .09, { ...S, gain: .18, to: 60 }); noise(0, .045, { ...S, gain: .06, from: 3000, to: 800, q: .7 }); };
+// 九姐's heels on the tiled floor: n clicks at a walking pace, each a hard tick over a small body
+export function heels(n = 4) {
+  for (let i = 0; i < n; i++) { const at = i * (.3 + Math.random() * .04), g = .03 + i * .008; noise(at, .025, { ...S, gain: g, from: 4200, to: 2800, q: 3 }); tone(340, at, .04, { ...S, gain: g, to: 220 }); }
+}
+// a burlap sack: coarse cloth rubbing, twice
+export const sack = () => [0, .3].forEach(at => noise(at, .4, { ...S, gain: .05, from: 700, to: 1800, q: .6 }));
+// the tube light struggling on: three buzzing blips (mains hum through a saw), the room tone takes over after
+export const flicker = () => [0, .22, .38].forEach((at, i) => tone(100, at, i === 2 ? .2 : .07, { ...S, type: 'sawtooth', gain: .03 }));
+// cash counted on a counter: quick flicks of paper
+export const count = () => { for (let i = 0; i < 7; i++) noise(i * .09, .04, { ...S, gain: .03, from: 2600, to: 1500, q: 1.5 }); };
+
+// ---------- looping beds (bus 'amb'): the shop's room tone, or the story scene's (rain on the street, the car in the sack) ----------
+export type Scene = 'shop' | 'street' | 'dark';
+let scene: Scene | null = 'shop', story = false, beds: Partial<Record<Scene, GainNode>> = {}, drops = 0;
+const BED_GAIN: Record<Scene, number> = { shop: .5, street: 1, dark: .9 };
+function loop(c: AudioContext, secs: number, brown: boolean) { // a looping noise buffer; brown = integrated (a deep rumble), else white
+  const len = c.sampleRate * secs, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+  let last = 0; for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; d[i] = brown ? (last = (last + .02 * w) / 1.02) * 3.5 : w; }
+  const s = c.createBufferSource(); s.buffer = buf; s.loop = true; return s;
+}
+function build(c: AudioContext, k: Scene) {
+  const g = c.createGain(); g.gain.value = 0; g.connect(buses.amb);
+  const filt = (type: BiquadFilterType, f: number, q = .7) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
+  const src = (n: AudioScheduledSourceNode, ...chain: AudioNode[]) => { chain.reduce((a: AudioNode, b) => (a.connect(b), b), n).connect(g); n.start(); };
+  const lvl = (v: number) => { const x = c.createGain(); x.gain.value = v; return x; };
+  if (k === 'shop') { // a closed room at night: low air, the tube light's 100 Hz hum and its faint 200 Hz buzz
+    src(loop(c, 3, true), filt('lowpass', 220), lvl(.05));
+    const h = c.createOscillator(); h.frequency.value = 100; src(h, lvl(.006));
+    const b = c.createOscillator(); b.type = 'sawtooth'; b.frequency.value = 200; src(b, filt('lowpass', 900), lvl(.0015));
+  } else if (k === 'street') { // rain: a wide hiss (white, band-limited) over a low wash; drops are ticked in by drip()
+    src(loop(c, 3, false), filt('highpass', 900), filt('lowpass', 6500), lvl(.03));
+    src(loop(c, 3, true), filt('lowpass', 500), lvl(.05));
+  } else { // inside the sack in a moving car: engine rumble and road noise, muffled
+    src(loop(c, 3, true), filt('lowpass', 160), lvl(.12));
+    const e = c.createOscillator(); e.frequency.value = 42; src(e, lvl(.02));
+  }
+  return g;
+}
+const drip = () => { if (scene === 'street') noise(0, .02, { bus: 'amb', gain: .015 + Math.random() * .03, from: 3000 + Math.random() * 4000, to: 1500, q: 4 }); };
+// Crossfades to whatever should be playing now: the story's scene while a story is on, else the room tone if 店内环境声 is on.
+function bed() {
+  const c = live(); if (!c) return;
+  const want: Scene | null = story ? scene : amb ? 'shop' : null;
+  (Object.keys(BED_GAIN) as Scene[]).forEach(k => {
+    const on = k === want; if (on && !beds[k]) beds[k] = build(c, k);
+    beds[k]?.gain.setTargetAtTime(on ? BED_GAIN[k] : 0, c.currentTime, on ? .6 : .3);
+  });
+  buses.amb.gain.setTargetAtTime(want ? 1 : 0, c.currentTime, .3);
+  clearInterval(drops); if (want === 'street') drops = window.setInterval(() => { if (Math.random() < .6) drip(); }, 90);
+}
+// the story player's scene (null: the story closed, back to the shop)
+export function setScene(k: Scene | null) { story = !!k; scene = k; bed(); }
+
+// 成就: the grading label printing (a dot-matrix chatter), then pressed onto its slab: a dull thud and the paper's slap.
+export const award = () => {
+  for (let i = 0; i < 8; i++) noise(i * .028, .02, { gain: .025, from: 2600, to: 2200, q: 5 });
+  tone(110, .26, .18, { gain: .28, to: 45 }); noise(.26, .06, { gain: .1, from: 1200, to: 300, q: .6 });
+};

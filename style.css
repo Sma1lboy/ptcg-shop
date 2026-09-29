@@ -533,6 +533,15 @@ button:disabled { cursor: not-allowed; }
 .coach p { margin: 0; text-wrap: pretty; }
 .coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .coach-on { outline: 2px dashed var(--sticker-edge); outline-offset: 3px; }
+/* 声音 (src/ui/sound.ts): the footer's popover, the same sleeve in the trim as the guide. Controls stay native (ink as their accent: not yellow, which is only for prices and the one primary button) */
+.sound { position: fixed; inset: auto 16px 16px auto; margin: 0; width: min(300px, calc(100vw - 32px)); padding: 10px 14px 12px; border: 8px solid var(--trim);
+  border-image: url(gen/frame.webp) 48 / 12px / 0 stretch; background: var(--panel) padding-box; color: var(--ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  font-size: var(--fs-body); line-height: 1.6; accent-color: var(--ink); }
+.sound h3 { margin: 0 0 6px; font-size: var(--fs-h); }
+.sd-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.sd-row input[type="range"] { flex: 1; }
+.sd-row input { margin: 0; } .sd-row input:disabled { opacity: .5; }
+.sd-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
 .nav a.coach-on { outline-offset: -6px; }
 
 /* share card (extras.js) */

@@ -21,6 +21,7 @@ import { bindGuide } from './ui/guide.ts';
 import { initStory } from './ui/story.ts';
 import { initGoals } from './ui/goals.ts';
 import { initAch } from './ui/ach.ts';
+import { initSound } from './ui/sound.ts';
 
 // While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
 function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
@@ -36,4 +37,5 @@ initStory(); // before the guide: the story comes first, the guide waits until i
 bindGuide();
 
 initGoals();
+initSound(); // after the boot tick: the hours the shop was closed ring nothing
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

@@ -40,6 +40,8 @@ function flush() {
 function type() {
   clearInterval(timer);
   if (!cur) return;
+  const sc = SCENES[cur.id][cur.scene]; // a new line: src/ui/sound.ts plays its scene's bed and the cues in its text
+  document.dispatchEvent(new CustomEvent('ptcg:line', { detail: { id: cur.id, scene: cur.scene, bg: sc.bg, who: sc.lines[cur.line].who, text: text(cur) } }));
   const full = text(cur).length;
   if (still()) { cur.typed = full; draw(); return; }
   timer = setInterval(() => { if (!cur) return clearInterval(timer); cur.typed = Math.min(full, cur.typed + 1); draw(); if (cur.typed >= full) clearInterval(timer); }, 32);
