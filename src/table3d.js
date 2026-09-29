@@ -36,7 +36,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
 const MW = 64, MH = 54, MZ = -8; // playmat size and where its centre sits: the shelf, the single-pack spread and the fan stay on it; a ten-pack deal's back row reaches the counter
 const CZ0 = 34, CZ1 = -60, CX = 72; // the counter top: near edge (under the player's hands), back edge, half width
-const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
+const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18, SPREAD_PITCH_TALL = 1.42;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
 // Render on demand: a frame is drawn only while something moves (tweens, drag, pointer tilt, particles, a show) and for IDLE ms
@@ -659,15 +659,18 @@ function celebrate(run, i, t) {
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
   return t === 5 ? 1700 : 1300;
 }
+// Portrait and phones look almost straight down: at the landscape pitch a 3–4 row grid keystones, the outer cards lean out and the
+// back rows shrink, so the rows read as slanted and each price tag lands on the card below it. The rows also leave a tag's height.
 function gridOf(n) {
-  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), gx = CW + .7, gz = CH + 1.6;
+  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), tall = camera.aspect < 1.15 || small(); // a phone whose summary squeezed the scene wide still gets the phone shot
+  const gx = CW + .7, gz = CH + (tall ? 2.6 : 1.6), p = tall ? SPREAD_PITCH_TALL : SPREAD_PITCH;
   const pos = [];
   for (let k = 0; k < n; k++) {
     const r = Math.floor(k / cols), inRow = Math.min(cols, n - r * cols), c = k - r * cols;
     pos.push(new V3((c - (inRow - 1) / 2) * gx, .06, (r - (rows - 1) / 2) * gz - .6));
   }
   const w = cols * gx, h = rows * gz;
-  return { pos, cam: { t: new V3(0, 0, .8), p: SPREAD_PITCH, d: fit(w * 1.02, h * Math.sin(SPREAD_PITCH) * 1.08 + 4) } };
+  return { pos, cam: { t: new V3(0, 0, .8), p, d: fit(w * 1.02, h * Math.sin(p) * 1.08 + 4) } };
 }
 async function toSpread(run) {
   if (run.stage === 'spread') return;
