@@ -1071,7 +1071,7 @@ button:disabled { cursor: not-allowed; }
 .bk-key i:not(:first-child) { margin-left: 8px; }
 .bk-head .master { display: block; } /* 大师套 and 亲手开齐 are two lines, not one run-on */
 .bk-head .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
-/* the card up close: a popover in the case trim, the card at hand size beside its line */
+/* the card up close: a popover in the BW window, the card at hand size beside its line */
 .bk-zoom { width: min(600px, calc(100vw - 32px)); padding: 18px; color: var(--ink); }
 .bk-zoom:popover-open { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .bk-zoom::backdrop { background: rgba(4, 8, 14, .55); }
@@ -1457,7 +1457,7 @@ button:disabled { cursor: not-allowed; }
     border-width: 6px 0; border-image-width: 10px 0; }
   /* the guide's strip over the bottom tabs (a step on another page) sits where the table's summary keys are: the table ends above it */
   :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px - 64px); }
-  /* panels keep the trim but thinner, so a 390 screen still has ~330px of content */
+  /* panels keep the double frame but thinner, so a 390 screen still has ~330px of content */
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
