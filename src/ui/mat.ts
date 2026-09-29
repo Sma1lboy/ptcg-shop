@@ -1,15 +1,17 @@
-// 开包台: tear, flip, reveal. Deliberately NOT lit-html: #mat (and the #stage inside it) is rebuilt only on player actions and
-// then driven by direct DOM work (cloneNode slide-outs, class toggles, timed flips) that would corrupt lit's markers.
-// The 3D table mounts here too, behind the same functions.
+// 开包台: tear, flip, reveal — on the three.js table (src/table3d.js) when it can run, else the 2D mat. Deliberately NOT lit-html:
+// #mat (and the #stage / #scene3d inside it) is rebuilt only on player actions and then driven by direct DOM work
+// (cloneNode slide-outs, class toggles, timed flips, the WebGL canvas) that would corrupt lit's markers.
 import type { Pull } from '../sim.ts';
 import * as S from '../sim.ts';
 import * as FX from '../fx.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
 import { showPack } from './share.ts';
+import { mountTable } from '../table3d.js';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean }
+// m3d: this pack is on the 3D table; quiet: 全部翻开 on the 3D table, no flip sound per card.
+interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean; m3d?: boolean; quiet?: boolean }
 let mat = { mode: 'idle' } as Mat;
 
 const capHTML = (c: Pull) => { const r = rar(c); return `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>`; };
@@ -59,6 +61,9 @@ function packSummary(cards: Pull[], set: { id: string }) {
 
 export function renderMat() {
   const el = $('mat');
+  if (mat.m3d && mat.mode === 'pack') { if (mat3D(el)) return; mat.m3d = false; }
+  if (table) { table.dispose(); table = null; }
+  el.classList.remove('m3d');
   if (mat.mode === 'idle') {
     el.innerHTML = `<div class="mat-empty"><p class="mat-big">开包台</p><p>左边货架先进货，再点「开 1 包」。<br>单包可以一张张翻，按空格翻下一张。</p></div>`;
     return;
@@ -89,6 +94,43 @@ export function renderMat() {
       <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
 }
 
+// ---------- 3D table (src/table3d.js) ----------
+// The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
+let table: ReturnType<typeof mountTable> = null;
+const touch = () => matchMedia('(pointer: coarse)').matches;
+const HINT = { pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
+  cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看' };
+const head3D = () => {
+  $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}</h2><span id="mat-prog">${mat.mode === 'cards' ? prog() : ''}</span>${sndBtn()}
+      ${mat.mode === 'cards' && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
+};
+const hint3D = (k: keyof typeof HINT) => { const h = document.getElementById('s3-hint'); if (h) h.textContent = HINT[k](); };
+const on3D = {
+  onTear() { if (mat.mode !== 'pack') return; FX.tear(); mat.mode = 'cards'; head3D(); hint3D('cards'); },
+  onFlip(i: number, c: Pull) {
+    mat.up.add(i); mat.cur = i;
+    const pg = document.getElementById('mat-prog'); if (pg) pg.textContent = prog();
+    const cap = document.getElementById('s3-cap'); if (cap) { cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${esc(c.name)}</b>${capHTML(c)}`; }
+    if (!mat.quiet) FX.flip(rar(c).t);
+  },
+  onDone() { hint3D('done'); const cap = document.getElementById('s3-cap'); if (cap) cap.innerHTML = ''; finish(); },
+  onLost() { table = null; mat.m3d = false; renderMat(); if (mat.cards && mat.up.size === mat.cards.length) finish(); },
+};
+// Returns false when the 3D table can't run (no WebGL, three.js not loaded yet or at all, reduced motion): the caller draws the 2D mat.
+function mat3D(el: HTMLElement) {
+  if (!table) {
+    if (reduced()) return false;
+    el.innerHTML = `<div class="mat-head" id="m3-head"></div><div class="scene3d" id="scene3d"><p class="s3-cap" id="s3-cap"></p><p class="s3-hint" id="s3-hint"></p><div class="s3-tags"></div></div>`;
+    table = mountTable($('scene3d'), { ...on3D, reducedMotion: reduced() });
+    if (!table) return false;
+    el.classList.add('m3d');
+  }
+  el.querySelector('.summary')?.remove(); $('s3-cap').innerHTML = '';
+  head3D(); hint3D('pack');
+  table.showPack(mat.set, mat.cards);
+  return true;
+}
+
 // ---------- reveal ----------
 // While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
 export let hold = false;
@@ -113,6 +155,7 @@ function slideAway(stage: HTMLElement) {
 
 // One tap = next card slides out of the pack and flips. The last card (the rare slot) flips slowly for every pack, hit or not.
 export function advance() {
+  if (mat.m3d) return mat.mode === 'cards' && table!.flip(mat.up.size);
   if (mat.mode !== 'cards' || mat.busy || mat.up.size >= mat.cards.length) return false;
   const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i, bulk = rar(mat.cards[i]).t === 0;
   mat.busy = true;
@@ -170,13 +213,13 @@ export function startPack(id: string) {
   const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
   const warm = (u: string) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = u; };
   cards.forEach(c => { if (c.r !== 'E') { warm(imgUrl(c)); warm(imgUrl(c, 'high')); } }); // warm the cache before the flips (CORS mode, so the share poster can reuse it)
-  mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0 } as Mat;
+  mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0, m3d: true } as Mat;
   renderMat();
 }
 export function openBatch(id: string) { hold = true; const packs = G.open(id, 10); if (packs.length) { mat = { mode: 'batch', set: id, packs } as Mat; renderMat(); revealBatch(mat); } else release(); }
 export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }
 export function peek(i: number) { if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } }
-export function flipAll() { mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
+export function flipAll() { if (mat.m3d) { mat.quiet = true; table!.flipAll(); return; } mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
 export function toggleMute() { FX.setMuted(!FX.muted()); document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; }); }
 export function shareMat() { showPack(shareSpec()); }
 export function resetMat() { hold = false; G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
@@ -215,8 +258,8 @@ export function bindMatInput() {
   document.addEventListener('keydown', e => {
     if (e.code !== 'Space' || (e.target as Element).closest('input, textarea')) return;
     FX.unlock();
-    if (mat.mode === 'pack') { e.preventDefault(); document.querySelector<HTMLElement>('.pack')?.click(); }
-    else if (mat.mode === 'cards' && mat.up.size < mat.cards.length) { e.preventDefault(); advance(); }
+    if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
+    else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
   });
 }
 

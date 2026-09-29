@@ -48,6 +48,8 @@ export function flip(t: number) {
 }
 export const tear = () => { noise(0, .3, { gain: .16, from: 3200, to: 900, q: .7 }); noise(.05, .12, { gain: .12, from: 6000, to: 2000 }); };
 export const swell = (ms: number) => noise(0, ms / 1000, { gain: .06, from: 300, to: 3500, q: 2 }); // rising hiss under the slow last flip
+export const crinkle = () => noise(0, .04 + Math.random() * .05, { gain: .06, from: 3500 + Math.random() * 3500, to: 1400, q: .8 }); // foil giving way under a drag
+export const slide = () => noise(0, .14, { gain: .035, from: 1600, to: 4200, q: 1.3 }); // card sliding off the stack
 export const miss = () => { tone(330, 0, .35, { type: 'sawtooth', gain: .05, to: 220 }); tone(247, .3, .5, { type: 'sawtooth', gain: .05, to: 150 }); };
 
 // Sparkles fly out of `host` (must be position: relative); rays behind the card from tier 4.

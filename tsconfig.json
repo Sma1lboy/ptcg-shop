@@ -1,12 +1,14 @@
 {
   // Type-check only (npm run build runs tsc first). Vite bundles for the browser; node runs src/*.ts directly by stripping types,
   // so only erasable syntax is allowed (no enum / namespace / parameter properties) and imports keep their .ts extension.
+  // allowJs: src/table3d.js (the three.js scene) stays plain JS; importers get inferred types, the file itself is not checked.
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2023", "dom", "dom.iterable"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
+    "allowJs": true,
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,

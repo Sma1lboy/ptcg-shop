@@ -1,5 +1,5 @@
 data/raw/
 .DS_Store
 dist/
-assets/tcg/
+assets/tcg
 node_modules/

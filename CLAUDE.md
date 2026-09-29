@@ -18,9 +18,9 @@
 ## 规矩（每个 worker 必读）
 
 - **依赖白名单：运行时只有 `three`、`lit-html`；开发时只有 `vite`、`typescript`、`vite-plugin-singlefile`。** 框架、组件库、CSS 框架、测试框架、i18n 层一律不加；确实要加，先问用户。版本在 package.json 里写死，改版本连 package-lock.json 一起提交。
-- **TypeScript 只写可擦除语法**（tsconfig 开了 `erasableSyntaxOnly`）。测试和 autoplay 让 node 直接跑 `src/*.ts`，所以不许用 enum、namespace、构造函数参数属性；import 带 `.ts` 后缀；只导入类型写 `import type`。
-- **three.js 只用于开包台的 3D 场景，用 `await import('three')` 动态加载。** 构建时它不进包（压缩后约 800 KB，会撑爆 pen），由 `vite.config.ts` 注入的 import map 从 jsdelivr 加载和 node_modules 同一版本；dev 用 node_modules 里的。动态加载保证 CDN 挂了只丢 3D，页面照常能玩。WebGL 不可用或 `prefers-reduced-motion` 时退回 2D 开包台。
-- **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 `#stage`）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
+- **TypeScript 只写可擦除语法**（tsconfig 开了 `erasableSyntaxOnly`）。测试和 autoplay 让 node 直接跑 `src/*.ts`，所以不许用 enum、namespace、构造函数参数属性；import 带 `.ts` 后缀；只导入类型写 `import type`。唯一的例外是 `src/table3d.js`：3D 场景保持纯 JS（tsconfig 的 `allowJs`，引用方拿到推断出的类型，文件本身不做类型检查）。
+- **three.js 只用于开包台的 3D 场景（`src/table3d.js`），一律动态 `import('three')` / `import('three/addons/…')`，写字面量路径。** 构建时它不进包（压缩后约 800 KB，会撑爆 pen），由 `vite.config.ts` 注入的 import map 从 jsdelivr 加载和 node_modules 同一版本（package.json 钉死 0.176.0，3D 场景就是按这个版本做的，升级要重新看一遍效果）；dev 用 node_modules 里的。动态加载保证 CDN 挂了只丢 3D，页面照常能玩。WebGL 不可用、`prefers-reduced-motion`、three 还没加载到或加载失败时，`mountTable` 返回 null，`mat.ts` 退回 2D 开包台。
+- **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 2D 的 `#stage` 和 3D 的 `#scene3d` 画布）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入、WebGL），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
   - `data/cards-*.json` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
@@ -40,7 +40,8 @@
 | `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/图鉴/店员，`sources` 是页脚的来源、游戏设定和价格口径 |
-| `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入。命令式 DOM，3D 场景也接在这里 |
+| `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
+| `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, reducedMotion })` → `{ showPack, flip, flipAll, resize, dispose }` |
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
