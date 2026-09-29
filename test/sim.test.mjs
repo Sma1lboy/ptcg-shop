@@ -596,7 +596,7 @@ console.log('ok luck percentile');
 {
   for (const [id, scenes] of Object.entries(ST.SCENES)) for (const sc of scenes) {
     assert.ok(sc.lines.length, `story ${id}: empty scene`);
-    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', week: 2, card: 'X', price: '$1', set: 'Y', bills: 25, fame: 6, debt: '$60,000', shop: 2 }]) {
+    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', short: '$3.00', rate: '10%', week: 2, card: 'X', price: '$1', set: 'Y', bills: 25, fame: 6, debt: '$60,000', shop: 2 }]) {
       const t = typeof l.t === 'string' ? l.t : l.t(c); assert.ok(t && !t.includes('undefined'), `story ${id}: "${t}"`);
     }
   }
@@ -606,25 +606,28 @@ console.log('ok luck percentile');
   const fake = Object.assign(Object.create(g), { nextBill: () => ({ week: 3, amount: 120, dueAt: 9 }) });
   const due = D.debtBeat({ type: 'bill_due' }, fake);
   assert.deepEqual([due.kind, due.key, due.week, due.amount], ['due', 'due:0.0:3', 3, 120]);
-  assert.equal(ST.sceneFor(due, {}), 'due'); assert.equal(ST.sceneFor(due, { [due.key]: 1 }), null);
+  assert.equal(ST.sceneFor(due, {}), null, 'a bill falling due is no scene: covered → a slip, short → missed');
   const paid = w => D.debtBeat({ type: 'bill_paid', week: w }, fake);
-  assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(['paid', 'paid2'].includes(ST.sceneFor(paid(2), { paid1: 1 })));
+  assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(!ST.slipFor(paid(1), {}), 'the first paid bill is 九姐 in person');
+  assert.equal(ST.sceneFor(paid(2), { paid1: 1 }), null); assert.ok(ST.slipFor(paid(2), { paid1: 1 }), 'every later one a receipt');
+  assert.ok(!ST.slipFor(paid(2), { paid1: 1, [paid(2).key]: 1 }) && !ST.slipFor(due, { paid1: 1 }));
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'bankrupt' }, fake), { bankrupt: 1 }), 'bankrupt'); // a bankruptcy always plays
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'nope' }, fake), {}), null);
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'loan' }, fake), {}), 'loan');
-  for (const k of ['due', 'paid1', 'paid', 'paid2', 'last', 'missed', 'loan', 'bankrupt', 'debt_cleared', 'branch']) assert.ok(ST.SCENES[k], `no scene ${k}`);
+  for (const k of ['paid1', 'last', 'missed', 'loan', 'bankrupt', 'debt_cleared', 'branch']) assert.ok(ST.SCENES[k], `no scene ${k}`);
   // The end of a run, played as the ui plays it (a beat's key marks it seen): the bill before the last says so; the bill that
   // clears the debt emits due → paid → 还清 in one tick, and only 还清 speaks; the next shop starts at week 1 again and still
   // gets its weekly beats and, later, its own 还清.
   let T = 1_700_000_000_000; const E = createGame({ now: () => T, random: S.rng(3), storage: { getItem: () => null, setItem() {} } }), seen = {}, played = [];
-  E.on(ev => { const b = D.debtBeat(ev, E), id = ST.sceneFor(b, seen); if (id) { played.push(id); if (b.key) seen[b.key] = 1; } });
+  E.on(ev => { const b = D.debtBeat(ev, E), id = ST.sceneFor(b, seen); if (id) { played.push(id); seen[id] = 1; if (b.key) seen[b.key] = 1; } else if (ST.slipFor(b, seen)) played.push('slip'); });
   const week = () => { for (let i = 0; i < E.WEEK; i += 20) { T += 20e3; E.tick(); } };
   const owe = n => { E.state.owe = E.state.debt = [0, 1].reduce((a, i) => a + Math.round(E.BILL0 * (1 + E.DEBT_STEP * E.state.branch.n) * E.BILL_G ** (E.state.week - 1 + i)), 0) - n; };
   E.state.cash = 1e6; E.state.earned.sealed = 1; owe(0);
   week(); assert.deepEqual(played, ['last'], 'the bill before the last one (the till covered it: no 「这周的账」 before it)');
   week(); assert.deepEqual(played, ['last', 'debt_cleared'], 'the clearing bill: no 「下周见」 before 还清');
   assert.ok(E.branch()); assert.equal(played.at(-1), 'branch'); E.state.cash = 1e6;
-  played.length = 0; week(); assert.ok(['paid1', 'paid', 'paid2'].includes(played[0]), "shop 2's week 1 is not shop 1's week 1");
+  played.length = 0; week(); assert.deepEqual(played, ['paid1'], "shop 2's week 1 is not shop 1's week 1 (and 九姐 still comes in for the first bill ever)");
+  E.state.cash = 1e6; week(); assert.deepEqual(played, ['paid1', 'slip'], 'then a covered week is a receipt, no scene');
   E.state.cash = 1e6; owe(0); week(); week(); assert.deepEqual(played.slice(-2), ['last', 'debt_cleared'], 'shop 2 gets its own 还清');
   console.log('ok story beats, and the end of a run: last → 还清 → 开张, per shop');
 }
@@ -678,15 +681,28 @@ console.log('ok luck percentile');
   console.log(`ok 亲手开出: every card pullable, odds match the simulator, 名气 +${J.HAND_FAME} once per set at the next 开分店, kept through bankruptcy`);
 }
 
-// A week the till covers plays one beat (收到), not two: 「这周的账」 only when it could not be paid.
+// 每二十分钟的那一下: a week the till covers is one receipt and no scene; a short week is ONE scene (missed, not due + missed);
+// when the grace runs out the forced loan speaks and the bill that it settled is a receipt again.
 {
-  let T = 1_700_000_000_000; const W = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), kinds = [];
-  W.on(ev => { const b = D.debtBeat(ev, W); if (b) kinds.push(b.kind); });
+  let T = 1_700_000_000_000; const W = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), kinds = [], shown = [], seen = { paid1: 1 };
+  W.on(ev => { const b = D.debtBeat(ev, W); if (!b) return; kinds.push(b.kind); const id = ST.sceneFor(b, seen); if (id) { shown.push(id); if (b.key) seen[b.key] = 1; } else if (ST.slipFor(b, seen)) shown.push('slip'); if (b.kind === 'loan' && b.forced) shown.push('forced'); });
   const week = () => { for (let i = 0; i < W.WEEK; i += 20) { T += 20e3; W.tick(); } };
   W.state.cash = 1e5; week(); assert.ok(kinds.includes('paid') && !kinds.includes('due'), `covered week: ${kinds}`);
-  kinds.length = 0; W.state.cash = 0; W.state.shelves.length = 0; W.state.stock = { sv08: 5 }; week(); // stock in the back room: no 进货钱 bailout
+  assert.deepEqual(shown, ['slip'], `covered week: a receipt, no scene (${shown})`);
+  kinds.length = shown.length = 0; W.state.cash = 0; W.state.shelves.length = 0; W.state.stock = { sv08: 5 }; week(); // stock in the back room: no 进货钱 bailout
   assert.deepEqual(kinds.filter(k => k === 'due' || k === 'missed'), ['due', 'missed'], `a short week still says so: ${kinds}`);
-  console.log('ok a covered bill is one beat, a missed one still two');
+  for (let i = 0; i <= W.GRACE; i += 20) { T += 20e3; W.tick(); } // the grace runs out with the till still empty
+  assert.deepEqual(shown.slice(0, 3), ['missed', 'loan', 'forced'], `short week: one scene, then the grace runs out into a forced loan (${shown})`);
+  assert.equal(shown[3], 'slip', `...and the bill it settled prints a receipt (${shown})`);
+  // a fresh save whose first bill is short: after the hammer, 九姐 never says 「准时」 — a late receipt, and paid1 waits for an on-time week
+  T += 1e9; const F = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), fs = {}, fShown = []; let missedW = 0;
+  F.on(ev => { const b = D.debtBeat(ev, F); if (!b) return; if (b.kind === 'missed') missedW = b.week; const late = b.kind === 'paid' && b.week === missedW, id = ST.sceneFor(b, fs, late);
+    if (id) { fShown.push(id); fs[id] = 1; if (b.key) fs[b.key] = 1; } else if (ST.slipFor(b, fs, late)) fShown.push('slip'); });
+  const fTicks = s => { for (let i = 0; i < s; i += 20) { T += 20e3; F.tick(); } };
+  F.state.cash = 0; F.state.shelves.length = 0; F.state.stock = { sv08: 5 }; fTicks(F.WEEK + F.GRACE + 20);
+  assert.ok(fShown.includes('missed') && fShown.includes('slip') && !fShown.includes('paid1'), `a late first bill: ${fShown}`);
+  F.state.cash = 1e5; fShown.length = 0; fTicks(F.WEEK); assert.deepEqual(fShown, ['paid1'], 'the first on-time bill still gets 九姐 in person');
+  console.log('ok 每二十分钟: a covered bill is a receipt, a short one one scene, the lapse a forced loan + receipt');
 }
 
 // 成长: G.peek shows what one more level does and leaves the save exactly as it was (货架 must not pad a shelf in).

@@ -7,17 +7,19 @@ import type { Game, GameEvent } from './game.ts';
 export interface Bill { week: number; amount: number; dueAt?: number }
 // kind: what happened to the debt. key: stable id for "has this beat already played" (bill_due fires every tick inside its window)
 // 'last' = a bill was paid and the next one would clear the opening debt (nothing borrowed): the run's closing stretch
-export interface DebtBeat { kind: 'due' | 'paid' | 'last' | 'missed' | 'loan' | 'bankrupt' | 'story'; key: string; week?: number; amount?: number; id?: string; set?: string }
+export interface DebtBeat { kind: 'due' | 'paid' | 'last' | 'missed' | 'loan' | 'bankrupt' | 'story'; key: string; week?: number; amount?: number; id?: string; set?: string; forced?: boolean }
 
 type Econ = { nextBill?: () => Partial<Bill> | null | undefined };
-type Ev = { type?: string; week?: number; amount?: number; id?: string; set?: string };
+type Ev = { type?: string; week?: number; amount?: number; id?: string; set?: string; forced?: boolean };
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
 export function bill(G: Game): Bill | null {
   try { const b = (G as Game & Econ).nextBill?.(); const week = num(b?.week), amount = num(b?.amount); return week && amount != null ? { week, amount, dueAt: num(b?.dueAt) } : null; }
   catch { return null; }
 }
-export const inDebt = (G: Game) => (num((G.state as { debt?: number }).debt) ?? 0) > 0 || !!bill(G);
+// what is still owed in all (opening debt + loan), or null without the economy
+export const owed = (G: Game) => num((G.state as { debt?: number }).debt) ?? null;
+export const inDebt = (G: Game) => (owed(G) ?? 0) > 0 || !!bill(G);
 const weekNow = (G: Game) => num((G.state as { week?: number }).week);
 // Which run this is: every new shop (开分店) and every bankruptcy starts week 1 again, so week keys are per run.
 const run = (G: Game) => { const b = (G.state as { branch?: { n?: number; broke?: number } }).branch; return `${b?.n ?? 0}.${b?.broke ?? 0}`; };
@@ -37,5 +39,5 @@ export function debtBeat(ev: GameEvent | undefined, G: Game): DebtBeat | null {
   if (kind === 'paid' && lastAhead(G)) return { kind: 'last', key: `last:${r}`, week, amount };
   // '' = may play every time; story ids are per shop (branch.n), so the second shop gets its own 还清 and 开张
   const key = kind === 'story' ? `story:${e.id}:${e.set ?? r.split('.')[0]}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${r}:${week ?? amount ?? b?.dueAt ?? '?'}`;
-  return { kind, key, week, amount, id: e.id, set: e.set };
+  return { kind, key, week, amount, id: e.id, set: e.set, forced: e.forced };
 }

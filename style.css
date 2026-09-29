@@ -28,7 +28,7 @@
   --mat-gold: #F0A333;
   --mat-line: rgba(238, 241, 247, .14);
   --paper: #FFFFFF;       /* thermal receipt paper (the closing report): a light object in both themes, as the mat is a dark one */
-  --paper-ink: #14203A; --paper-muted: #58627A; --paper-gain: #C8261C;
+  --paper-ink: #14203A; --paper-muted: #58627A; --paper-gain: #C8261C; --paper-loss: #56698F; /* the light theme's --loss: dark theme's is pale, for dark grounds */
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
   --fx-gold: #F6A533;
   --stock-rim: #C9CED6;   /* blank card stock (DESIGN.md「卡面」): the silver border, the paper, the print, the cut edge. A printed object, same in */
@@ -491,22 +491,27 @@ button:disabled { cursor: not-allowed; }
   border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
   animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
 /* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
-.notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
-.notice[hidden] { display: none; }
+:is(.notice, .slip) { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --loss: var(--paper-loss); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
+:is(.notice, .slip)[hidden] { display: none; }
 /* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 350 = the
    tray's 300 width + 24 inset + the slot's 10px overhang + a gap. Phones reserve the stub's height above the view instead (below) */
 @media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
-.notice .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
+:is(.notice, .slip) .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
   mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
   animation: print .9s .22s steps(18, jump-end) backwards; } /* stepped: a thermal printer feeds in jerks, not a glide */
 @keyframes slot { from { opacity: 0; transform: translateY(-14px) scaleX(.85); } }
 @keyframes print { from { clip-path: inset(0 0 100% 0); translate: 0 -16px; } to { clip-path: inset(0 0 -20px 0); } }
-.notice h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
-.notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
-.notice dt { color: var(--muted); } .notice dd { margin: 0; text-align: right; font-weight: 600; }
+:is(.notice, .slip) h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
+:is(.notice, .slip) dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+:is(.notice, .slip) dt { color: var(--muted); } :is(.notice, .slip) dd { margin: 0; text-align: right; font-weight: 600; }
 .notice button { width: 100%; }
+/* the weekly bill's receipt (notice.ts): the same paper, shorter — 九姐's scribble at the foot instead of a button; tap to put it away */
+.slip { cursor: pointer; }
+.slip .paper { padding-bottom: 20px; }
+.slip dl { margin-bottom: 8px; }
+.slip .note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line-strong); color: var(--muted); font-size: var(--fs-cap); text-align: right; }
 /* the tear-off stub (phones only, see the phone block): the receipt's first line on the same thermal paper, a button */
 .notice .stub { display: none; position: relative; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 0;
   background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12)); }

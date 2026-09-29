@@ -33,7 +33,6 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const b = debtBeat(ev, G); if (hold || !b || (b.key && heard.has(b.key))) return; // held: bill_due comes again next tick, the rest play in their story
   heard.add(b.key); // bill_due fires every tick inside its window: one knock per bill ('' = loan/bankrupt, every time)
   if (b.kind === 'due') play('knock', FX.knock); // 九姐 at the shutter
-  else if (b.kind === 'paid') { play('calc', () => FX.calc(5)); setTimeout(() => play('till', FX.till), 700); }
   else if (b.kind === 'missed') play('hammer', FX.hammer);
   else if (b.kind === 'loan') play('stamp', FX.stamp);
   else if (b.kind === 'bankrupt') play('shutter', FX.shutter);
@@ -42,7 +41,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
 // ---------- the story: each scene's bed, and cues found in the line's text (so edits to the script keep their sounds) ----------
 const CUES: [RegExp, keyof typeof GAP, () => void][] = [
   [/风铃/, 'chime', FX.chime], [/计算器/, 'calc', () => FX.calc(2)], [/锤子/, 'hammer', FX.hammer], [/卷帘门/, 'shutter', FX.shutter],
-  [/灯管/, 'flicker', FX.flicker], [/麻袋/, 'sack', FX.sack], [/钞票/, 'count', FX.count],
+  [/灯管/, 'flicker', FX.flicker], [/麻袋/, 'sack', FX.sack], [/钞票/, 'count', FX.count], [/收银机叮|叮了一声/, 'till', FX.till], [/敲了/, 'knock', FX.knock],
 ];
 let walked = ''; // the scene 九姐 last walked into
 interface Line { id: string; scene: number; bg: FX.Scene; who: string; text: string }
@@ -80,6 +79,8 @@ export function initSound() {
   document.addEventListener('ptcg:line', onLine);
   document.addEventListener('ptcg:story', () => { if (!storyOpen()) { walked = ''; FX.setScene(null); } });
   document.addEventListener('ptcg:sound', renderPanel);
+  // a week's receipt printing (notice.ts; the paid week's sound waits for it, so a reveal never swallows it): calculator, then till
+  document.addEventListener('ptcg:slip', () => { play('calc', () => FX.calc(5)); setTimeout(() => play('till', FX.till), 700); });
   renderPanel();
   if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) (window as unknown as { __snd: unknown }).__snd = FX;
 }
