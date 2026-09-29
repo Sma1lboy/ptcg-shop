@@ -14,7 +14,7 @@
     const steps = [
       ['进货', `你有 ${money(s.cash)}。在货架点「进 10 包」。`],
       ['开包', '点「开 1 包」撕开，一张张翻，或按空格。'],
-      ['测欧气', '开完看「欧气检测」：你的运气排在 400 个模拟玩家的第几位。可以生成分享图。'],
+      ['测欧气', '开完看「欧气检测」：你的运气在几千个模拟玩家里排第几。可以生成分享图。'],
     ];
     el.hidden = false;
     el.innerHTML = `<h2 class="eyebrow">怎么玩</h2><ol>${steps.map(([h, p], i) =>
@@ -37,7 +37,7 @@
     const T = (s, px, y, o = {}) => { x.font = `${o.w || 400} ${px}px ${o.f || body}`; x.fillStyle = o.c || ink; x.textAlign = o.a || 'left'; x.fillText(s, o.a === 'right' ? W - 80 : 80, y); };
     T('欧气卡铺 · 欧气检测', 34, 110, { c: muted });
     T(L.title, 200, 340, { f: disp, c: tone });
-    T(`开了 ${L.packs} 包，总值超过 ${pct.toFixed(1)}% 的模拟玩家`, 38, 420);
+    T(`开了 ${L.packs} 包，总值超过 ${pct.toFixed(0)}% 的模拟玩家`, 38, 420);
     // meter: same six bands as the on-page detector
     const bands = [[0, 10, css('--loss')], [10, 30, `color-mix(in oklab, ${css('--loss')} 45%, ${line})`], [30, 70, line], [70, 90, `color-mix(in oklab, ${css('--gold')} 45%, ${line})`], [90, 100, css('--gold')]];
     const mx = 80, mw = W - 160, my = 480;
@@ -64,7 +64,7 @@
       el.innerHTML = `<h2 class="eyebrow">分享欧气</h2><button type="button" id="make-card">生成分享图</button><div id="card-out"></div>`;
       $('make-card').onclick = async () => {
         shownAt = opened(); img = await drawCard();
-        const text = `我在欧气卡铺开了 ${G.luck().packs} 包，欧气排在 ${(G.luck().pct * 100).toFixed(1)}%：${G.luck().title}`;
+        const text = `我在欧气卡铺开了 ${G.luck().packs} 包，欧气排在 ${(G.luck().pct * 100).toFixed(0)}%：${G.luck().title}`;
         $('card-out').innerHTML = `<img src="${img}" alt="${text}"><div class="btns"><a class="dl" href="${img}" download="ouqi.png">下载 PNG</a><button type="button" id="copy-text">复制文字</button></div>`;
         $('copy-text').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { e.target.textContent = '已复制'; });
       };
