@@ -12,7 +12,9 @@ export function renderSources() {
       <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%。
       进货先进仓库（每系列 ${G.WAREHOUSE} 包），上架后才会卖；标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，货架每系列 ${G.SHELF_BASE} 包起，展示柜 ${G.CASE_BASE} 格起。
       平均每 ${Math.round(1 / G.ARRIVAL)} 秒进来一位顾客，每位都有来意和预算：${Object.values(G.TYPES).map(t => `${t.name}最多肯付约 ${Math.round(t.tol * 100)}% 市价`).join('，')}（每人不同，招牌每级 +${G.SIGN_STEP * 100} 个百分点，倒爷不受影响；收藏党还看镇店之宝）。热销的系列顾客多一倍、滞销的少一半。
-      图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）。店员不领工资。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>`, $('sources'));
+      每个系列来买整包的人不一样：${SETS.map(x => { const d = G.DEMAND[x.id], pp = (v: number) => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`; return `${x.name}「${d.tag}」（肯付上限 ${pp(d.tol)} 个百分点${d.budget !== 1 ? `、预算 ×${d.budget}` : ''}${d.w !== 1 ? `、来的人 ×${d.w}` : ''}）`; }).join('，')}。倒爷扫过一个系列后 ${G.FLIP_COOLDOWN / 60} 分钟内不再收它（手上的要先出掉）。
+      图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）；收齐（大师套）后这个系列的拆包玩家再肯多付 ${G.MASTER.tol * 100} 个百分点、专程来买的人 ×${G.MASTER.w}。
+      图鉴补卡：${G.BUY_R.join('/')} 可以按当前单卡市价从同行买进图鉴册，只进图鉴，不能再卖、上柜或当镇店之宝；普通、非普通、稀有只能开包收。店员不领工资。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>`, $('sources'));
 }
 
 export function renderBasis() {

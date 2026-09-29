@@ -15,7 +15,7 @@ export function renderShelf() {
     const heat = s.heat[set.id], mkt = G.sealedPrice(set.id), margin = G.ask(set.id) - w;
     return html`<article class="set">
         <img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
-        <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
+        <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)} · <b title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${G.demand(set.id).tag}</b></span></div>
         <div class="set-price"><span class="sticker" title="货架标价">${money(G.ask(set.id))}</span>${heat ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销' : '滞销'}</span>` : ''}
           <span>市价 ${money(mkt)}</span><span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 实测概率算出的单包期望">开出期望 ${money(ev)}</span></div>
         <div class="set-stock">仓库 <b>${stock}</b>/${G.WAREHOUSE} · 货架 <b>${onShelf}</b>/${G.capacity()} 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>

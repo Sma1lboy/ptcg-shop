@@ -161,6 +161,49 @@ console.log('ok luck percentile');
     // The vm contexts used to give this block its own copy of data/; with one module graph, undo the refresh before autoplay below (×2 ÷2 is exact).
     for (const c of PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] /= 2;
   }
+
+  // 9. No single right price: undercutting into flipper range stops paying (flippers flip a set once per FLIP_COOLDOWN),
+  //    and sets have their own buyers, so the best price differs per set. Profit of one set over 2 sim-hours, shelves kept full.
+  {
+    const PCTS = [0.85, 0.9, 1, 1.1];
+    const profitAt = (id, pct) => {
+      G.reset(); st().cash = 1e9; st().earned.sealed = 1e6; st().up.shelf = 4; T += 1;
+      for (const x of PTCG_SETS) G.setPrice(x.id, x.id === id ? pct : 1);
+      let p = 0;
+      for (let i = 0; i < 720; i++) {
+        for (const x of PTCG_SETS) { G.buy(x.id, 200); G.shelve(x.id, 999); }
+        const q = G.shelfQty(id), margin = G.ask(id) - G.wholesale(id); T += 10e3; G.tick(); p += (q - G.shelfQty(id)) * margin;
+      }
+      return p;
+    };
+    const a = PCTS.map(x => profitAt('sv08', x)), b = PCTS.map(x => profitAt('sv08.5', x)), at = (v, x) => v[PCTS.indexOf(x)], best = v => PCTS[v.indexOf(Math.max(...v))];
+    assert.ok(at(b, 1) > at(b, 0.85) && at(b, 1.1) > at(b, 0.85), `棱镜进化 buyers pay over market: 85% must not beat 100%/110% (${b.map(Math.round)})`);
+    assert.ok(at(a, 0.85) > at(a, 1.1), `超电突围 buyers shop around: 85% beats 110% (${a.map(Math.round)})`);
+    assert.ok(best(b) > best(a), `best price differs per set: 超电 ${best(a)}, 棱镜 ${best(b)}`);
+  }
+
+  // 10. 图鉴补卡: missing hits can be bought at market into the binder only; C/U/R still have to be pulled; 大师套 pays.
+  {
+    G.reset(); st().cash = 1e6; T += 1;
+    assert.equal(G.collect('sv08.5'), false, 'locked set cannot be collected');
+    G.buy('sv08', 5); G.open('sv08', 5);
+    const miss = G.missing('sv08'), first = miss[0], n0 = G.dexCount('sv08'), cash0 = st().cash;
+    const before = JSON.stringify([st().singles, st().shown, st().trophy, st().dex, st().pulled]);
+    assert.ok(miss.every((c, i) => G.BUY_R.includes(c.r) && (!i || c.price >= miss[i - 1].price)), 'only hits are for sale, cheapest first');
+    assert.ok(G.collect('sv08'));
+    assert.equal(first.price, S.cardPrice('sv08', first.n, first.r)); assert.ok(Math.abs(cash0 - st().cash - first.price) < 1e-9, 'a card costs its market price');
+    assert.equal(G.dexCount('sv08'), n0 + 1);
+    assert.ok(G.collect('sv08', true)); assert.equal(G.missing('sv08').length, 0); assert.equal(G.collect('sv08'), false, 'nothing left to buy');
+    assert.equal(JSON.stringify([st().singles, st().shown, st().trophy, st().dex, st().pulled]), before, 'bought cards never become sellable (no buy-at-market, list-at-160% pump) and are not pulls');
+    assert.ok(G.luck().live, 'luck baseline untouched');
+    assert.ok(!G.master('sv08'), 'C/U/R only come from packs');
+    st().cash = 0; assert.equal(G.collect('sv10'), false, 'cannot afford it'); st().cash = 1e6;
+    const tol0 = G.demand('sv08').tol, w0 = G.demand('sv08').w, rate0 = G.rate();
+    for (let i = 0; i < 300 && !G.master('sv08'); i++) { G.buy('sv08', 10); G.open('sv08', 10); }
+    assert.ok(G.master('sv08'), 'opening packs finishes the C/U/R');
+    assert.ok(Math.abs(G.demand('sv08').tol - tol0 - G.MASTER.tol) < 1e-9 && G.demand('sv08').w > w0, '大师套: that set\'s pack buyers pay more and come more');
+    assert.ok(G.rate() > rate0 && Math.abs(G.dexBonusOf('sv08') - G.DEX_TIERS.reduce((x, t) => x + t[1], 0)) < 1e-9, '大师套 collects every dex tier of that set');
+  }
   console.log('ok economy');
 }
 
@@ -173,4 +216,11 @@ console.log('ok luck percentile');
   assert.ok(shop[3].up >= 5, `several upgrades bought within 3h (${shop[3].up})`);
   assert.ok(opener[3].net < shop[3].net, 'opening packs is a fun expense, not a money machine, even when hits are sold at +20%');
   console.log(`ok growth: net after 1h/3h = $${shop[1].net}/$${shop[3].net}; the same shop that opens 5% of its packs: $${opener[3].net}`);
+  // Long game: a player who puts 10% of revenue into master sets has a next goal for hours, and it pays for itself.
+  const plain = play({ hours: 10, openShare: 0, pct: 1, log: 3600 }), chase = play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.1, log: 3600 });
+  const masters = h => chase[h].dex.split('/').filter(x => x === '★').length;
+  assert.ok(masters(3) >= 1, `first master set within 3h (${chase[3].dex})`);
+  assert.ok(masters(6) < 4 && masters(10) > masters(3), `still chasing after 6h, and progress keeps coming (${chase[6].dex} → ${chase[10].dex})`);
+  assert.ok(chase[10].net > plain[10].net, `the binder pays for itself by hour 10 (net $${chase[10].net} vs $${plain[10].net} for a shop that never collects)`);
+  console.log(`ok long game: master sets at 3h/6h/10h = ${masters(3)}/${masters(6)}/${masters(10)}; walk-ins ${plain[10].rate} → ${chase[10].rate}/min; net at 10h $${chase[10].net} vs $${plain[10].net}`);
 }

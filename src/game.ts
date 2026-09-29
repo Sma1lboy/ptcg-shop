@@ -14,7 +14,7 @@ export interface State {
   log: { t: number; text: string; tone: string }[]; shelf: Record<string, { qty: number; pct: number }>;
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: { t: string; r: string; text: string }[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
-  shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number;
+  shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>;
   offline: { secs: number; sales: number; revenue: number; lost: number } | null;
 }
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number }
@@ -40,6 +40,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     collector: { name: '收藏党', w: 10, tol: 1.22, sd: 0.12 },   // wants the priciest card in the case; trophy and signage draw more of them
     flipper:   { name: '倒爷', w: 8, tol: 0.93, sd: 0.05 },      // sweeps up bargains in bulk; ignores anything above ~market
   };
+  // Per-set pack demand. w = share of pack buyers who come for this set, tol = added to how far over market they will pay,
+  // budget = multiplier on their spending money. Flavour from where each set sits in the real market, not market data.
+  const DEMAND: Record<string, { tag: string; w: number; tol: number; budget: number }> = {
+    sv08: { tag: '货足比价', w: 1.2, tol: -0.06, budget: 1 },      // plentiful main set: players shop around
+    sv10: { tag: '新系列', w: 1, tol: 0, budget: 1 },
+    'sv08.5': { tag: '断货抢手', w: 1.3, tol: 0.14, budget: 1.6 }, // sold out for most of 2025: players pay over market, and bring more money
+    'sv03.5': { tag: '老粉收藏', w: 0.7, tol: 0.06, budget: 2.4 }, // out of print; adult collectors with deeper pockets
+  };
+  const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
   const SIGN_STEP = 0.04;                 // signage: customers pay +4% more per level, and more seekers/collectors come
@@ -48,8 +57,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop sales credited on return
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
   // 图鉴: each set's Pokédex fills as you pull new card numbers (selling a card never un-collects it).
-  // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +30% per set.
-  const DEX_TIERS: [number, number][] = [[0.25, 0.02], [0.5, 0.03], [0.75, 0.05], [0.9, 0.08], [1, 0.12]];
+  // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +38% per set.
+  const DEX_TIERS: [number, number][] = [[0.25, 0.02], [0.5, 0.03], [0.75, 0.05], [0.9, 0.08], [1, 0.2]];
+  // Hits (RR and up) can also be bought from other shops at market price, into the binder only; C/U/R only come from packs.
+  const BUY_R = ['RR', 'ACE', 'UR', 'IR', 'SIR', 'HR'];
+  const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
   const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000 }; // lifetime revenue needed before a set can be stocked
@@ -78,15 +90,17 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
   const dexTotal = (id: string) => DATA[id].cards.length;
-  const dexCount = (id: string) => Object.keys(state.dexSeen).filter(k => k.startsWith(id + '|')).length;
+  const dexCount = (id: string) => (dexN ||= Object.keys(state.dexSeen).reduce((a, k) => { const s = k.split('|')[0]; a[s] = (a[s] || 0) + 1; return a; }, {} as Record<string, number>))[id] || 0;
   const dexShare = (id: string) => dexCount(id) / dexTotal(id);
+  const master = (id: string) => dexCount(id) >= dexTotal(id);
+  const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
   const rate = () => ARRIVAL * (1 + dexBonus()); // walk-ins per second: only word of mouth (图鉴) grows it
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelf: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {} });
 
-  let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt; // first tick after load credits the time the tab was closed
+  let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: (() => void)[] = [];
   const emit = () => { save(); listeners.forEach(f => f()); };
 
@@ -143,7 +157,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       packs.push(pack);
       state.pulled += S.packValue(pack);
       for (const c of pack) {
-        if (c.r !== 'E') state.dexSeen[`${c.set}|${c.n}`] = 1;
+        if (c.r !== 'E' && !state.dexSeen[`${c.set}|${c.n}`]) { state.dexSeen[`${c.set}|${c.n}`] = 1; dexN = null; }
         const key = `${c.set}|${c.n}|${c.kind}`;
         (state.singles[key] ||= { ...c, count: 0 }).count++;
         const d = (state.dex[key] ||= { c: 0, p: c.price }); d.c++; d.p = c.price;
@@ -155,12 +169,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     state.costOpened += wholesale(id) * n;
     state.opened[id] = (state.opened[id] || 0) + n; state.dexPacks += n;
     luckCache = null;
-    if (dexCount(id) > had) {
-      if (dexBonusOf(id) > dex0) log(`图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%`, 'hit');
-    }
+    if (dexCount(id) > had) dexLog(id, dex0);
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
     log(`开了 ${n} 包${setById(id).name}，最贵：${best.name} $${best.price.toFixed(2)}`, S.HITS.includes(best.kind) ? 'hit' : '');
     emit(); return packs;
+  }
+
+  const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before) log(master(id)
+    ? `大师套：${setById(id).name} 收齐了！回头客 +${Math.round(dexBonusOf(id) * 100)}%，这个系列的拆包玩家肯多付 ${MASTER.tol * 100}%`
+    : `图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%`, 'hit'); };
+
+  // 图鉴补卡: missing hits of a set, cheapest first, at today's market price.
+  const missing = (id: string) => DATA[id].cards.filter(c => BUY_R.includes(c.r) && !state.dexSeen[`${id}|${c.n}`])
+    .map(c => ({ n: c.n, name: c.name, r: c.r, price: S.cardPrice(id, c.n, c.r)! })).sort((a, b) => a.price - b.price);
+  // Buys the cheapest missing hit (or all of them) into the binder. Never into singles/case/trophy, so it cannot be resold.
+  function collect(id: string, all = false) {
+    const miss = missing(id), buy = all ? miss : miss.slice(0, 1), cost = buy.reduce((a, c) => a + c.price, 0);
+    if (!unlocked(id) || !buy.length || state.cash < cost) return false;
+    const before = dexBonusOf(id);
+    state.cash -= cost; for (const c of buy) state.dexSeen[`${id}|${c.n}`] = 1; dexN = null;
+    log(`图鉴补卡：${buy.length > 1 ? `${setById(id).name}闪卡 ${buy.length} 张` : buy[0].name}，−$${cost.toFixed(2)}`);
+    dexLog(id, before);
+    emit(); return true;
   }
 
   function sell(key: string, count = Infinity) {
@@ -253,23 +283,24 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const onShelf = SETS.filter(s => shelfQty(s.id) > 0).map(s => s.id);
     let res = 'none', out: { gain: number; text: string } | null = null, why = '';
     if (type === 'opener') {
-      const budget = lognorm(25, 0.6), want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
-      let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id)).id;
+      const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
+      let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
       if (!shelfQty(id) && onShelf.length && random() < 0.5) id = pickW(onShelf, i => shelfQty(i)); // settles for another set
       if (shelfQty(id)) {
-        const n = Math.min(want, shelfQty(id), Math.floor(budget / ask(id)));
-        if (n >= 1 && pctOf(id) <= tol) { res = 'sold'; out = sellPacks(id, n, who); } else { res = 'pricey'; why = `${setById(id).name}标价 ${Math.round(pctOf(id) * 100)}%，嫌贵走了`; }
+        const n = Math.min(want, shelfQty(id), Math.floor(lognorm(25 * demand(id).budget, 0.6) / ask(id)));
+        if (n >= 1 && pctOf(id) <= tol + demand(id).tol) { res = 'sold'; out = sellPacks(id, n, who); } else { res = 'pricey'; why = `${setById(id).name}标价 ${Math.round(pctOf(id) * 100)}%，嫌贵走了`; }
       } else why = `想拆 ${setById(id).name}，货架没有`;
     } else if (type === 'flipper') {
-      const cheap = onShelf.filter(id => pctOf(id) <= tol).sort((a, b) => pctOf(a) - pctOf(b))[0];
+      const under = onShelf.filter(id => pctOf(id) <= tol), cheap = under.filter(id => !(state.flipT[id] > vnow)).sort((a, b) => pctOf(a) - pctOf(b))[0];
       const budget = lognorm(300, 0.5);
-      if (cheap) { // a low price empties the shelf: they take up to 4–15 packs
+      if (cheap) { // a low price empties the shelf: they take up to 4–15 packs, then that set is off their list until resold
         const n = Math.min(shelfQty(cheap), Math.floor(budget / ask(cheap)), 4 + Math.floor(random() * 12));
-        if (n >= 1) { res = 'sold'; out = sellPacks(cheap, n, who); }
+        if (n >= 1) { res = 'sold'; out = sellPacks(cheap, n, who); state.flipT[cheap] = vnow + FLIP_COOLDOWN * 1000; }
       }
       if (res !== 'sold') {
         const i = hits.findIndex(c => cardPct(c) <= tol && cardAsk(c) <= budget);
         if (i >= 0) { res = 'sold'; out = sellCard(i, quiet, who); }
+        else if (under.length) { res = 'pricey'; why = `${setById(under[0]).name}刚收过一批还没出手，这次不收`; }
         else if (onShelf.length || hits.length) { res = 'pricey'; why = '没有低于市价的货，空手走了'; }
       }
     } else if (type === 'seeker') {
@@ -318,9 +349,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
     let n = 0, revenue = 0, sales = 0, quiet = false;
     for (let left = dt; left > 0; left -= slice) {
-      const x = rate() * Math.min(slice, left), m = Math.floor(x) + (random() < x % 1 ? 1 : 0);
+      const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
       quiet = quiet || m > 3; n += m;
-      for (let i = 0; i < m; i++) { const got = visit(quiet); revenue += got; if (got) sales++; }
+      for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(quiet); revenue += got; if (got) sales++; } // spread over the slice
       clerkWork(acc);
     }
     if (acc.packs) log(`店员进货 ${acc.packs} 包，−$${acc.spent.toFixed(2)}${acc.bulk ? `；散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}` : ''}`);
@@ -363,13 +394,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return e;
   }
 
-  function reset() { state = fresh(); luckCache = null; emit(); }
+  function reset() { state = fresh(); luckCache = null; dexN = null; emit(); }
 
   return {
     get state() { return state; }, on: (f: () => void) => listeners.push(f),
-    buy, shelve, unshelve, setPrice, setCardPrice, open, sell, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
+    buy, shelve, unshelve, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline,
-    sealedPrice, ask, cardAsk, shelfQty, pctOf, cardPct, capacity, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, TYPES, DEX_TIERS, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    demand, sealedPrice, ask, cardAsk, shelfQty, pctOf, cardPct, capacity, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
+    UPGRADES, TYPES, DEMAND, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }
