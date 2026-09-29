@@ -4,6 +4,8 @@
 
 先 `node scripts/fetch-images.mjs` 把卡图镜像到本地（约 90 MB，只需一次），再 `python3 -m http.server 8765` 后打开 http://127.0.0.1:8765 。直接双击 `index.html` 也能玩，但卡图会走 TCGdex CDN。
 
+开包台是 three.js 的 3D 场景（`src/table3d.js`，three.js 从 jsdelivr 按固定版本加载）：撕封口、抽卡、闪卡材质、按稀有度分级的出货演出。没有 WebGL、系统开了「减少动态效果」、或 CDN 加载失败时，自动退回 2D 开包台。
+
 - 开包概率：TCGplayer 实开统计（每个系列 1,200–8,000 包），模拟结果由 `node test/sim.test.mjs` 校验落在其 95% 置信区间内。
 - 单卡价格：TCGplayer 市价，经 TCGdex API 抓取（`node scripts/fetch-data.mjs`）。
 - 整包价格：PriceCharting。
