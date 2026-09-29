@@ -140,7 +140,7 @@
     const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR'].filter(k => e[k] > 0 || t[k]);
     $('luck').innerHTML = `<h2 class="eyebrow" id="luck-h">欧气检测</h2>
       <p class="verdict ${pct == null ? '' : pct >= 70 ? 'lucky' : pct < 30 ? 'unlucky' : ''}">${L.title}</p>
-      <p class="verdict-sub">${pct == null ? '开几包就能测。拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 10 万包建分布）。'
+      <p class="verdict-sub">${pct == null ? '开几包就能测。拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
         : `开了 ${L.packs} 包，开出总值超过 <b>${pct.toFixed(0)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
         ${BANDS.map(([a, b, n]) => `<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`).join('')}

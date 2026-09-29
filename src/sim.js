@@ -72,8 +72,8 @@
   }
 
   // Luck: where a player's total pulled value sits among simulated players who opened the same packs.
-  // 100k packs per set: the top tail (a 0.07%-per-pack SIR) needs ~70 samples to be priced sanely; 20k gave ~14.
-  const SAMPLES = 100000, samples = {};
+  // 60k packs per set (~250ms once per set): a 0.07%-per-pack SIR chase card gets ~40 samples, 20k gave ~14.
+  const SAMPLES = 60000, samples = {};
   function valueSamples(setId) {
     if (samples[setId]) return samples[setId];
     const r = rng(0xC0FFEE ^ setId.length), a = new Float64Array(SAMPLES);
