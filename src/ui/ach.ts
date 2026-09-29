@@ -7,7 +7,7 @@ import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import * as FX from '../fx.ts';
 import { ACH, GROUPS, TIERS, check, note, tier, watch, type Ach } from '../achievements.ts';
-import { G, $, money } from './common.ts';
+import { G, $, money, bar } from './common.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 
@@ -32,11 +32,11 @@ function label(a: Ach, cls = '') {
 }
 // Not yet earned: only the label's outline, one row: what it is, what to do, how far along, and which stock it would print on.
 function todo(a: Ach) {
-  const hide = a.group === 'hidden', t = tier(a), [now, goal] = a.prog(G), bar = goal > 1 && !hide;
+  const hide = a.group === 'hidden', t = tier(a), [now, goal] = a.prog(G), show = goal > 1 && !hide;
   return html`<li class="ach-todo t-${t}">
       <p class="a-name">${hide ? '？？？' : a.name}</p><p class="a-pay"><i class="a-chip" aria-hidden="true"></i>${tierName(t)} · ${pay(a)}</p>
       <p class="a-desc">${hide ? a.hint : a.desc}</p>
-      ${bar ? html`<p class="a-prog"><span class="a-bar" role="img" aria-label="${amount(a, now)}/${amount(a, goal)}"><i style="width:${Math.min(1, now / goal) * 100}%"></i></span>${amount(a, now)} / ${amount(a, goal)}</p>` : ''}
+      ${show ? html`<p class="a-prog">${bar(now / goal, `${amount(a, now)}/${amount(a, goal)}`)}${amount(a, now)} / ${amount(a, goal)}</p>` : ''}
     </li>`;
 }
 
@@ -50,10 +50,10 @@ export function renderAch() {
   const count = (t: string) => { const l = ACH.filter(a => tier(a) === t); return `${l.filter(a => got[a.id]).length} / ${l.length}`; };
   render(html`<header class="grow-head ach-head">
       <div class="gh-lv"><p><span>成就</span><b>${n}</b><small>/ ${ACH.length}</small></p>
-        <span class="gh-bar" role="img" aria-label="${n}/${ACH.length}"><i style="--p:${n / ACH.length}"></i></span></div>
+        ${bar(n / ACH.length, `${n}/${ACH.length}`, { k: 'EXP' })}</div>
       ${near ? html`<div class="gh-goal"><p class="gg-k">离得最近</p>
         <p class="gg-what"><b>${near.a.name}</b><span>${near.a.desc}</span></p>
-        ${near.g > 1 ? html`<span class="gt-save" role="img" aria-label="${Math.round(near.p * 100)}%"><i style="width:${near.p * 100}%"></i></span><small>${amount(near.a, near.x)} / ${amount(near.a, near.g)} · ${tierName(tier(near.a))} · ${pay(near.a)}</small>` : ''}</div>` : html`<p class="gh-goal gg-k">看得见的都解锁了。</p>`}
+        ${near.g > 1 ? html`${bar(near.p, `${Math.round(near.p * 100)}%`)}<small>${amount(near.a, near.x)} / ${amount(near.a, near.g)} · ${tierName(tier(near.a))} · ${pay(near.a)}</small>` : ''}</div>` : html`<p class="gh-goal gg-k">看得见的都解锁了。</p>`}
       <dl class="gh-now">
         <div><dt>奖金已领</dt><dd>${money(paid)}</dd></div>
         <div><dt>最近一个</dt><dd>${last ? last.name : '还没有'}</dd></div>

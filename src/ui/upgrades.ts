@@ -3,7 +3,7 @@
 // A node shows its badge ringed with its levels, current → next effect, and until it is affordable a bar filling toward the price.
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
-import { G, $, money, logoUrl } from './common.ts';
+import { G, $, money, logoUrl, bar } from './common.ts';
 import { odds } from './skills.ts';
 
 const moneyOf = money;
@@ -118,12 +118,12 @@ export function renderUpgrades() {
   const goal = nextStep();
   render(html`<header class="grow-head">
       <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b>` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
-        <span class="gh-bar" role="img" aria-label="${lv}/${max}"><i style="--p:${lv / max}"></i></span></div>
+        ${bar(lv / max, `${lv}/${max}`, { k: 'EXP' })}</div>
       ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? (goal.cost <= G.spare() ? '下一步，现在就能升' : '下一步，钱够但要动账单的钱') : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
         <button type="button" class="gg-what" @click=${() => seek(`tn-${goal.k}`)}><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span><i aria-hidden="true">↓</i></button>
         ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
-          : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / goal.cost * 100)}%"><i style="width:${cash / goal.cost * 100}%"></i></span>
+          : html`${bar(cash / goal.cost, `攒了 ${Math.round(cash / goal.cost * 100)}%`)}
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
         ${spareLine()}
         ${fameLine()}
@@ -208,9 +208,9 @@ function node(n: Node, next: string | undefined, lit: boolean) {
     <p class="tn-top"><b>${n.name}</b><span class="gt-lv">Lv ${n.lv}<small>/${n.max}</small></span>${n.k === next ? html`<small class="tn-next">下一步</small>` : ''}</p>
     <p class="gt-fx">${done ? n.fx[0] : html`${n.fx[0]} <span aria-hidden="true">→</span> <b>${n.fx[1]}</b>`}</p>
     <p class="gt-desc">${n.desc}</p>
-    ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`<span class="gt-save" role="img" aria-label="口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}"><i style="width:${Math.min(100, n.gate[0] / n.gate[1] * 100)}%"></i></span><small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
+    ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`${bar(n.gate[0] / n.gate[1], `口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}`)}<small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
       : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
-        ${can ? (perk ? '' : billNote(n.cost!)) : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / n.cost! * 100)}%"><i style="width:${Math.min(100, cash / n.cost! * 100)}%"></i></span><small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
+        ${can ? (perk ? '' : billNote(n.cost!)) : html`${bar(cash / n.cost!, `攒了 ${Math.round(cash / n.cost! * 100)}%`)}<small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
     ${back ? refundBtn(back.k, n.name, n.lv, back.cost) : ''}
   </li>`;
 }
@@ -254,7 +254,7 @@ function renderBranch() {
     <div class="br-now">
       <div class="br-prog">
         <p><span>这家店的债</span> <b>${can ? '还清了' : `还欠 ${money(G.state.debt)}`}</b> <small>/ ${money(d0)}</small></p>
-        <span class="gh-bar" role="img" aria-label="已还 ${Math.round(paid * 100)}%"><i style="--p:${paid}"></i></span>
+        ${bar(paid, `已还 ${Math.round(paid * 100)}%`, { k: 'EXP' })}
         <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame + hand)}</b>（本店营业额 ${money(rev)}${hand ? `，加亲手开齐的 ${hand}` : ''}）；多做 ${money(nextAt - rev)} 营业额就是 ${pts(fame + 1)}（名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')})，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。`
           : html`按现在的营业额（${money(rev)}），还清时能带走至少 ${pts(fame)}。破产的店一点名气都没有。`}${!can && hand ? ` 另有亲手开齐的 ${pts(hand)}等着：开分店时一起拿，破产也不丢。` : ''}</p>
       </div>

@@ -8,7 +8,7 @@
 // - 破产结算 (#wreck): a <dialog> listing what 九姐 took and what stayed, open until acknowledged.
 import { html, render, nothing } from 'lit-html';
 import * as S from '../sim.ts';
-import { G, $, money } from './common.ts';
+import { G, $, money, bar } from './common.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 import { sellPlan } from '../debt.ts';
@@ -33,8 +33,10 @@ export function renderDue() {
   const left = o ? o.until - s.shopT : G.dueIn(), hot = !!o || left < 300 || (b != null && s.cash < b.amount);
   el.className = `due${o ? ' late' : hot ? ' hot' : ''}`;
   el.title = o ? `第 ${o.week} 周的账逾期，宽限 ${clock(left)}` : `第 ${b!.week} 周的账 ${money(b!.amount)}，${clock(left)} 后九姐来收`;
-  render(o ? html`<span class="k">逾期</span><b>${clock(left)}</b><small>差 ${money(Math.max(0, o.amount - s.cash))}</small>`
-    : html`<span class="k">第 ${b!.week} 周</span><b>${clock(left)}</b><small>${money(b!.amount)}</small>`, el);
+  // the chip is the shop's battle box: HP is the till against this bill — full means 九姐 gets paid on the spot
+  const owed = o ? o.amount : b!.amount, hp = bar(s.cash / owed, `手上 ${money(s.cash)}，账 ${money(owed)}`, { hp: true, k: 'HP' });
+  render(o ? html`<span class="k">逾期</span><b>${clock(left)}</b><small>差 ${money(Math.max(0, o.amount - s.cash))}</small>${hp}`
+    : html`<span class="k">第 ${b!.week} 周</span><b>${clock(left)}</b><small>${money(b!.amount)}</small>${hp}`, el);
 }
 
 // 退回: this week's upgrades and skills, back at G.REFUND of the price while the till is short of the bill (G.refundable).
@@ -68,7 +70,7 @@ export function renderLedger() {
         <p class="lg-k">还欠</p><p class="lg-big">${money(s.debt)}</p>
         <dl><div><dt>开店欠款（分期，不计息）</dt><dd>${money(s.owe)} <small>/ ${money(d0)}</small></dd></div>
           <div><dt>借款（每周利滚利 ${pct(r)}）</dt><dd class=${s.loan > 0 ? 'lg-loan' : ''}>${money(s.loan)}</dd></div></dl>
-        <span class="gh-bar" role="img" aria-label="开店欠款已还 ${pct(paid)}"><i style="--p:${paid}"></i></span>
+        ${bar(paid, `开店欠款已还 ${pct(paid)}`, { k: 'EXP' })}
         ${s.loan > 0 ? html`<p class="lg-note">借款每周付完账顺手还：九姐收回 1/${Math.round(1 / G.LOAN_PAY)}（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}），只拿收银机里 ${money(G.loanFloat())} 以上的钱（补满货架的进货钱加下周的分期），不够就少收，不算逾期。照这样约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
       </div>
       <div class="lg-bill">
@@ -169,7 +171,7 @@ export function renderRaise() {
     <div class="rs-head">
       <p class="rs-short">${short ? html`还差 <b>${money(short)}</b>` : html`<b>钱够了</b>`}</p>
       <p class="rs-clock"><span class="rs-k">宽限</span><b>${clock(left)}</b></p>
-      <span class="gh-bar" role="img" aria-label="手上 ${money(cash)}，账 ${money(o.amount)}"><i style="--p:${Math.min(1, cash / o.amount)}"></i></span>
+      ${bar(cash / o.amount, `手上 ${money(cash)}，账 ${money(o.amount)}`, { hp: true, k: 'HP' })}
       <p class="rs-note">手上 ${money(cash)} / 账 ${money(o.amount)} · 钱一够就自动付掉 · 开包、离开时宽限不走</p>
     </div>
     ${short ? html`<ul class="rs-list">

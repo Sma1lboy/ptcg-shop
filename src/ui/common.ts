@@ -1,7 +1,7 @@
 // What every panel shares: the one game instance, DOM lookup, money format, card art URLs, rarity labels.
 // Panels only read G.state and call G's methods, never mutate state directly.
 import { createGame } from '../game.ts';
-import { html } from 'lit-html';
+import { html, nothing } from 'lit-html';
 import { card, logo } from '../assets.ts';
 
 export const G = createGame();
@@ -10,6 +10,13 @@ export const $ = (id: string) => document.getElementById(id)!;
 export const money = (v: number): string => v < 0 ? '−' + money(-v) : '$' + (v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e5 ? `${(v / 1e3).toFixed(1)}K` : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
 export const imgUrl = (c: { set: string; n: string }, size = 'low') => card(c.set, c.n, size);
 export const logoUrl = (id: string) => logo(id);
+// The BW status bar (DESIGN.md「状态条」): the dark plate of a battle box with the fill on a pale track. EXP (the default) is
+// progress toward something — a level, an unlock, a price; HP is what the till has against what is owed, coloured by what is left
+// (over half, over a fifth, below). k names the bar on its plate (HP / EXP); a bar inside a sentence goes without it.
+export function bar(p: number, label: string, o: { hp?: boolean; k?: string } = {}) {
+  const v = Math.max(0, Math.min(1, p || 0));
+  return html`<span class="bar${o.hp ? ' hp' : ''}" data-k=${o.k ?? nothing} data-hp=${o.hp ? (v > .5 ? 'hi' : v > .2 ? 'mid' : 'lo') : nothing} role="img" aria-label=${label}><i style="--p:${v}"></i></span>`;
+}
 
 // Rarity names; `jp` is the name Chinese/Japanese players use. t = tier (0 bulk … 5 SIR/HR/MHR) for flip time, sound and glow. The printed symbols are card.ts mark().
 export const RAR: Record<string, { zh: string; jp?: string; t: number }> = {
