@@ -17,7 +17,7 @@ import { renderMat, refreshIdle, bindMatInput, hold } from './ui/mat.ts';
 import { bindEvents } from './ui/events.ts';
 import { bindLayout, renderTabs } from './ui/layout.ts';
 import { renderRail } from './ui/rail.ts';
-import { renderGuide } from './ui/guide.ts';
+import { bindGuide } from './ui/guide.ts';
 import { initGoals } from './ui/goals.ts';
 
 // While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
@@ -30,7 +30,6 @@ setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
 renderBasis(); bindLayout();
-G.on(renderGuide);
-renderGuide();
+bindGuide();
 
 initGoals();
