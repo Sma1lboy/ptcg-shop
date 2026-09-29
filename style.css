@@ -756,7 +756,7 @@ button:disabled { cursor: not-allowed; }
    locked logos are greyed the way the shelf greys them */
 .mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
 .mile-track li { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; font-size: var(--fs-cap); color: var(--muted); min-width: 0; }
-.mile-track img { width: 76px; height: 40px; object-fit: contain; margin-bottom: 30px; }
+.mile-track img { width: 76px; max-width: 92%; height: 40px; object-fit: contain; margin-bottom: 30px; } /* narrow columns (780–1000 wide) shrink the logo instead of overlapping */
 .mile-track li:not(.got) img { filter: grayscale(1); opacity: .5; }
 .mile-track b { font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .mile-track li.got b, .mile-track li.next b { color: var(--ink); font-weight: 600; }
