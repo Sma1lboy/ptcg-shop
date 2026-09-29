@@ -442,7 +442,7 @@ button:disabled { cursor: not-allowed; }
 .s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* footer: sources and game settings folded away; the reset lives here, far from the shop's buttons */
-.foot { max-width: 1680px; margin: 0 auto; padding: 28px var(--gap) 48px; background: url(gen/divider.webp) 50% 0 / min(560px, 90%) auto no-repeat; /* the trim's divider rule; hairline when it's missing */
+.foot { max-width: 1680px; margin: 0 auto; padding: 44px var(--gap) 48px; background: url(gen/divider.webp) 50% 0 / min(420px, 70%) auto no-repeat; /* the trim's divider rule; hairline when it's missing */
   border-top: 1px solid transparent; display: flex; flex-wrap: wrap; align-items: start; gap: 12px 40px; font-size: var(--fs-cap); color: var(--muted); }
 .foot details { flex: 1 1 340px; min-width: 0; }
 .foot summary { cursor: pointer; color: var(--ink); font-size: var(--fs-body); font-weight: 600; padding: 6px 0; }
