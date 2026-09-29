@@ -146,6 +146,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const WEEK = 20 * 60, GRACE = 5 * 60;
   const DEBT0 = 40000, BILL0 = 300, BILL_G = 1.12, DEBT_STEP = 0.5;
   const LOAN_RATE = 0.1, LOAN_MARK = 0.05, LOAN_K = 1, LOAN_FLOOR = 3000;
+  // 顺手还 (game setting, GAMEPLAY §4.5): once a week's bill is paid, 九姐 also takes LOAN_PAY of the loan (at least LOAN_MIN × the
+  // shop's scale, or all of it) out of the till — only from cash beyond the money to fill the shelves plus next week's installment (loanFloat),
+  // never making the bill late, never borrowed for, never a bankruptcy. A loan left alone used to climb to the credit line and sit
+  // there for good, a tenth of it paid every week as interest (autoplay 冲动新手: ~$50k at 16 h, 0/20 ever cleared; now 10/20).
+  const LOAN_PAY = 1 / 3, LOAN_MIN = 1000, LOAN_FLOAT = 1000;
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
   // 图鉴: each set's Pokédex fills as you pull new card numbers (selling a card never un-collects it).
   // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +38% per set.
@@ -514,7 +519,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // covers: a first-timer who spends the till on growth before the first bill borrows every week after and never clears the debt
   // (autoplay 冲动新手, GAMEPLAY.md §8). Game setting.
   const REFUND = 1 - LOAN_RATE;
-  const spare = () => Math.max(0, state.cash - (state.overdue?.amount ?? nextBill()?.amount ?? 0));
+  const spare = () => { const b = nextBill(); return Math.max(0, state.cash - (state.overdue?.amount ?? (b ? b.amount + b.loanPay : 0))); }; // 顺手还 is set aside too: spending it keeps the loan growing
   const bought = (k: string, cost: number) => { (state.bought ||= []).push({ k, cost, week: state.week }); };
   // 退回 (game setting): a level bought in the week whose bill the till now can't cover goes back for REFUND of its price — the way
   // back for buying before the bill. Only the top level of each, only while short. REFUND = 1 − LOAN_RATE: buying after a bill and
@@ -765,10 +770,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const installment = (w: number) => Math.min(state.owe, Math.round(BILL0 * debtScale() * BILL_G ** (w - 1)));
   const dueIn = () => state.week * WEEK - state.shopT; // seconds of shop time until the next bill
   // The next bill as it stands now (the loan part is what the loan has grown past the credit line; it grows again at the week's end).
+  // loanPay: the 顺手还 part as scheduled (taken only if the till has it beyond the float, so it is not in amount).
   function nextBill() {
     if (!state.debt) return null;
-    const inst = installment(state.week);
-    return { week: state.week, amount: inst + Math.max(0, Math.round(state.loan * (1 + loanRate()) - creditLimit())), inst, dueAt: clock() + dueIn() * 1000 };
+    const inst = installment(state.week), grown = state.loan * (1 + loanRate()), hard = Math.max(0, Math.round(grown - creditLimit()));
+    return { week: state.week, amount: inst + hard, inst, loanPay: Math.max(0, Math.round(loanDue(grown) - hard)), dueAt: clock() + dueIn() * 1000 };
+  }
+  // What 顺手还 leaves in the till: the money to fill every shelf (a clerk's round, or the shelves' gap for a player restocking by
+  // hand; at least LOAN_FLOAT) plus the installment of the week after the bill being paid (w; before it falls due, state.week + 1).
+  // Without the installment 普通 borrowed a fifth more; without the shelves' gap a clerkless shop's restock money went to the loan (§4.5).
+  const loanFloat = (w = state.week + 1) => Math.max(LOAN_FLOAT, clerkBudget(), shelfGap()) + installment(w);
+  // what filling every shelf to the top would cost at the wholesale price (a player without a clerk restocks by hand from the same till)
+  const shelfGap = () => cents(shelves().reduce((a, sh) => a + (sh.id && unlocked(sh.id) ? Math.max(0, depth() - sh.qty) * wholesale(sh.id) : 0), 0));
+  const loanDue = (L: number) => Math.min(L, Math.max(L * LOAN_PAY, LOAN_MIN * debtScale())); // this week's 顺手还 of a loan grown to L, hard part included
+  // Weeks until the loan is gone if every 顺手还 is taken in full and nothing more is borrowed (账本 prints it).
+  function loanWeeks() { let L = state.loan, w = 0; for (; L >= 1 && w < 99; w++) { const g = L * (1 + loanRate()); L = g - Math.max(loanDue(g), g - creditLimit()); } return w; }
+  // 顺手还: after the week's bill is paid, up to `due` of the loan from cash above the float (no event: it is a repayment, not a bill).
+  function payDown(due: number) {
+    const pay = cents(Math.min(due, state.loan, state.cash - loanFloat(state.week)));
+    if (!(pay >= 1)) return;
+    state.cash -= pay; state.loan -= pay; setDebt();
+    log(`九姐顺手收回借款 $${Math.round(pay).toLocaleString('en-US')}`, 'loss', -pay);
+    cleared();
   }
   function borrow(amount: number, forced: boolean) {
     amount = cents(amount);
@@ -790,11 +813,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     state.weekRev0 = revenue(); state.best = Math.max(state.best, made);
     if (!state.debt) return;
     state.loan *= 1 + loanRate(); setDebt();
-    const inst = installment(w), amount = cents(inst + Math.max(0, state.loan - creditLimit()));
-    if (amount <= 0) return;
+    const inst = installment(w), hard = Math.max(0, state.loan - creditLimit()), amount = cents(inst + hard), soft = loanDue(state.loan) - hard;
+    if (amount <= 0) { if (!state.overdue) payDown(soft); return; }
     pending.push({ type: 'bill_due', week: w, amount });
     if (state.overdue) { state.overdue = { week: w, amount: cents(state.overdue.amount + amount), inst: state.overdue.inst + inst, until: Math.max(state.overdue.until, state.shopT + GRACE) }; return; } // piled up while away: the new bill gets its own grace
-    if (state.cash >= amount) settle({ week: w, amount, inst });
+    if (state.cash >= amount) { settle({ week: w, amount, inst }); if (state.debt) payDown(soft); }
     else {
       state.overdue = { week: w, amount, inst, until: state.shopT + GRACE };
       log(`第 ${w} 周的账 ${'$' + amount.toFixed(0)} 付不上：${GRACE / 60} 分钟内凑齐，不然就借`, 'loss');
@@ -925,8 +948,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
-    clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
-    WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP, AWAY,
+    clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
+    WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,

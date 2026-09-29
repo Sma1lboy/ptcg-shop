@@ -16,6 +16,7 @@ import { refundBtn } from './upgrades.ts';
 
 const clock = (s: number) => { s = Math.max(0, Math.ceil(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
 const pct = (r: number) => `${Math.round(r * 100)}%`;
+const weeks = (n: number) => { const m = n * G.WEEK / 60; return n >= 99 ? '很多周' : `${n} 周（开着店 ${m >= 60 ? `${(m / 60).toFixed(1)} 小时` : `${m} 分钟`}）`; };
 
 // Borrowing takes two clicks within 4 s on the same amount: the first one only shows what the loan becomes.
 let armed = { n: 0, at: 0 };
@@ -51,6 +52,8 @@ export function renderLedger() {
       <p>下面「开分店」能带走名气；九姐在${G.street(s.branch.n + 1).name}出下一家店的本钱（${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (s.branch.n + 1))))}）。</p></div>`, $('ledger'));
     return;
   }
+  // what 顺手还 would take at the bill if the till stayed as it is now (game.ts payDown: only cash above the float)
+  const take = b ? Math.max(0, Math.min(b.loanPay, s.cash - b.amount - G.loanFloat())) : 0;
   const paid = Math.max(0, Math.min(1, 1 - s.owe / d0)), short = o ? Math.max(0, o.amount - s.cash) : 0;
   const upcoming = Array.from({ length: 4 }, (_, i) => s.week + 1 + i).map(w => [w, G.installment(w)] as const).filter(([, v]) => v > 0);
   // what a loan of n grows to if left alone for 3 weeks (the number the confirm click shows)
@@ -66,13 +69,14 @@ export function renderLedger() {
         <dl><div><dt>开店欠款（分期，不计息）</dt><dd>${money(s.owe)} <small>/ ${money(d0)}</small></dd></div>
           <div><dt>借款（每周利滚利 ${pct(r)}）</dt><dd class=${s.loan > 0 ? 'lg-loan' : ''}>${money(s.loan)}</dd></div></dl>
         <span class="gh-bar" role="img" aria-label="开店欠款已还 ${pct(paid)}"><i style="--p:${paid}"></i></span>
+        ${s.loan > 0 ? html`<p class="lg-note">借款每周付完账顺手还：九姐收回 1/${Math.round(1 / G.LOAN_PAY)}（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}），只拿收银机里 ${money(G.loanFloat())} 以上的钱（补满货架的进货钱加下周的分期），不够就少收，不算逾期。照这样约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
       </div>
       <div class="lg-bill">
         ${o ? html`<p class="lg-k lg-late">第 ${o.week} 周的账逾期</p><p class="lg-big">${money(o.amount)}</p>
             <p>宽限还剩 <b>${clock(o.until - s.shopT)}</b>。${short ? html`手上 ${money(s.cash)}，还差 <b>${money(short)}</b>。` : '钱够了，付掉吧。'}</p>
             <div class="lg-act">${short ? html`<button type="button" class="primary" @click=${openRaise}>去凑钱</button>` : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>${backs()}`
         : b ? html`<p class="lg-k">第 ${b.week} 周的账 · ${clock(G.dueIn())} 后来收</p><p class="lg-big">${money(b.amount)}</p>
-            <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>${backs()}
+            <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付${take ? `，再顺手还借款 ${money(take)}` : ''}。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>${backs()}
             ${upcoming.length ? html`<ol class="lg-next">${upcoming.map(([w, v]) => html`<li><span>第 ${w} 周</span><b>${money(v)}</b></li>`)}</ol>
               <p class="lg-note">每周 ×${G.BILL_G}，付到欠款为零为止。</p>` : ''}` : ''}
       </div>
