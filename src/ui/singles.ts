@@ -12,18 +12,18 @@ import { G, $, money } from './common.ts';
 import { face, cap } from './card.ts';
 
 const LIVE = 2400;
-let had: Record<string, number> | null = null, lastAt = 0, soldN = 0;
+let had: Record<string, { c: Single; n: number }> | null = null, lastAt = 0, soldN = 0;
 const sold: Record<string, { k: number; at: number; c: Single; n: number; gain: number }> = {};
 function listen(list: [string, Single][]) {
   const s = G.state, now = Date.now();
   const fresh = s.recent.filter(v => v.at > lastAt && v.t === 'seeker' && v.r === 'sold' && now - v.at < LIVE);
   lastAt = s.recent[0]?.at ?? lastAt;
-  if (had) for (const [k, n] of Object.entries(had)) {
-    const c = s.singles[k] ?? sold[k]?.c, left = s.singles[k]?.count ?? 0;
-    if (!c || left >= n || !fresh.some(v => v.card === c.name || v.n! > 1)) continue;
+  if (had) for (const [k, { c, n }] of Object.entries(had)) {
+    const left = s.singles[k]?.count ?? 0;
+    if (left >= n || !fresh.some(v => v.card === c.name || v.n! > 1)) continue;
     sold[k] = { k: ++soldN, at: now, c, n: n - left, gain: (n - left) * Math.round(c.price * G.casePct() * 100) / 100 };
   }
-  had = Object.fromEntries(list.map(([k, c]) => [k, c.count]));
+  had = Object.fromEntries(list.map(([k, c]) => [k, { c: { ...c }, n: c.count }]));
   for (const k in sold) if (now - sold[k].at >= LIVE) delete sold[k];
 }
 
