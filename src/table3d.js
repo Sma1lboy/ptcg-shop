@@ -13,6 +13,7 @@
 import * as fx from './fx.ts';
 import * as ASSETS from './assets.ts';
 import { SETS } from './sets.ts';
+import { FOIL, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
 const FX = () => fx;
 let T, M;
@@ -276,17 +277,16 @@ const CARD_VS = `
     vN = normalize(m * normal); vR = normalize(m * vec3(1.0, 0.0, 0.0)); vU = normalize(m * vec3(0.0, 1.0, 0.0));
     gl_Position = projectionMatrix * viewMatrix * wp;
   }`;
-// uKind: 0 plain, 1 reverse holo (all but the art box), 2 holo art box, 3 full holo, 4 etched full art, 5 gold, 6 ball pattern reverse, 7 cosmos
+// uKind: 0 plain, 1 reverse holo (all but the art box), 2 holo art box, 3 full holo, 4 etched (full arts and gold), 6 ball pattern reverse, 7 cosmos (5 unused)
 // uLit 0…1: 1 for the card in hand (held to the eye, or the front of the pack being revealed). Its light is then a neutral
 // hand light, not the room's: away from the lamp's cone and under the dimmed show moods it still shows the printed colours.
-// Foil only ADDS reflection (a spectral sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
+// Foil only ADDS reflection (a white sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
 const CARD_FS = `
   uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
   varying vec2 vUv; varying float vFront; varying vec3 vN, vP, vR, vU;
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
-  vec3 spectrum(float x) { return 0.5 + 0.5 * cos(6.2832 * (x + vec3(0.0, 0.33, 0.67))); }
   void main() {
     vec3 N = normalize(vN), V = normalize(cameraPosition - vP);
     bool front = vFront > 0.5;
@@ -306,14 +306,13 @@ const CARD_FS = `
       float k = uKind, luma = dot(base, vec3(0.299, 0.587, 0.114));
       float art = step(0.075, vUv.x) * step(vUv.x, 0.925) * step(0.525, vUv.y) * step(vUv.y, 0.903);
       float mask = k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
-      vec3 rb = mix(vec3(1.0), spectrum(vUv.x * 0.8 + vUv.y * 1.2 + ang.x * 2.6 + ang.y * 1.9), 0.75);
+      vec3 rb = vec3(1.0); // white light only: the print keeps its own colours, gold cards included (DESIGN.md「闪面」)
       float tx = 1.0;
-      if (k > 3.5 && k < 5.5) tx = 0.45 + 0.8 * vnoise(vUv * vec2(64.0, 90.0)) * vnoise(vUv * vec2(9.0, 12.6) + 3.0);
+      if (k > 3.5 && k < 4.5) tx = 0.45 + 0.8 * vnoise(vUv * vec2(64.0, 90.0)) * vnoise(vUv * vec2(9.0, 12.6) + 3.0);
       if (k > 5.5 && k < 6.5) { float r = length(fract(vUv * vec2(8.0, 11.2)) - 0.5); tx = 0.25 + smoothstep(0.35, 0.31, r) - 0.6 * smoothstep(0.25, 0.21, r); }
       if (k > 6.5) { vec2 c = floor(vUv * 12.0); vec2 q = fract(vUv * 12.0) - 0.5 - (vec2(hash(c), hash(c + 7.1)) - 0.5) * 0.4; float rr = 0.12 + hash(c + 3.3) * 0.25; tx = 0.3 + smoothstep(rr, rr - 0.04, length(q)); }
-      if (k > 4.5 && k < 5.5) rb = mix(vec3(1.0, 0.8, 0.36), rb, 0.22);
       float h = hash(floor(vUv * vec2(84.0, 118.0)));
-      float spark = step(0.9, h) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
+      float spark = step(0.9, h) * smoothstep(0.45, 0.1, length(fract(vUv * vec2(84.0, 118.0)) - 0.5)) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
       float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
       float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
       col += rb * shine * amt * tx * sheen * (0.4 + 0.6 * luma) + spark * amt * (k > 3.5 ? 1.1 : k < 1.5 ? 0.35 : 0.7) * shine;
@@ -322,85 +321,29 @@ const CARD_FS = `
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }`;
-const FOIL = { REV: [1, .75], R: [2, .8], RR: [3, .75], ACE: [3, .8], PB: [6, .85], MB: [6, 1], UR: [4, 1], IR: [4, .8], SIR: [4, 1], HR: [5, 1], MHR: [5, 1], FE: [7, .85] };
-const foilOf = c => FOIL[c.kind] || [0, 0];
+// How the card is printed is card.ts's FOIL (the 2D face reads the same table): [look, sheen strength]; the look picks uKind.
+const LOOKS = { rev: 1, holo: 2, full: 3, etch: 4, ball: 6, cosmos: 7 };
+const foilOf = c => { const f = FOIL[c.kind]; return f ? [LOOKS[f[0]], f[1]] : [0, 0]; };
 
 function roundRect(w, h, r) {
   const s = new T.Shape(), x = -w / 2, y = -h / 2;
   s.moveTo(x + r, y); s.lineTo(x + w - r, y); s.quadraticCurveTo(x + w, y, x + w, y + r); s.lineTo(x + w, y + h - r); s.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
   s.lineTo(x + r, y + h); s.quadraticCurveTo(x, y + h, x, y + h - r); s.lineTo(x, y + r); s.quadraticCurveTo(x, y, x + r, y); return s;
 }
-function backCanvas() {
-  const W = 512, H = Math.round(W * CH / CW), c = canvasOf(W, H), x = c.getContext('2d'), b1 = css('--back-1'), b2 = css('--back-2'), ring = css('--back-ring');
-  x.fillStyle = b2; x.fillRect(0, 0, W, H);
-  const m = 24, gr = x.createRadialGradient(W * .3, H * .22, 20, W * .5, H * .5, H * .7); gr.addColorStop(0, b1); gr.addColorStop(1, b2);
-  x.fillStyle = gr; x.beginPath(); x.roundRect(m, m, W - 2 * m, H - 2 * m, 16); x.fill();
-  x.save(); x.translate(W / 2, H / 2); x.globalCompositeOperation = 'lighter';
-  for (let k = 0; k < 9; k++) { x.rotate(.7); x.fillStyle = 'rgba(120,160,255,.05)'; x.beginPath(); x.ellipse(60, 0, 250, 70, 0, 0, Math.PI * 2); x.fill(); }
-  x.restore();
-  x.fillStyle = ring; x.beginPath(); x.arc(W / 2, H / 2, 74, 0, Math.PI * 2); x.fill();
-  x.fillStyle = b2; x.fillRect(W / 2 - 76, H / 2 - 8, 152, 16);
-  x.beginPath(); x.arc(W / 2, H / 2, 26, 0, Math.PI * 2); x.fill(); x.fillStyle = ring; x.beginPath(); x.arc(W / 2, H / 2, 15, 0, Math.PI * 2); x.fill();
-  return c;
-}
-// Energy has no card art in the data: paint a basic energy card around its type mark, the way the printed card is
-// recognised: leaf, flame, drop, bolt, eye, fist, crescent, triangle, white on the type colour. Not a character in a
-// display face (「火」 in the display font read as 「活」). Marks are our own drawings on a 100×100 box; `cut` is drawn
-// over `d` in the circle colour. ui/mat.ts draws the same paths as inline SVG on the 2D mat. Print colours, same in both themes.
-export const ENERGY = {
-  草: { col: '#3E9B4F', rot: -32, d: 'M50 16C67 27 75 45 70 62C66 75 58 81 50 81C42 81 34 75 30 62C25 45 33 27 50 16ZM48.6 81H51.4V92H48.6Z',
-    cut: 'M48.8 30H51.2V80H48.8ZM50 46L61 38L62 40L50 49ZM50 60L64 51L65 53L50 63ZM50 52L38 44L37 46L50 55ZM50 66L36 58L35 60L50 69Z' },
-  火: { col: '#D8492C', d: 'M50 14C55 30 72 37 72 57C72 72 62 83 50 83C38 83 28 72 28 57C28 46 34 38 40 32C40 41 43 46 47 48C44 36 45 25 50 14Z',
-    cut: 'M50 57C55 62 58 66 57 72C56 77 53 79 50 79C47 79 44 77 43 72C42 66 45 62 50 57Z' },
-  水: { col: '#2F7FC9', d: 'M50 14C58 30 73 44 73 60C73 73 63 84 50 84C37 84 27 73 27 60C27 44 42 30 50 14Z', cut: 'M37 60C37 68 42 74 49 76C44 72 41 67 41 60Z' },
-  雷: { col: '#E7B521', d: 'M57 12L28 55H46L39 88L72 41H54L63 12Z' },
-  超: { col: '#8C52B3', d: 'M14 50C26 30 74 30 86 50C74 70 26 70 14 50Z', cut: 'M64 50A14 14 0 1 0 36 50A14 14 0 1 0 64 50Z', dot: [50, 50, 7] },
-  斗: { col: '#B4622F', d: 'M27 40A6 6 0 0 1 39 40V46H40V36A6 6 0 0 1 52 36V46H53V36A6 6 0 0 1 65 36V46H66V40A6 6 0 0 1 78 40V64C78 75 70 82 60 82H43C33 82 27 75 27 66Z',
-    cut: 'M38.7 37H40.3V50H38.7ZM51.7 33H53.3V50H51.7ZM64.7 37H66.3V50H64.7ZM27 55H55C60 55 63 58 63 62C63 66 60 68 55 68H44V65.5H55C58 65.5 60 64 60 62C60 60 58 58 55 58H27Z' },
-  恶: { col: '#2E4652', d: 'M72 32A28 28 0 1 0 72 68A23 23 0 1 1 72 32Z' },
-  钢: { col: '#8996A5', d: 'M50 16L82 74H18Z', cut: 'M50 40L64 66H36Z' },
-};
-const typeOf = name => (name.slice(2, 3) in ENERGY ? name.slice(2, 3) : '钢');
-function energyMark(x, t, cx, cy, r) { // the round type mark, r = radius in canvas px
-  const e = ENERGY[t], k = r / 50;
-  x.save(); x.translate(cx - r, cy - r); x.scale(k, k);
-  x.fillStyle = e.col; x.beginPath(); x.arc(50, 50, 50, 0, Math.PI * 2); x.fill();
-  if (e.rot) { x.translate(50, 50); x.rotate(e.rot * Math.PI / 180); x.translate(-50, -50); }
-  x.fillStyle = '#FFFFFF'; x.fill(new Path2D(e.d));
-  if (e.cut) { x.fillStyle = e.col; x.fill(new Path2D(e.cut)); }
-  if (e.dot) { x.fillStyle = '#FFFFFF'; x.beginPath(); x.arc(...e.dot, 0, Math.PI * 2); x.fill(); }
-  x.restore();
-}
-function energyCanvas(c) {
-  const W = 512, H = Math.round(W * CH / CW), cv = canvasOf(W, H), x = cv.getContext('2d'), t = typeOf(c.name), col = ENERGY[t].col;
-  x.fillStyle = '#C9CED6'; x.fillRect(0, 0, W, H); // silver border
-  x.save(); x.beginPath(); x.roundRect(22, 22, W - 44, H - 44, 14); x.clip();
-  const gr = x.createRadialGradient(W / 2, H * .44, 30, W / 2, H * .44, H * .7); gr.addColorStop(0, '#FFFFFF'); gr.addColorStop(.45, rgba(col, .35)); gr.addColorStop(1, col);
-  x.fillStyle = gr; x.fillRect(0, 0, W, H);
-  x.translate(W / 2, H * .44); x.fillStyle = 'rgba(255,255,255,.16)'; // printed rays behind the mark
-  for (let i = 0; i < 24; i++) { x.rotate(Math.PI / 12); x.beginPath(); x.moveTo(0, 0); x.lineTo(H, -26); x.lineTo(H, 26); x.fill(); }
-  x.restore();
-  x.fillStyle = 'rgba(255,255,255,.95)'; x.beginPath(); x.arc(W / 2, H * .44, 166, 0, Math.PI * 2); x.fill();
-  energyMark(x, t, W / 2, H * .44, 154);
-  x.fillStyle = 'rgba(255,255,255,.88)'; x.beginPath(); x.roundRect(60, H * .74, W - 120, 84, 42); x.fill();
-  x.textAlign = 'center'; x.fillStyle = '#1F2833'; x.font = `600 44px ${BODY()}`; x.fillText(c.name, W / 2, H * .74 + 57);
-  x.font = `500 24px ${BODY()}`; x.fillStyle = rgba('#1F2833', .6); x.textAlign = 'left'; x.fillText('基础能量', 44, 66);
-  return cv;
-}
-function placeholder(c) {
-  const W = 512, H = Math.round(W * CH / CW), cv = canvasOf(W, H), x = cv.getContext('2d');
-  x.fillStyle = '#C9CED6'; x.fillRect(0, 0, W, H); x.fillStyle = '#E9ECF0'; x.fillRect(22, 22, W - 44, H - 44);
-  x.fillStyle = '#1F2833'; x.textAlign = 'center'; x.font = `600 40px ${BODY()}`;
-  (c.name.match(/.{1,14}/g) || [c.name]).forEach((l, i) => x.fillText(l, W / 2, H * .45 + i * 50));
-  x.font = `400 26px ${BODY()}`; x.fillStyle = '#5A6371'; x.fillText('卡图没加载出来', W / 2, H * .7); return cv;
+// card.ts's SVG pictures (back, basic energy, blank stock) are drawn at card size first: an SVG with only a viewBox has no
+// intrinsic size of its own as an image.
+async function svgTex(url) {
+  const img = await loadImg(url), W = 512, H = Math.round(W * CH / CW), c = canvasOf(W, H);
+  if (img) c.getContext('2d').drawImage(img, 0, 0, W, H);
+  return canvasTex(c);
 }
 async function loadFace(c) {
-  if (c.r === 'E') return canvasTex(energyCanvas(c));
+  if (c.r === 'E') return svgTex(energySVG(c.name));
   for (const size of ['high', 'low']) {
     const img = await loadImg(ASSETS.card(c.set, c.n, size));
     if (img) { const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; renderer.initTexture(t); return t; }
   }
-  return canvasTex(placeholder(c));
+  return svgTex(stockSVG(c.name));
 }
 function cardMesh(c) {
   const [kind, foil] = foilOf(c), u = shared.u;
@@ -675,7 +618,7 @@ function celebrate(run, i, t) {
   if (t === 0) { mood('base', 300); push(1, 400); return 40; }
   run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1) };
   if (t === 1) { mood('base', 300); push(1, 400); return 160; }
-  if (t === 2) { mood('lift', 300); halo(card, silver, .3); burst(at, 50, silver, 14); push(.96, 500); return 420; }
+  if (t === 2) { mood('lift', 300); burst(at, 50, silver, 14); push(.96, 500); return 420; }
   if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
   mood('gold', 450).then(() => wait(1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
   halo(card, gold, .6); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
@@ -708,7 +651,7 @@ async function toSpread(run) {
 }
 function tags(run) {
   const box = host && host.querySelector('.s3-tags'); if (!box) return;
-  box.innerHTML = run.data.map((c, k) => `<span class="s3-tag t${run.tiers[k]}">$${c.price.toFixed(2)}</span>`).join('');
+  box.innerHTML = run.data.map(c => `<span class="s3-tag">${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price
   run.tagEls = [...box.children];
 }
 function placeTags(run) {
@@ -1317,7 +1260,6 @@ function theme() {
   const bg = new T.Color(css('--bg'));
   renderer.setClearColor(bg); scene.fog.color.copy(bg);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
-  shared.back.value.image = backCanvas(); shared.back.value.needsUpdate = true;
   const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC);
   w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = true; w.metal.color.set(css('--foil-1')); w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
   wake(100);
@@ -1354,10 +1296,11 @@ function init() {
   const cardGeo = new T.ExtrudeGeometry(roundRect(CW, CH, CR), { depth: CT, bevelEnabled: false, curveSegments: 6 }); cardGeo.translate(0, 0, -CT / 2);
   const back = canvasTex(canvasOf(8, 8)), blank = canvasTex(canvasOf(8, 8));
   shared = { cardGeo, blank, back: { value: back },
-    edge: new T.MeshStandardMaterial({ color: 0xE6E9EE, roughness: .8 }),
+    edge: new T.MeshStandardMaterial({ color: css('--stock'), roughness: .8 }), // the cut edge: bare card stock
     inner: new T.MeshStandardMaterial({ color: 0xC3C9D2, metalness: 1, roughness: .38, side: T.BackSide }),
     crinkle: crinkleTex() };
   shared.inner.normalMap = shared.crinkle;
+  svgTex(backSVG()).then(t => { back.dispose(); shared.back.value = t; wake(100); }); // card.ts's back, the one the 2D mat and the share image show
   shared.u = { back: shared.back, time: { value: 0 }, key: { value: new V3() }, keyDir: { value: new V3() }, glowAt: { value: new V3() }, cone0: { value: 0 }, cone1: { value: 1 }, keyCol: { value: new T.Color() }, amb: { value: new T.Color() }, wash: { value: new T.Color() } };
 
   world(); // after shared: the showcase's booster box wears a pack's material
