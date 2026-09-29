@@ -40,11 +40,13 @@ function shelfDot() {
   render(html`${n || ''}<span class="visually-hidden">${n ? ` 位顾客没买到` : ' 有顾客嫌贵走了'}</span>`, el);
 }
 
-// 成长 badge: how many upgrades / skills the cash on hand can buy right now (the incremental loop's nudge).
+// 成长 badge: how many upgrades / skills the cash on hand can buy right now (the incremental loop's nudge), plus 开分店 once the
+// debt is paid (it costs nothing, and 成长's 下一步 names it then).
 export function renderTabs() {
   const cash = G.state.cash, el = $('grow-n');
   const n = Object.keys(G.UPGRADES).filter(k => { const c = G.upgradeCost(k); return c != null && cash >= c; }).length
-    + Object.keys(G.SKILLS).filter(k => { const c = G.skillCost(k); return c != null && G.canLearn(k) && cash >= c; }).length;
+    + Object.keys(G.SKILLS).filter(k => { const c = G.skillCost(k); return c != null && G.canLearn(k) && cash >= c; }).length
+    + (G.canBranch() ? 1 : 0);
   el.hidden = !n; render(html`${n}<span class="visually-hidden"> 项买得起</span>`, el);
   shelfDot();
 }
