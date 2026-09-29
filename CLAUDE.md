@@ -24,7 +24,8 @@
 - **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 2D 的 `#stage` 和 3D 的 `#scene3d` 画布）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入、WebGL），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
-  - `data/cards-*.json` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
+  - `data/cards-*.json` 由 `node scripts/fetch-data.mjs [系列 id…]` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。整包价 `data/packs.json` 由 `node scripts/fetch-packs.mjs` 从各系列的 `priceSource`（PriceCharting）抓，同样不许手改。
+  - 新系列必须有 TCGplayer 实开统计文章（正文用 `https://infinite-api.tcgplayer.com/content/article/<uuid>/?source=infinite-content` 拿）；有稀有度没测出概率的系列（如黑闪/白焰的 BWR）不加，不许估。
   - `src/sets.ts` 里的 `rates` 是 TCGplayer 实开统计的百分比，**不许为了手感改概率**。改动必须附来源链接（写在 `rateSource` 或注释里）。
   - 技能「手气」是标明的游戏加成：只在开包时把闪卡概率乘系数（`sim.ts` 的 `openPack(id, r, m)`），`rates` 本身不动；每包按 `rateKey(set, m)` 记进 `state.packsBy`，欧气检测、期望、尾概率都按开包时的概率算。m = 1 的输出由测试里的哈希锁定，别往这条路径加随机数调用。
   - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.ts` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
@@ -53,7 +54,7 @@
 | `src/ui/layout.ts` | 右栏页签（欧气 / 顾客 / 单卡 / 成长）和成长页签上的可买数，手机上开包的全屏层 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
-| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
+| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

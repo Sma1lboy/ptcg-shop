@@ -4,7 +4,7 @@
 import { mkdir, writeFile, readdir, readFile, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-const CDN = 'https://assets.tcgdex.net/en/sv';
+const CDN = 'https://assets.tcgdex.net/en'; // + /<series>/<set>/…: the series is the set id's letter prefix (sv08 → sv, me01 → me), as in src/assets.ts
 const jobs = [];
 for (const f of (await readdir('data')).filter(f => f.endsWith('.json'))) {
   const d = JSON.parse(await readFile('data/' + f, 'utf8')), set = d.id;
@@ -18,7 +18,7 @@ async function get(path) {
   if (existsSync(file)) return;
   for (let i = 0; i < 4; i++) {
     try {
-      const r = await fetch(`${CDN}/${path}`); // no query string: the CDN doubles CORS headers on those
+      const r = await fetch(`${CDN}/${path.match(/^[a-z]+/)[0]}/${path}`); // no query string: the CDN doubles CORS headers on those
       if (r.ok) { await mkdir(file.slice(0, file.lastIndexOf('/')), { recursive: true }); await writeFile(file, Buffer.from(await r.arrayBuffer())); fetched++; return; }
       if (r.status === 404) break;
     } catch {}
