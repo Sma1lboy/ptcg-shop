@@ -654,6 +654,7 @@ button:disabled { cursor: not-allowed; }
 .c-rule .sticker { position: absolute; top: calc(var(--h) + var(--rail) - 1px); z-index: 1; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; }
 .c-rule small { position: absolute; top: calc(var(--h) + var(--rail) + 6px); font-size: var(--fs-cap); line-height: 1; color: var(--muted); white-space: nowrap; }
 .c-lo { left: 0; } .c-m { transform: translateX(-50%); }
+.c-rule .c-per { right: 0; }
 /* the rail is the price control: an invisible range input over the whole rail, its thumb 1px so a click lands on the step under
    the pointer (the dots and the tag use the same full-width scale); the tag shows focus in its place */
 .c-set { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
