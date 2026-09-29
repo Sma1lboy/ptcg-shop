@@ -71,6 +71,13 @@ PORTRAIT：
 
 ## SUBJECT
 
+
+### p-icons（1536x1024，high）→ p-seed p-fit p-regulars / p-access p-hire p-luck（3×2 grid，切法同上：按不透明投影切块、裁包围盒、放进 96² 透明方块，cwebp q84）
+
+名气加成的徽章（DESIGN.md「成长」开分店），六项各一枚。模板同 u-icons（「no yellow anywhere, no brown」那版）。high 那张的四叶草画成了六瓣，p-luck 用的是同一提示词 low 草稿里切出来的（四瓣）；其余五枚是 high。
+
+> （模板，黄色一句替换如 u-icons）Subject: a sprite sheet of exactly six small game HUD icons in a 3-column by 2-row grid, evenly spaced with generous transparent gaps, each icon the same size and centered in its cell, all in one consistent style: embossed badges made of satin aluminium with navy enamel inlay, chunky readable silhouettes that still read at 24 pixels, thin dark outline, no background plate behind each icon. Row 1: (1) a small closed cash tin strongbox with a coin slot in its lid and a little latch; (2) a two-wheeled hand truck dolly carrying a small folded shop shelf rack strapped to it; (3) a punched loyalty stamp card, a rectangle with a row of round punched holes along it and one blank circle, no writing. Row 2: (4) an old-fashioned key on a ring with a small blank luggage tag tied to it; (5) a shop apron hanging from a single wall hook; (6) a four-leaf clover standing on a small raised stepped plinth base. Every icon uses only navy enamel and satin aluminium; the clover is aluminium with navy inlay. Fully transparent background around every icon, no dark backdrop, no vignette, no checkerboard.
+
 ### street.webp（landscape 1536x1024，high）
 
 > rainy night, a narrow old East Asian city side street: small shop fronts with blank unlettered signboards, air-conditioner units and tangled overhead wires, one small card shop with its rolling steel shutter pulled half down and a dim light inside, a dark unmarked van parked at the curb with headlights on and its side door slid open, puddles reflecting one streetlamp, wet asphalt, no people, wide establishing shot, the middle of the frame calm and uncluttered.

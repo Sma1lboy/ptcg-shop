@@ -596,9 +596,6 @@ button:disabled { cursor: not-allowed; }
 .notice .stub span:last-child { font-weight: 600; }
 .notice .stub::after { content: ""; align-self: center; border-top: 6px solid var(--muted); border-inline: 4px solid transparent; }
 .notice .stub:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
-.u-lv { display: inline-flex; gap: 3px; } /* level pips (common.ts pips) */
-.u-lv i { width: 8px; height: 8px; border: 1px solid var(--line-strong); border-radius: 1px; }
-.u-lv i.on { background: var(--ink); border-color: var(--ink); }
 #upgrades details { margin-top: 16px; }
 .page summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 #upgrades details .tally { margin-top: 12px; }
@@ -1118,31 +1115,34 @@ button:disabled { cursor: not-allowed; }
 .mile-track li.next small { color: var(--ink); }
 .mile-next { margin: 0; color: var(--muted); } .mile-next b { color: var(--ink); }
 .m-short { display: none; }
-/* the pockets */
-.grow-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-.gtile { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
-.gtile p { margin: 0; }
 .gt-top { display: flex; align-items: baseline; gap: 8px; }
 .gt-top b { font-size: 18px; } .gt-top > small { font-size: var(--fs-cap); color: var(--muted); }
 .gt-lv { margin-left: auto; font: 600 18px/1 var(--font-tag); } .gt-lv small { font-size: var(--fs-body); color: var(--muted); }
-.gtile .u-lv i { width: 12px; height: 12px; }
 .gt-fx b { font-weight: 700; }
 .gt-desc { font-size: var(--fs-cap); color: var(--muted); flex: 1; }
 .gt-buy { display: grid; gap: 6px; }
 .gt-buy button { justify-self: start; }
 .gt-save { display: block; height: 3px; background: var(--line); } .gt-save i { display: block; height: 100%; background: color-mix(in oklab, var(--ink) 55%, transparent); }
 .gt-buy small, .gt-done { font-size: var(--fs-cap); color: var(--muted); }
-.gtile.max .u-lv i.on { background: var(--muted); border-color: var(--muted); }
-/* affordable: the next empty level slot turns label-yellow (it is the thing a click fills); the button itself stays outlined so a
-   rich shop is not a wall of yellow */
-.gtile.can .u-lv :is(i.on + i:not(.on), i:first-child:not(.on)) { background: var(--sticker); border-color: var(--sticker-edge); }
-.gtile.can .gt-buy button { border-color: var(--ink); font-weight: 600; }
-/* 开分店 (upgrades.ts renderBranch): the prestige panel spans both binder pages — this shop's revenue toward the gate on the
-   left, what goes and what stays plus the (secondary, two-click) button on the right, then the 名气 perks, three pockets a row */
+/* 开分店 (upgrades.ts renderBranch): the prestige panel spans both binder pages — this shop's debt toward the gate on the
+   left, what goes and what stays plus the (secondary, two-click) button on the right, then the 名气 perks as 成长树 nodes (no rail:
+   perks have no order), three a row */
 .gh-lv .gh-shop { display: block; margin-bottom: 8px; font-size: var(--fs-body); color: var(--muted); }
 .gh-lv .gh-shop b { font: 600 var(--fs-body)/1.3 var(--font-body); color: var(--ink); }
 .page-grow > :is(.branch, #upgrades) { grid-column: 1 / -1; }
-.br-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 16px 56px; align-items: end; }
+.br-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 16px 56px; align-items: start; }
+.perks { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line); }
+.perks .br-h { margin: 0; }
+.perks .tn::after { content: none; } /* no rail: perks have no order */
+.perks ol { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 36px; }
+/* 下一步 is a link to the node it names (upgrades.ts seek): plain text that underlines on hover, not a second button */
+.gh-goal :is(.gg-what, .gg-fame) { justify-self: start; padding: 0; border: 0; background: none; box-shadow: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.gh-goal .gg-what > i, .gg-fame > i { font-style: normal; color: var(--muted); }
+.gh-goal .gg-fame { font-size: var(--fs-cap); color: var(--muted); } .gg-fame b { color: var(--ink); }
+.gh-goal :is(.gg-what, .gg-fame):hover > b:first-child, .gg-fame:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* the node 下一步 scrolled to: the shop lamp swings onto its badge for a moment */
+.tn.seek .tn-badge { animation: tn-seek 1.6s ease-out; }
+@keyframes tn-seek { 0%, 40% { box-shadow: 0 0 0 1px var(--hud), 0 0 0 8px var(--lamp-glow), 0 0 36px 12px var(--lamp-glow); } 100% { box-shadow: none; } }
 .br-prog p, .br-go p { margin: 0; }
 .br-prog > p:first-child { display: flex; align-items: baseline; gap: 10px; }
 .br-prog > p:first-child span, .br-prog small { color: var(--muted); }
@@ -1193,11 +1193,9 @@ button:disabled { cursor: not-allowed; }
 @keyframes tn-stamp { 0% { transform: scale(1.3); box-shadow: 0 0 0 1px var(--hud), 0 0 0 14px var(--lamp-glow), 0 0 40px 16px var(--lamp-glow); } 55% { transform: scale(.94); } 100% { transform: none; } }
 @keyframes tn-lv { 0% { transform: translateY(-6px) scale(1.4); } 100% { transform: none; } }
 @media (max-width: 1399px) { .tree { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1100px) { .branch .grow-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1099px) { .perks ol { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1099px) {
   .page-grow { grid-template-columns: minmax(0, 1fr); }
-  .grow-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
-  .gtile.empty { display: none; }
 }
 /* phones: a pocket is one row — name, level, effect and what it does on the left, the price button on the right — so all
    eleven fit in about three screens instead of seven; the milestone track is one sideways-scrolling row with short thresholds */
@@ -1216,22 +1214,15 @@ button:disabled { cursor: not-allowed; }
   .mile-track b { display: none; }
   .mile-track small { font-size: var(--fs-cap); }
   .m-full { display: none; } .m-short { display: inline; }
-  .grow-grid { grid-template-columns: minmax(0, 1fr); border-left: 0; }
-  .gtile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; padding: 14px 0; border-right: 0; }
-  .gtile > * { grid-column: 1 / 3; }
-  .gtile > .gt-top { grid-column: 1; }
-  .gtile > .u-lv { grid-column: 2; grid-row: 1; align-self: center; }
-  .gtile > :is(.gt-buy, .gt-done) { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-items: end; text-align: right; max-width: 9em; }
   .gt-top > small { display: none; }
   .gt-lv { margin-left: 4px; }
   .gt-top b { font-size: var(--fs-h); }
-  .gtile .u-lv i { width: 8px; height: 8px; }
   .gt-buy button { justify-self: end; min-width: 5.5em; }
   .gb-lv { display: none; }
   .gt-buy .gt-save { width: 100%; }
   /* 成长树 on phones: the lines stack; a node is one row — badge, name and effect, the price on the right — descriptions go */
   .tree { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .t-line ol { gap: 16px; margin-top: 12px; }
+  :is(.t-line, .perks) ol { grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 12px; }
   .tn { grid-template-columns: 48px minmax(0, 1fr) auto; gap: 2px 12px; }
   .tn > * { grid-column: 2; }
   .tn > .tn-badge { grid-column: 1; width: 48px; height: 48px; }
