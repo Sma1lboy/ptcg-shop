@@ -15,7 +15,7 @@ export function renderGuide() {
     ['测欧气', '开完看「欧气检测」：你的运气在几千个模拟玩家里排第几。可以生成分享图。'],
   ];
   el.hidden = false;
-  render(html`<h2 class="eyebrow">怎么玩</h2><ol>${steps.map(([h, p], i) =>
-    html`<li class="${i < cur ? 'done' : i === cur ? 'now' : ''}"><b>${i + 1} ${h}</b><span>${p}</span></li>`)}</ol>
+  render(html`<h2>怎么玩</h2><ol>${steps.map(([h, p], i) =>
+    html`<li class="${i < cur ? 'done' : i === cur ? 'now' : ''}"><i>${i < cur ? '✓' : i + 1}</i><b>${h}</b><span>${p}</span></li>`)}</ol>
       <p class="muted">卡价和开包概率都是真实统计；每位顾客有自己的来意和预算，嫌贵就走：上架的整包和展示柜里的卡自己定价。</p>`, el);
 }

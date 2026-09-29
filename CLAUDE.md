@@ -12,6 +12,7 @@
 | 构建 | `npm run build`：先 `tsc` 类型检查，再出 `dist/index.html`。双击能玩（卡图走 TCGdex CDN）；`npm run preview` 或任何静态服务器开 `dist/` 用本地镜像 |
 | CodePen 单文件 | `npm run pen` → `dist/pen.html`，超过 1,000,000 字符构建直接失败 |
 | 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
+| 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
@@ -27,7 +28,7 @@
   - `src/sets.ts` 里的 `rates` 是 TCGplayer 实开统计的百分比，**不许为了手感改概率**。改动必须附来源链接（写在 `rateSource` 或注释里）。
   - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.ts` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
 - **改完必须跑** `npm test`（20 万包/系列，每个稀有度都要落在 TCGplayer 95% 置信区间内）。改了模拟逻辑就在这个文件里加断言，不要另起测试框架。`src/game.ts` 不直接碰 `Date.now` / `Math.random` / `localStorage`，一律走 `createGame({ now, random, storage })` 的参数，测试和 autoplay 靠它注入假时钟和种子随机数。
-- 视觉：颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对；强调色只有价格贴纸橙，稀有度用银/金（对应卡面上的银星/金星），盈亏用 gain/loss 语义色。别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
+- 视觉：先读 `DESIGN.md`（每个 token 对应柜台上哪件实物、管什么、不许干什么）。颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对，改了颜色 token 跑 `node scripts/contrast.mjs`。强调色只有卡框黄（玩家定的价签 + 每组一个主按钮），稀有度用银/金（对应卡面上的银星/金星），钱用 gain/loss（进账红、出账冷灰）。不许圆角卡片加左侧彩条，别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
 - **卡图和 Logo 从本地服务器出，不要直连 TCGdex**（用户要求：别把 API 打爆）。`node scripts/fetch-images.mjs` 把全部卡图（low/high webp）和 logo 镜像到仓库根的 `assets/tcg/`（约 90 MB，gitignored；新 worktree 由 `.rove/init.sh` 软链到主仓库的镜像）。**别挪进 `public/`**，那样每次构建都往 `dist/` 拷 88 MB；dev 服务器直接出根目录下的它（`vite.config.ts` 让 watcher 忽略这个目录），`npm run build` 在 `dist/assets/tcg` 放一个指回去的软链。代码里一律用 `src/assets.ts` 的 `card(set, n, size)` / `logo(set)`，不要自己拼 URL。只有 `file://` 打开和 pen（`--mode pen` 把 `__REMOTE_ASSETS__` 定为 true）会退回 CDN；CDN 地址不许带 query string。本地同源的图做 canvas / WebGL 贴图没有 CORS 问题，所以要看 3D/分享效果请用 `npm run dev` 或 `npm run preview`。
 
 ## 文件分工（并行 worker 按这个认领，动别人的文件要在报告里说明）
@@ -47,9 +48,11 @@
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
-| `index.html` | 外壳，Vite 入口 |
+| `index.html` | 外壳，Vite 入口：顶栏、三栏（货架 / 开包台 / 页签）、页脚 |
+| `src/ui/layout.ts` | 右栏页签，手机上开包的全屏层 |
+| `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
-| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay） |
+| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

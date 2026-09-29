@@ -7,7 +7,7 @@ const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非']
 // Exact binomial tail for one rarity: how likely a player is to be at least this lucky (or unlucky).
 function tailLabel(k: string, got: number, exp: number) {
   const p = S.hitTail(G.state.opened, k, got), pct = p * 100;
-  return `${got >= exp ? '≥' : '≤'}${got} 的概率 ${pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
+  return `${got >= exp ? '≥' : '≤'}${got}　${pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
 }
 export function renderLuck() {
   const L = G.luck(), e = G.expectedTally(), t = G.state.tally;
@@ -27,7 +27,7 @@ export function renderLuck() {
         <div><dt>期望市值</dt><dd>${money(L.expected)}<small class="dd-note">整包标价的 ${Math.round(L.expected / L.listEV * 100)}%</small></dd></div>
         <div><dt>进货成本</dt><dd>${money(L.cost)}</dd></div></dl>
       <p class="muted basis-note">开出市值按 TCGplayer <b>现在</b>的单卡市价重算，和模拟玩家同一口径${L.live ? '' : '（旧存档：早期开的包只能按开包当时的价格）'}。期望只有整包标价的 ${Math.round(L.expected / L.listEV * 100)}%，是因为标价里有密封溢价，见页脚「价格口径」。</p>
-      <table class="tally"><thead><tr><th>稀有度</th><th>开出</th><th>期望</th><th title="按官方概率，开到这么多或更多（更少）的概率">概率</th></tr></thead><tbody>
+      <table class="tally"><thead><tr><th>稀有度</th><th>开出</th><th>期望</th><th title="按官方概率，开到这么多或更多（更少）的概率">开成这样的概率</th></tr></thead><tbody>
         ${rows.map(k => html`<tr class="${(t[k] || 0) >= (e[k] || 0) ? 'up' : ''}"><td><span class="glyph">${RAR[k].g}</span>${rarLabel(k)}</td><td>${t[k] || 0}</td><td>${(e[k] || 0).toFixed(1)}</td><td>${tailLabel(k, t[k] || 0, e[k] || 0)}</td></tr>`)}
       </tbody></table>` : ''}`, $('luck'));
 }
