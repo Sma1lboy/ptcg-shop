@@ -8,7 +8,7 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money } from './common.ts';
 import { SETS } from '../sets.ts';
 import { hold } from './mat.ts';
-import { SCENES, NAMES, BIG_PULL, sceneFor, type Ctx, type Seen, type Who } from '../story.ts';
+import { SCENES, NAMES, END, BIG_PULL, sceneFor, type Ctx, type Seen, type Who } from '../story.ts';
 import { bill, inDebt, debtBeat } from '../debt.ts';
 
 const KEY = 'ptcg.story';
@@ -67,14 +67,15 @@ function draw() {
     <div class="st-box ${line.who ? '' : 'narr'}">
       ${line.who ? html`<p class="st-name ${SIDE[line.who] ?? ''}">${NAMES[line.who]}</p>` : nothing}
       <p class="st-text" aria-label=${full}><span aria-hidden="true">${full.slice(0, cur.typed)}</span><span class="st-rest" aria-hidden="true">${full.slice(cur.typed)}</span></p>
-      <button type="button" class="st-next ${done ? 'ready' : ''}" autofocus @click=${(e: Event) => { e.stopPropagation(); next(); }}>${last && done ? '开张' : '继续'}</button>
+      <button type="button" class="st-next ${done ? 'ready' : ''}" autofocus @click=${(e: Event) => { e.stopPropagation(); next(); }}>${last && done ? END[cur.id] ?? '回店里' : '继续'}</button>
     </div>`, dlg());
 }
 
 // milestones that need no debt: the first 大货 pulled, and each set newly unlocked (baseline taken at start, so old saves don't replay)
 function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const b = debtBeat(ev, G), id = sceneFor(b, seen);
-  if (id) play(id, { ...billCtx(), ...(b?.amount != null ? { bill: money(b.amount) } : {}), ...(b?.week ? { week: b.week } : {}) }, b?.key || undefined);
+  if (id === 'branch') { seen.sets = unlockedSets().length; save(); } // the new shop relocks the later sets: each unlock plays again
+  if (b && id) play(id, b.kind === 'story' ? storyCtx() : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);
   const big = ev?.open?.flat().filter(c => c.price >= BIG_PULL).sort((a, c) => c.price - a.price)[0];
   if (big && !seen.bigpull) play('bigpull', { card: big.name, price: money(big.price) });
   const nowUnlocked = unlockedSets();
@@ -83,6 +84,11 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
     play('unlock', { set: G.setById(fresh).name });
   }
 }
+// 还清 / 开分店, read at the moment: before branching, the 名气 this shop would take and the next shop's debt; after, this shop's
+const storyCtx = (): Ctx => {
+  const s = G.state, n = s.debt ? s.branch.n : s.branch.n + 1;
+  return { ...billCtx(), bills: s.billsPaid, fame: G.fameFor(), shop: s.branch.n + 1, debt: money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * n))) };
+};
 const unlockedSets = () => SETS.filter(s => G.unlocked(s.id)).map(s => s.id);
 
 function start() {
