@@ -749,7 +749,7 @@ button:disabled { cursor: not-allowed; }
 .gg-what > b { font-size: var(--fs-h); }
 .gh-goal button { justify-self: start; border-color: var(--ink); font-weight: 600; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
-.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 22px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; }
+.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 48px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; } /* the rule is 38px tall at 520 wide; the labels start under it */
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 :is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
