@@ -25,10 +25,12 @@ export interface State {
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   offline: { secs: number; sales: number; revenue: number; lost: number } | null;
+  ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
 }
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
 export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
 export type Game = ReturnType<typeof createGame>;
+export interface GameEvent { open?: Pull[][] } // what happened, for listeners that need more than the new state (achievements.ts)
 
 export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
@@ -145,11 +147,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
   const rate = () => ARRIVAL * crowdMult(); // walk-ins per second
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {} });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {} });
 
   let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
-  const listeners: (() => void)[] = [];
-  const emit = () => { save(); listeners.forEach(f => f()); };
+  const listeners: ((ev?: GameEvent) => void)[] = [];
+  const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
 
   function load(): State {
     try { const s = JSON.parse(store.getItem(SAVE_KEY)!); if (s && typeof s.cash === 'number') {
@@ -253,7 +255,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (dexCount(id) > had) dexLog(id, dex0);
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
     log(`开了 ${n} 包${setById(id).name}，最贵：${best.name} $${best.price.toFixed(2)}`, S.HITS.includes(best.kind) ? 'hit' : '');
-    emit(); return packs;
+    emit({ open: packs }); return packs;
   }
 
   const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before) log(master(id)
@@ -500,10 +502,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return e;
   }
 
+  // A one-off cash grant from outside the shop (成就奖金). Not revenue: it never counts toward unlocking a set.
+  function bonus(cash: number, text: string) { state.cash += cash; log(text, 'hit', cash || undefined); emit(); }
+
   function reset() { state = fresh(); luckCache = null; dexN = null; emit(); }
 
   return {
-    get state() { return state; }, on: (f: () => void) => listeners.push(f),
+    get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,

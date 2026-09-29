@@ -74,7 +74,7 @@ a { color: inherit; }
 .muted { color: var(--muted); }
 small { font-size: var(--fs-cap); }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
-:where(.rail, .page-shelf, .page-luck, .page-grow) h2 { font-size: var(--fs-h); font-weight: 600; line-height: 1.3; margin: 0 0 8px; color: var(--ink); text-wrap: balance; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach) h2 { font-size: var(--fs-h); font-weight: 600; line-height: 1.3; margin: 0 0 8px; color: var(--ink); text-wrap: balance; }
 
 /* top bar: the shop sign, cash as the one big number, the rest a step down. Sticky; the stage height is computed from --top-h */
 .top { position: sticky; top: 0; z-index: 10; height: var(--top-h); display: flex; align-items: center; gap: 28px; padding: 0 var(--gap); background: var(--bg); border-bottom: 1px solid var(--line); }
@@ -596,7 +596,7 @@ button:disabled { cursor: not-allowed; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
 .gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 16px; border-top: 1px solid var(--line); }
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
-.page-grow h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
+:is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
    locked logos are greyed the way the shelf greys them */
 .mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
@@ -691,4 +691,48 @@ button:disabled { cursor: not-allowed; }
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
   .rack { scroll-snap-align: start; }
   .r-ctl select { min-height: 40px; }
+}
+
+/* 成就 (ui/ach.ts, DESIGN.md「成就」): each achievement is a small grading label, the same object as the 欧气鉴定 label —
+   earned: navy frame, cert number and the day, the achievement's word as the grade; not yet: the blank label (hairline frame,
+   muted) with its progress. Labels sit flat on the page in a grid; the page itself is not boxed */
+.page-ach { --page-ink: var(--ink); --page-muted: var(--muted); --page-line: var(--line-strong); grid-template-columns: minmax(0, 1fr); max-width: 1320px; }
+.ach-group { margin-top: 36px; }
+.ach-group > h2 { margin-bottom: 12px; }
+.ach-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px 16px; }
+.grade.ach { --gain: var(--paper-gain); margin: 0; padding: 14px 16px 14px 18px; gap: 4px 14px; align-items: start; }
+.grade.ach .g-id { gap: 1px; }
+.grade.ach .g-k { font-size: var(--fs-cap); letter-spacing: .04em; }
+.a-name { font-size: var(--fs-h); font-weight: 700; line-height: 1.35; }
+.grade.ach .g-cert { justify-content: space-between; margin-top: 6px; font-family: var(--font-tag); font-size: var(--fs-body); }
+.grade.ach .g-grade { align-self: stretch; align-content: center; min-width: 3.2em; }
+.grade.ach .g-grade b { font-size: 34px; }
+.grade.ach .g-grade b.long { font-size: 22px; }
+.grade.ach .g-grade b.tag { font: 700 40px/1 var(--font-tag); }
+.grade.ach .g-grade span { font: 600 var(--fs-body)/1.2 var(--font-tag); }
+.grade.ach.blank { --ink: var(--page-ink); --muted: var(--page-muted); --line-strong: var(--page-line); background: none; color: var(--muted); box-shadow: inset 0 0 0 1px var(--line-strong); } /* not yet: only the label's outline, on the page */
+.grade.ach.blank .g-grade b { font-size: 26px; color: color-mix(in oklab, var(--muted) 60%, transparent); }
+.grade.ach.blank .g-grade b.long { font-size: 18px; }
+.grade.ach.blank .g-grade span { font: 400 var(--fs-cap)/1.3 var(--font-body); color: var(--muted); }
+.grade.ach.blank .a-name { color: var(--ink); }
+.a-prog { display: flex; align-items: center; gap: 8px; margin-top: 6px !important; }
+.a-bar { flex: 1; max-width: 140px; height: 3px; background: var(--line-strong); } .a-bar i { display: block; height: 100%; background: var(--ink); }
+.gh-goal .gt-save { max-width: 260px; }
+.ach-note { margin: 0; font-size: var(--fs-cap); }
+
+/* the unlock pop: a label printed out at the bottom right of the counter (the receipt prints top right), then pressed flat */
+.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; }
+.ach-pop[hidden] { display: none; }
+.ach-pop a { display: block; color: inherit; text-decoration: none; }
+.ach-pop ul { list-style: none; margin: 0; padding: 0; }
+.grade.pop { box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2);
+  animation: print .5s cubic-bezier(.23, 1, .32, 1), press .9s .45s cubic-bezier(.23, 1, .32, 1) backwards; }
+.grade.pop .g-grade b { animation: ink .7s .5s cubic-bezier(.2, .9, .3, 1.2) backwards; }
+@keyframes press { 0% { transform: translateY(-3px) rotate(-.8deg); } 30% { transform: translateY(1px) rotate(0); } 100% { transform: none; } }
+@keyframes ink { from { opacity: 0; transform: scale(1.5); } }
+@media (prefers-reduced-motion: reduce) { .grade.pop, .grade.pop .g-grade b { animation: none; } }
+@media (max-width: 779px) {
+  .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .ach-pop { left: 16px; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); width: auto; max-width: 400px; margin-inline: auto; }
+  .nav a { padding: 0 4px; }
 }
