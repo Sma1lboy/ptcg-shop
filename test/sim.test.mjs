@@ -35,3 +35,20 @@ for (const set of PTCG_SETS) {
 const p = S.luckPercentile({ sv08: 36 }, 0);
 assert.equal(p, 0, 'zero value must be the unluckiest');
 console.log('ok luck percentile');
+
+// Luck statistics: percentile must agree with a fresh, independent simulation, and hitTail with the binomial.
+{
+  const counts = { sv08: 30 }, r = S.rng(99), vals = [];
+  for (let i = 0; i < 3000; i++) { let v = 0; for (let k = 0; k < 30; k++) v += S.packValue(S.openPack('sv08', r)); vals.push(v); }
+  vals.sort((a, b) => a - b);
+  for (const q of [0.1, 0.5, 0.9, 0.99]) {
+    const got = S.luckPercentile(counts, vals[Math.floor(q * vals.length)]);
+    assert.ok(Math.abs(got - q) < 0.03, `percentile at true q=${q} came out ${got}`);
+  }
+  assert.equal(S.luckPercentile(counts, 1e9), 1);
+  // binomial(100, 0.0674) UR: P(X<=0)=(1-p)^100, P(X>=20) tiny
+  assert.ok(Math.abs(S.hitTail({ sv08: 100 }, 'UR', 0) - Math.pow(1 - 0.0674, 100)) < 1e-9);
+  assert.ok(S.hitTail({ sv08: 100 }, 'UR', 20) < 1e-4);
+  assert.ok(Math.abs(S.hitTail({ sv08: 100 }, 'UR', 7) - 0.5) < 0.35);
+  console.log('ok luck statistics');
+}

@@ -72,22 +72,37 @@
   }
 
   // Luck: where a player's total pulled value sits among simulated players who opened the same packs.
-  const samples = {};
+  // 60k packs per set (~250ms once per set): a 0.07%-per-pack SIR chase card gets ~40 samples, 20k gave ~14.
+  const SAMPLES = 60000, samples = {};
   function valueSamples(setId) {
     if (samples[setId]) return samples[setId];
-    const r = rng(0xC0FFEE ^ setId.length), a = new Float64Array(20000);
+    const r = rng(0xC0FFEE ^ setId.length), a = new Float64Array(SAMPLES);
     for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(setId, r));
     return (samples[setId] = a);
   }
-  function luckPercentile(counts, value, trials = 400) { // counts: {setId: packs}
+  // Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
+  function luckPercentile(counts, value, trials) { // counts: {setId: packs}
+    const total = Object.values(counts).reduce((a, b) => a + b, 0);
+    trials ||= Math.max(1000, Math.min(4000, Math.floor(2e6 / Math.max(total, 1))));
     const r = rng(7); let below = 0, ties = 0;
     for (let t = 0; t < trials; t++) {
       let v = 0;
       for (const id in counts) { const a = valueSamples(id); for (let k = 0; k < counts[id]; k++) v += a[Math.floor(r() * a.length)]; }
-      if (v < value) below++; else if (v === value) ties++;
+      if (v < value - 1e-9) below++; else if (Math.abs(v - value) <= 1e-9) ties++;
     }
     return (below + ties / 2) / trials;
   }
 
-  g.PTCG_SIM = { rng, openPack, packEV, packValue, luckPercentile, RANK, HITS, slotTables, poolsFor };
+  // Exact chance of seeing `k` or more (k >= expected) / `k` or fewer (k < expected) hits of one rarity,
+  // over packs opened in several sets (Poisson-binomial by DP, truncated at k+1 entries).
+  function hitTail(counts, kind, k) {
+    const probs = []; let mean = 0;
+    for (const id in counts) { const p = (g.PTCG_SETS.find(s => s.id === id).rates[kind] || 0) / 100; for (let i = 0; i < counts[id]; i++) probs.push(p); mean += p * counts[id]; }
+    const pmf = new Float64Array(k + 1); pmf[0] = 1; // P(X = j) for j <= k
+    for (const p of probs) for (let j = k; j >= 0; j--) pmf[j] = pmf[j] * (1 - p) + (j ? pmf[j - 1] * p : 0);
+    const le = pmf.reduce((a, b) => a + b, 0), lt = le - pmf[k];
+    return k >= mean ? 1 - lt : le;
+  }
+
+  g.PTCG_SIM = { rng, openPack, packEV, packValue, luckPercentile, hitTail, RANK, HITS, slotTables, poolsFor };
 })(typeof window !== 'undefined' ? window : globalThis);
