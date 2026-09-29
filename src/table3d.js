@@ -36,6 +36,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
 const MW = 64, MH = 54, MZ = -8; // playmat size and where its centre sits: the shelf, the single-pack spread and the fan stay on it; a ten-pack deal's back row reaches the counter
 const CZ0 = 34, CZ1 = -60, CX = 72; // the counter top: near edge (under the player's hands), back edge, half width
+const SW = 30, SH = 15, SD = 12, SX = 1, SZ = -46; // the glass showcase behind the mat: width, glass height (on a 2.2 plinth), depth, centre
 const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18, SPREAD_PITCH_TALL = 1.42;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
@@ -918,15 +919,15 @@ async function batchSpread(run) {
 // the label has the count), one pack when it's out, in the lamp's shadow when it can't be opened. Labels are mat.ts's buttons
 // (.s3-shelf, index-aligned with the items), placed under each stack every frame. Pointing at a stack lifts its top pack;
 // tapping it calls onPick(k). The pack that gets opened rises from its stack into the hand (enter / enterBatch).
-const SHELF_MAX = 12, SHELF_PITCH = .74, SHELF_BACK = 13, SGX = PW + 2.8, LIFT = 1.1;
+const SHELF_MAX = 12, SHELF_PITCH = .74, SHELF_BACK = 25.5, SGX = PW + 2.8, LIFT = 1.1;
 // The column count that shows the packs biggest at this aspect; item 0 front left. The packs fill the lower part of the shot;
 // the top shows the back of the counter (showcase, binder), so the table reads as a place and not a black box.
 function shelfGrid(n) {
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 9.5 : 4.4); // portrait: the labels need more room between rows
-    // The front row's near edge stays on the mat, and the back row stays within ~16 cm of the props, so one or two rows
-    // don't leave a strip of bare mat between the packs and the back of the counter.
+    // The front row's near edge stays on the mat, and the back row's centre sits SHELF_BACK behind the mat's centre line (its
+    // rear edge ~3 cm inside the mat's far edge), so one or two rows lie right in front of the showcase, not a band of bare mat away.
     const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2), (rows - 1) / 2 * SGZ - SHELF_BACK);
     for (let k = 0; k < n; k++) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
@@ -934,7 +935,9 @@ function shelfGrid(n) {
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * (PW / 2 + .6), 0, dz * PH / 2)));
       pts.push(at.clone().add(new V3(0, 0, PH / 2 + 3.2))); // the label under it
     }
-    const cam = frameOn(pts, new V3(0, 0, 0), SHELF_PITCH, .92, -.9, camera.aspect < .8 ? .4 : .22);
+    // One or two rows: the showcase's top stays in shot behind them (only its height counts; on a phone its sides are cropped)
+    const back = rows <= 2; if (back) pts.push(new V3(SX, 2.2 + 12.4, SZ - 1.2)); // the slabs' tops
+    const cam = frameOn(pts, new V3(0, 0, 0), SHELF_PITCH, .92, -.9, back ? .95 : camera.aspect < .8 ? .4 : .22);
     if (!best || cam.d < best.cam.d - .01) best = { pos, cam };
   }
   return best;
@@ -1192,8 +1195,7 @@ function relayout() {
 
 // ---------- table, theme ----------
 // The counter the player stands behind (DESIGN.md「题材」): a laminate top with a bevelled edge and an aluminium trim, the shop's
-// rubber playmat on it, and at the back what a card counter holds: a glass countertop showcase with graded slabs and a booster
-// box, a binder, a stack of toploaders, a pack of sleeves. Colours come from tokens (laminate = --bg, binder = card-back navy,
+// rubber playmat on it, and at the back what a card counter holds: a glass countertop showcase with graded slabs, a binder, a stack of toploaders, a pack of sleeves. Colours come from tokens (laminate = --bg, binder = card-back navy,
 // aluminium trim = --trim, the skin's navy anodized case frame); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
 // None of the props casts a shadow; the whole world is ~16 draw calls.
 let world0 = null; // theme-dependent textures: { laminate canvas, mat canvas, binder canvas, materials }
@@ -1236,6 +1238,18 @@ function drawBinder(c) {
   x.fillStyle = rgba(css('--back-ring'), .55); x.font = `900 44px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', W / 2, H * .82);
   x.strokeStyle = rgba('#FFFFFF', .08); x.lineWidth = 3; x.strokeRect(14, 14, W - 28, H - 28); // stitched border
 }
+// The penny sleeves' pack, seen from above: clear sleeves over a white backing card, a card-back navy header with the shop's name.
+function drawSleeves(c) {
+  const x = c.getContext('2d'), W = c.width, H = c.height;
+  x.fillStyle = css('--stock'); x.fillRect(0, 0, W, H);
+  x.fillStyle = css('--back-2'); x.fillRect(0, 0, W, H * .3);
+  x.fillStyle = css('--back-ring'); x.textAlign = 'center';
+  x.font = `900 40px ${DISP()}`; x.fillText('欧气卡铺', W / 2, H * .15);
+  x.font = `600 22px ${BODY()}`; x.fillText('卡套 · 100 枚', W / 2, H * .25);
+  x.fillStyle = css('--stock-ink'); x.font = `600 18px ${BODY()}`; x.fillText('66 × 91 mm', W / 2, H * .93);
+  x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(W * .08, H * .34, W * .08, H * .55); // the light on the sleeves' plastic
+  x.strokeStyle = css('--stock-edge'); x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
+}
 // A graded slab's insert: the grading label over the card, as one texture.
 function slabCanvas(img, grade) {
   const W = 256, H = 404, c = canvasOf(W, H), x = c.getContext('2d');
@@ -1272,10 +1286,9 @@ function world() {
   playmat = place(new T.Mesh(mg, new T.MeshStandardMaterial({ map: matMap, normalMap: grain, normalScale: new T.Vector2(.35, .35), roughness: .93, metalness: 0, envMapIntensity: .25 })), 0, 0, 0);
   playmat.receiveShadow = true;
 
-  // glass countertop showcase, back right: laminate plinth, aluminium frame, glass, a glass shelf, three slabs and a booster box
-  const SW = 30, SH = 15, SD = 12, sx = 24, sz = -46, sy = TOP + 2.2;
+  // glass countertop showcase, back centre (right behind the idle packs, so the first look has the shop's slabs in it): laminate plinth, aluminium frame, glass, three slabs
   const plinth = new T.BoxGeometry(SW + 1, 2.2, SD + 1); plinth.translate(0, 1.1, 0);
-  const show = new T.Group(); place(show, sx, TOP, sz, -.12);
+  const show = new T.Group(); place(show, SX, TOP, SZ, -.04);
   show.add(new T.Mesh(plinth, counter.material));
   const bars = [];
   for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { const g = new T.BoxGeometry(.5, SH, .5); g.translate(x * SW / 2, 2.2 + SH / 2, z * SD / 2); bars.push(g); }
@@ -1283,7 +1296,6 @@ function world() {
   for (const y of [2.2 + SH]) for (const x of [-1, 1]) { const g = new T.BoxGeometry(.5, .5, SD); g.translate(x * SW / 2, y, 0); bars.push(g); }
   show.add(new T.Mesh(merge(bars), metal));
   const pane = new T.BoxGeometry(SW, SH, SD); pane.translate(0, 2.2 + SH / 2, 0);
-  const shelf = new T.BoxGeometry(SW - .6, .3, SD - .6); shelf.translate(0, 2.2 + SH * .52, 0);
   const led = new T.Mesh(new T.BoxGeometry(SW - 2, .25, .25), new T.MeshBasicMaterial({ color: new T.Color(css('--lamp')).multiplyScalar(2.2) })); led.position.set(0, 2.2 + SH - .5, SD / 2 - .8);
   const slabs = new T.InstancedMesh(new T.BoxGeometry(7.6, 12, .7), acrylic, 3), m4 = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-.22, 0, 0));
   const chase = [['sv08', '238', '10'], ['sv10', '231', '10'], ['sv08.5', '161', '9.5']];
@@ -1294,27 +1306,29 @@ function world() {
     ins.position.copy(at).add(new V3(0, 0, .02)); ins.quaternion.copy(q); show.add(ins);
     loadImg(ASSETS.card(set, n, 'low')).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
   });
-  const boxArt = packArt('sv10').front, box = new T.Mesh(new T.BoxGeometry(12, 5.2, 5.6), [counter.material, counter.material, counter.material, counter.material, boxArt, counter.material]);
-  box.position.set(-6, 2.2 + SH * .52 + 2.75, -1.5); box.rotation.y = .18;
-  show.add(slabs, box, led, new T.Mesh(shelf, glass), new T.Mesh(pane, glass));
+  show.add(slabs, led, new T.Mesh(pane, glass));
 
   // a 4-pocket binder, back left, with index tabs
   const bg = new T.ExtrudeGeometry(roundRect(21, 26, 1.1), { depth: 2.6, bevelEnabled: true, bevelThickness: .35, bevelSize: .35, bevelSegments: 3, curveSegments: 6 });
   bg.rotateX(-Math.PI / 2); bg.translate(0, .35, 0);
   const cover = new T.MeshStandardMaterial({ map: binMap, roughness: .66, normalMap: grain, normalScale: new T.Vector2(.3, .3), envMapIntensity: .4 });
   binMap.repeat.set(1 / 21, 1 / 26); binMap.offset.set(.5, .5);
-  const binder = place(new T.Mesh(bg, cover), -25, TOP, -48, .22);
+  const binder = place(new T.Mesh(bg, cover), -39, TOP, -47, .22);
   const tabs = new T.InstancedMesh(new T.BoxGeometry(1.6, .25, 2.6), new T.MeshStandardMaterial({ color: css('--foil-2'), roughness: .5 }), 3);
   for (let i = 0; i < 3; i++) tabs.setMatrixAt(i, m4.compose(new V3(11, 1.6, -7 + i * 5), new T.Quaternion(), new V3(1, 1, 1)));
   binder.add(tabs);
 
-  // toploaders and a pack of penny sleeves, between the binder and the showcase
+  // back right: toploaders with a pulled card in the top one, and a pack of penny sleeves with its paper header
   const tops = new T.InstancedMesh(new T.BoxGeometry(7.7, .14, 10.2), acrylic, 7);
   for (let i = 0; i < 7; i++) tops.setMatrixAt(i, m4.compose(new V3((Math.random() - .5) * .5, .1 + i * .16, (Math.random() - .5) * .5), new T.Quaternion().setFromEuler(new T.Euler(0, (Math.random() - .5) * .12, 0)), new V3(1, 1, 1)));
-  place(tops, -4, TOP, -41, -.3);
-  place(new T.Mesh(new T.BoxGeometry(7.2, 1.3, 9.6), new T.MeshStandardMaterial({ color: 0xF2F4F8, transparent: true, opacity: .62, roughness: .35 })), 5, TOP + .65, -45, .5);
+  const tl = place(tops, 24, TOP, -39, -.3);
+  const kept = canvasTex(canvasOf(8, 8)), inTop = new T.Mesh(new T.PlaneGeometry(CW, CH), new T.MeshStandardMaterial({ map: kept, roughness: .5, envMapIntensity: .4 }));
+  inTop.rotation.x = -Math.PI / 2; inTop.position.set(0, .1 + 6 * .16 + .02, 0); tl.add(inTop);
+  loadImg(ASSETS.card('sv08', '219', 'low')).then(img => { if (img) { kept.image = img; kept.needsUpdate = true; wake(100); } });
+  const slvC = canvasOf(256, 340), slvMap = canvasTex(slvC), slvSide = new T.MeshStandardMaterial({ color: css('--stock'), transparent: true, opacity: .5, roughness: .3 });
+  place(new T.Mesh(new T.BoxGeometry(7.2, 1.1, 9.6), [slvSide, slvSide, new T.MeshStandardMaterial({ map: slvMap, roughness: .45, envMapIntensity: .4 }), slvSide, slvSide, slvSide]), 33, TOP + .55, -45, .45);
 
-  world0 = { lamC, matC, binC, lam, matMap, binMap, led };
+  world0 = { lamC, matC, binC, slvC, lam, matMap, binMap, slvMap, led };
 }
 function theme() {
   // The room past the counter is the shop in the lamp's shadow (the HUD's navy, both themes), not the page: a white fog in the
@@ -1323,8 +1337,8 @@ function theme() {
   renderer.setClearColor(room); scene.fog.color.copy(room);
   counter.material.color.setScalar(bg.getHSL(hsl).l > .6 ? .72 : 1);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
-  const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC);
-  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = true; w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
+  const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC); drawSleeves(w.slvC);
+  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = w.slvMap.needsUpdate = true; w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
   wake(100);
 }
 
@@ -1366,7 +1380,7 @@ function init() {
   svgTex(backSVG()).then(t => { back.dispose(); shared.back.value = t; wake(100); }); // card.ts's back, the one the 2D mat and the share image show
   shared.u = { back: shared.back, time: { value: 0 }, key: { value: new V3() }, keyDir: { value: new V3() }, glowAt: { value: new V3() }, cone0: { value: 0 }, cone1: { value: 1 }, keyCol: { value: new T.Color() }, amb: { value: new T.Color() }, wash: { value: new T.Color() }, dpr: { value: 1 } };
 
-  world(); // after shared: the showcase's booster box wears a pack's material
+  world();
   parts = makeParticles(900); scene.add(parts.pts);
   rays = new T.Mesh(new T.PlaneGeometry(70, 70), new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending,
     uniforms: { uCol: { value: new T.Color() }, uAmt: { value: 0 }, uTime: { value: 0 } },
