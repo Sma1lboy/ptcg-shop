@@ -1,7 +1,9 @@
 // 新手引导: one popover at a time, pinned next to the button the step is about (DESIGN.md「引导」). The step is read off the game
-// state (stock, shelves, packs opened) plus three flags state cannot tell (price looked at, 欧气 visited, skipped), kept in
-// localStorage like the mute switch. When the step's button is on another page it points at that page's tab instead. Hidden while
-// a pack is being revealed. The footer's 新手引导 replays every step with a 下一步 button.
+// state (stock, shelves, packs opened, bills paid) plus four flags state cannot tell (price looked at, bill explained, 欧气 visited,
+// skipped), kept in localStorage like the mute switch. It covers the first week, not just five buttons: once the first pack is
+// open it comes back whenever the shelves sell out (补货), and it shows what the top bar's countdown is (账单). When the step's
+// button is on another page it points at that page's tab instead. Hidden while a pack is being revealed. A save that has plainly
+// played past it (GRAD) never sees it. The footer's 新手引导 replays every step with a 下一步 button.
 import { html, render, nothing } from 'lit-html';
 import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
@@ -9,7 +11,7 @@ import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; luck?: 1; off?: 1; share?: 1 };
+type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1 };
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -21,6 +23,13 @@ const shown = (el: Element | null) => (el && el.getClientRects().length ? el : n
 // first visible match, in the order given (a comma selector would return document order)
 const pick = (...sels: string[]) => { for (const q of sels) for (const el of document.querySelectorAll(q)) if (shown(el)) return el; return null; };
 const firstShelved = () => G.shelves().find(r => r.id)?.id;
+const mins = (s: number) => Math.max(1, Math.ceil(s / 60));
+// an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid, or 30 packs opened once
+// the first bill has landed (a pack-happy newcomer opens 30 in three minutes and still needs 账单), or a second shop / a
+// bankruptcy (billsPaid counts this shop only) means the loop is known, whatever the flags say
+const GRAD = { bills: 2, packs: 30 };
+const graduated = () => { const s = G.state;
+  return s.billsPaid >= GRAD.bills || (sum(s.opened) >= GRAD.packs && (s.billsPaid > 0 || !G.nextBill())) || s.branch.n > 0 || !!s.branch.broke; };
 
 // alt: a button off the step's page that answers it just as well (the share button under a finished pack, for 测欧气)
 type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null; alt?: () => Element | null };
@@ -38,6 +47,15 @@ const STEPS: Step[] = [
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },
+  // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off
+  { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
+    at: () => pick('#shelf .set .primary:not(:disabled)', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
+    p: () => (sum(G.state.stock) ? '仓库里有货，货架是空的：点「摆上空货架」。' : '货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。进一箱、摆上去，这就是每天的活。') },
+  // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
+  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
+    at: () => shown(document.getElementById('due')),
+    p: () => { const b = G.nextBill(); if (!b) return null;
+      return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
     alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
     p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'
@@ -46,7 +64,7 @@ const STEPS: Step[] = [
 
 const TAB: Record<string, string> = { open: '开包', shelf: '货柜', luck: '欧气', grow: '成长' };
 let replay = -1; // index while replaying from the footer, else -1
-const current = () => (replay >= 0 ? replay : rec.off ? -1 : STEPS.findIndex(s => !s.done()));
+const current = () => (replay >= 0 ? replay : rec.off || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
 
 let anchor: Element | null = null;
 const phone = () => innerWidth < 780;
@@ -70,7 +88,7 @@ function place() {
   // a new step's button off screen, or a strip with no room under its button: scroll, once. Kept pending for a moment, because
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
-  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in)')) {
+  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
     const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
     else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
@@ -106,8 +124,9 @@ export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
   if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
-  // the step's own button when it is on this page, else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
-  const here = page() === step.page ? step.at() : step.alt?.() ?? null;
+  // the step's own button wherever it is visible (at() only finds shown ones: 开一包's 「开 1 包」 right there on 货柜, the top bar's
+  // bill chip on any page), else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
+  const here = step.at() ?? step.alt?.() ?? null;
   anchor = here ?? pick(`.subnav a[href="#${step.page}"]`, `.nav a[href="#${step.page}"]`);
   if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
@@ -117,7 +136,8 @@ export function renderGuide() {
     <p>${step.p(here)}</p>
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
-        : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>` : nothing}</div>`, pop);
+        : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>`
+        : step.h === '账单' && here ? html`<button type="button" class="ghost" data-coach="bill">知道了</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
   if (i !== last && here) seek = performance.now() + 1500;
   if (here) last = i; // a step first shown as its page's tab still gets scrolled to on arriving there
@@ -137,6 +157,7 @@ export function bindGuide() {
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }
     else if (b.dataset.act === 'sharemat') { if (!rec.share) { rec.share = 1; save(); } }
     else if (b.dataset.coach === 'price') { rec.price = 1; save(); }
+    else if (b.dataset.coach === 'bill') { rec.bill = 1; save(); }
     else if (b.dataset.coach === 'off') { if (replay < 0) { rec.off = 1; save(); } replay = -1; }
     else if (b.dataset.coach === 'next') { replay = replay + 1 < STEPS.length ? replay + 1 : -1; if (replay >= 0) go(STEPS[replay].page); }
     else return;
