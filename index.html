@@ -9,11 +9,6 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-<!-- three.js for the 3D opening mat only (src/table3d.js imports it); one pinned version from the CDN -->
-<script type="importmap">{ "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.176.0/build/three.module.min.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.176.0/examples/jsm/"
-} }</script>
 </head>
 <body>
 <header class="top">
@@ -43,18 +38,6 @@
 </main>
 <footer class="sources" id="sources"></footer>
 <details class="sources basis" id="basis"></details>
-<script src="data/cards-sv08.js"></script>
-<script src="data/cards-sv10.js"></script>
-<script src="data/cards-sv08.5.js"></script>
-<script src="data/cards-sv03.5.js"></script>
-<script src="src/assets.js"></script>
-<script src="src/sets.js"></script>
-<script src="src/sim.js"></script>
-<script src="src/game.js"></script>
-<script src="src/fx.js"></script>
-<script src="src/table3d.js"></script>
-<script src="src/ui.js"></script>
-<script src="src/extras.js"></script>
-<script src="src/goals.js"></script>
+<script type="module" src="/src/main.ts"></script>
 </body>
 </html>

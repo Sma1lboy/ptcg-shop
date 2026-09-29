@@ -1,13 +1,9 @@
 // Fairness check: 200k simulated packs per set must land inside TCGplayer's measured 95% CI for every rarity.
 // Run: node test/sim.test.mjs
-import { readFileSync, readdirSync } from 'node:fs';
-import vm from 'node:vm';
 import assert from 'node:assert/strict';
-
-const ctx = { window: {} }; ctx.window.window = ctx.window; vm.createContext(ctx);
-for (const f of readdirSync('data').filter(f => f.endsWith('.js'))) vm.runInContext(readFileSync('data/' + f, 'utf8'), ctx);
-for (const f of ['src/sets.js', 'src/sim.js']) vm.runInContext(readFileSync(f, 'utf8'), ctx);
-const { PTCG_SETS, PTCG_SIM: S, PTCG_DATA } = ctx.window;
+import { SETS as PTCG_SETS, DATA as PTCG_DATA } from '../src/sets.ts';
+import * as S from '../src/sim.ts';
+import { createGame } from '../src/game.ts';
 
 const N = 200000;
 for (const set of PTCG_SETS) {
@@ -71,16 +67,12 @@ console.log('ok luck percentile');
   assert.equal(S.cardPrice('sv08', '999', 'RR'), null);
   console.log('ok cardPrice repricing');
 }
-// ---------- economy (src/game.js) ----------
+// ---------- economy (src/game.ts) ----------
 {
   let T = 1_700_000_000_000, seed = 12345;
   const store = {};
-  const M = Object.create(Math); M.random = () => S.rng(seed++)(); // deterministic, but a fresh stream per call is fine for shop rolls
-  const gctx = { window: {}, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } }, Date: { now: () => T }, Math: M };
-  gctx.window.window = gctx.window; vm.createContext(gctx);
-  for (const f of readdirSync('data').filter(f => f.endsWith('.js'))) vm.runInContext(readFileSync('data/' + f, 'utf8'), gctx);
-  for (const f of ['src/sets.js', 'src/sim.js', 'src/game.js']) vm.runInContext(readFileSync(f, 'utf8'), gctx);
-  const G = gctx.window.PTCG_GAME, st = () => G.state;
+  const env = { now: () => T, random: () => S.rng(seed++)(), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } }; // deterministic, but a fresh stream per call is fine for shop rolls
+  const G = createGame(env), st = () => G.state;
 
   // 1. No money pump: opening a pack and selling it at market value returns less than the pack costs even at the best supplier level.
   const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length;
@@ -140,8 +132,8 @@ console.log('ok luck percentile');
 
   // 6. Old saves: packs that used to be "on sale" land on the shelf.
   store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, stock: { sv08: 7 }, singles: {} });
-  vm.runInContext(readFileSync('src/game.js', 'utf8'), gctx);
-  assert.equal(gctx.window.PTCG_GAME.shelfQty('sv08'), 7); assert.equal(gctx.window.PTCG_GAME.state.stock.sv08 || 0, 0);
+  const G2 = createGame(env); // a page reload: a second game over the same storage
+  assert.equal(G2.shelfQty('sv08'), 7); assert.equal(G2.state.stock.sv08 || 0, 0);
   delete store['ptcg-shop-v1'];
 
   // 7. Soft-lock guard, 图鉴 and the clerk.
@@ -160,17 +152,19 @@ console.log('ok luck percentile');
   {
     G.reset(); st().cash = 1e6; G.buy('sv08', 20); G.open('sv08', 20);
     const v0 = G.luck().value; assert.ok(G.luck().live && Math.abs(v0 - st().pulled) < 1e-6, 'fresh save: repriced value equals snapshot');
-    for (const c of gctx.window.PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] *= 2; // prices double after a data refresh
+    for (const c of PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] *= 2; // prices double after a data refresh
     G.buy('sv08', 1); G.open('sv08', 1); // clears the luck cache
     const L = G.luck(); assert.ok(L.value > (v0 + 0) * 1.5, 'value follows current prices');
     st().dexPacks = 0; // pre-dex save: falls back to the snapshot
     G.open('sv08', 0); G.buy('sv08', 1); G.open('sv08', 1);
     assert.equal(G.luck().live, false, 'old saves are flagged');
+    // The vm contexts used to give this block its own copy of data/; with one module graph, undo the refresh before autoplay below (×2 ÷2 is exact).
+    for (const c of PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] /= 2;
   }
   console.log('ok economy');
 }
 
-// ---------- growth curve (scripts/autoplay.mjs plays the real game.js on a fake clock) ----------
+// ---------- growth curve (scripts/autoplay.mjs plays the real game.ts on a fake clock) ----------
 {
   const { play } = await import('../scripts/autoplay.mjs');
   const shop = play({ hours: 3, openShare: 0, pct: 0.92, log: 3600 }), opener = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, log: 3600 });

@@ -1,33 +1,55 @@
 # ptcg-shop（欧气卡铺）
 
-宝可梦卡牌（PTCG）开包模拟 + 卡店经营放置游戏 + 欧气检测。纯前端，双击 `index.html` 就能玩。
+宝可梦卡牌（PTCG）开包模拟 + 卡店经营放置游戏 + 欧气检测。Vite + TypeScript + lit-html，构建产物是单个自带全部代码和数据的 `dist/index.html`。
+
+## 命令
+
+| 做什么 | 命令 |
+|---|---|
+| 装依赖（新 worktree 由 `.rove/init.sh` 自动跑） | `npm ci` |
+| 开发 | `npm run dev` → http://localhost:5173 ，卡图直接出仓库根的 `assets/tcg/` |
+| 测试 | `npm test`（就是 `node test/sim.test.mjs`，node 22 直接跑 `.ts`） |
+| 构建 | `npm run build`：先 `tsc` 类型检查，再出 `dist/index.html`。双击能玩（卡图走 TCGdex CDN）；`npm run preview` 或任何静态服务器开 `dist/` 用本地镜像 |
+| CodePen 单文件 | `npm run pen` → `dist/pen.html`，超过 1,000,000 字符构建直接失败 |
+| 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
+
+根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
 ## 规矩（每个 worker 必读）
 
-- **原生 HTML/CSS/JS，没有构建步骤。** 不要引入 npm 包、框架、打包器、TypeScript、i18n 层。本地脚本用经典 `<script src>` + `window.PTCG_*` 全局，因为本地文件的 `type="module"` 在 `file://` 下会被 Chrome 拦。
-- **唯一的外部库：three.js，只用于开包台的 3D 场景。** 从 CDN 按固定版本加载（例如 `<script type="importmap">` + jsdelivr/unpkg 的 `three.module.js` 和 `examples/jsm` 附加模块；https CDN 上的 module 在 `file://` 下能用，本地 module 不行）。别的库一律不加。WebGL 不可用或 `prefers-reduced-motion` 时要退回 2D 开包台。
+- **依赖白名单：运行时只有 `three`、`lit-html`；开发时只有 `vite`、`typescript`、`vite-plugin-singlefile`。** 框架、组件库、CSS 框架、测试框架、i18n 层一律不加；确实要加，先问用户。版本在 package.json 里写死，改版本连 package-lock.json 一起提交。
+- **TypeScript 只写可擦除语法**（tsconfig 开了 `erasableSyntaxOnly`）。测试和 autoplay 让 node 直接跑 `src/*.ts`，所以不许用 enum、namespace、构造函数参数属性；import 带 `.ts` 后缀；只导入类型写 `import type`。唯一的例外是 `src/table3d.js`：3D 场景保持纯 JS（tsconfig 的 `allowJs`，引用方拿到推断出的类型，文件本身不做类型检查）。
+- **three.js 只用于开包台的 3D 场景（`src/table3d.js`），一律动态 `import('three')` / `import('three/addons/…')`，写字面量路径。** 构建时它不进包（压缩后约 800 KB，会撑爆 pen），由 `vite.config.ts` 注入的 import map 从 jsdelivr 加载和 node_modules 同一版本（package.json 钉死 0.176.0，3D 场景就是按这个版本做的，升级要重新看一遍效果）；dev 用 node_modules 里的。动态加载保证 CDN 挂了只丢 3D，页面照常能玩。WebGL 不可用、`prefers-reduced-motion`、three 还没加载到或加载失败时，`mountTable` 返回 null，`mat.ts` 退回 2D 开包台。
+- **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 2D 的 `#stage` 和 3D 的 `#scene3d` 画布）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入、WebGL），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
-  - `data/cards-*.js` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
-  - `src/sets.js` 里的 `rates` 是 TCGplayer 实开统计的百分比，**不许为了手感改概率**。改动必须附来源链接（写在 `rateSource` 或注释里）。
-  - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.js` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
-- **改完必须跑** `node test/sim.test.mjs`（20 万包/系列，每个稀有度都要落在 TCGplayer 95% 置信区间内）。改了模拟逻辑就在这个文件里加断言，不要另起测试框架。
+  - `data/cards-*.json` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
+  - `src/sets.ts` 里的 `rates` 是 TCGplayer 实开统计的百分比，**不许为了手感改概率**。改动必须附来源链接（写在 `rateSource` 或注释里）。
+  - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.ts` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
+- **改完必须跑** `npm test`（20 万包/系列，每个稀有度都要落在 TCGplayer 95% 置信区间内）。改了模拟逻辑就在这个文件里加断言，不要另起测试框架。`src/game.ts` 不直接碰 `Date.now` / `Math.random` / `localStorage`，一律走 `createGame({ now, random, storage })` 的参数，测试和 autoplay 靠它注入假时钟和种子随机数。
 - 视觉：颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对；强调色只有价格贴纸橙，稀有度用银/金（对应卡面上的银星/金星），盈亏用 gain/loss 语义色。别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
-- **卡图和 Logo 从本地服务器出，不要直连 TCGdex**（用户要求：别把 API 打爆）。`node scripts/fetch-images.mjs` 把全部卡图（low/high webp）和 logo 镜像到 `assets/tcg/`（约 90 MB，gitignored；新 worktree 由 `.rove/init.sh` 软链到主仓库的镜像）。代码里一律用 `PTCG_ASSETS.card(set, n, size)` / `PTCG_ASSETS.logo(set)`（`src/assets.js`），不要自己拼 URL。只有 `file://` 打开和 CodePen 版（`PTCG_REMOTE_ASSETS`）会退回 CDN；CDN 地址不许带 query string。本地同源的图做 canvas / WebGL 贴图没有 CORS 问题，所以要看 3D/分享效果请用 http 打开（`python3 -m http.server 8765`）。
+- **卡图和 Logo 从本地服务器出，不要直连 TCGdex**（用户要求：别把 API 打爆）。`node scripts/fetch-images.mjs` 把全部卡图（low/high webp）和 logo 镜像到仓库根的 `assets/tcg/`（约 90 MB，gitignored；新 worktree 由 `.rove/init.sh` 软链到主仓库的镜像）。**别挪进 `public/`**，那样每次构建都往 `dist/` 拷 88 MB；dev 服务器直接出根目录下的它（`vite.config.ts` 让 watcher 忽略这个目录），`npm run build` 在 `dist/assets/tcg` 放一个指回去的软链。代码里一律用 `src/assets.ts` 的 `card(set, n, size)` / `logo(set)`，不要自己拼 URL。只有 `file://` 打开和 pen（`--mode pen` 把 `__REMOTE_ASSETS__` 定为 true）会退回 CDN；CDN 地址不许带 query string。本地同源的图做 canvas / WebGL 贴图没有 CORS 问题，所以要看 3D/分享效果请用 `npm run dev` 或 `npm run preview`。
 
 ## 文件分工（并行 worker 按这个认领，动别人的文件要在报告里说明）
 
 | 文件 | 管什么 |
 |---|---|
-| `src/sets.js` | 系列配置：实测概率、置信区间、整包市价、来源链接 |
-| `src/sim.js` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
-| `src/game.js` | 存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
-| `src/ui.js` | 渲染和交互，只读 state、只调 `PTCG_GAME` 的方法 |
-| `src/fx.js` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
+| `src/sets.ts` | 系列配置（实测概率、置信区间、整包市价、来源链接），并载入 `data/cards-*.json` 导出为 `DATA` |
+| `src/sim.ts` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
+| `src/game.ts` | `createGame()`：存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
+| `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
+| `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
+| `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/图鉴/店员，`sources` 是页脚的来源、游戏设定和价格口径 |
+| `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
+| `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, reducedMotion })` → `{ showPack, flip, flipAll, resize, dispose }` |
+| `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
+| `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
+| `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
+| `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
-| `index.html` | 外壳和脚本加载顺序 |
-| `src/assets.js` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
-| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、打包单文件 pen（pack-pen）、自动玩家（autoplay） |
+| `index.html` | 外壳，Vite 入口 |
+| `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
+| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

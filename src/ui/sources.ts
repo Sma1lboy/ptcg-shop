@@ -1,0 +1,28 @@
+// Footer: data sources with links, the game settings in plain words, and 价格口径 (what each number means, what is not modelled).
+import { html, render } from 'lit-html';
+import { SETS, DATA } from '../sets.ts';
+import * as S from '../sim.ts';
+import { G, $, money } from './common.ts';
+
+export function renderSources() {
+  const upd = SETS.map(s => DATA[s.id].pricesUpdated).sort().pop()?.slice(0, 10);
+  render(html`<p>单卡价：TCGplayer 市价（经 <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>，${upd}）。
+      开包概率：TCGplayer 实开统计 ${SETS.map((s, i) => html`${i ? '、' : ''}<a href="${s.rateSource}" target="_blank" rel="noopener">${s.name}</a>（${s.sample.toLocaleString()} 包）`)}。
+      整包市价：${SETS.map((s, i) => html`${i ? '、' : ''}<a href="${s.priceSource}" target="_blank" rel="noopener">PriceCharting ${s.name}</a>`)}。</p>
+      <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%。
+      进货先进仓库（每系列 ${G.WAREHOUSE} 包），上架后才会卖；标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，货架每系列 ${G.SHELF_BASE} 包起，展示柜 ${G.CASE_BASE} 格起。
+      平均每 ${Math.round(1 / G.ARRIVAL)} 秒进来一位顾客，每位都有来意和预算：${Object.values(G.TYPES).map(t => `${t.name}最多肯付约 ${Math.round(t.tol * 100)}% 市价`).join('，')}（每人不同，招牌每级 +${G.SIGN_STEP * 100} 个百分点，倒爷不受影响；收藏党还看镇店之宝）。热销的系列顾客多一倍、滞销的少一半。
+      图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）。店员不领工资。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>`, $('sources'));
+}
+
+export function renderBasis() {
+  const ev = (id: string) => S.packEV(id);
+  const rows = SETS.map(s => html`<tr><td>${s.name}</td><td>${money(s.packPrice)}</td><td>${money(ev(s.id))}</td><td>${Math.round(ev(s.id) / s.packPrice * 100)}%</td></tr>`);
+  render(html`<summary>价格口径与没建模的东西</summary>
+      <p>单卡是 TCGplayer 市价（成交均价），整包是 PriceCharting 的散包价，两个来源不同。下表「期望市值」= 每个槽位的概率 × 该稀有度卡池的平均单卡市价，不含任何游戏设定。</p>
+      <table class="tally"><thead><tr><th>系列</th><th>整包标价</th><th>期望市值</th><th>占比</th></tr></thead><tbody>${rows}</tbody></table>
+      <p>期望只有标价的四成多。这个差距是两个口径直接算出来的，不是游戏调的：整包标价里含密封品本身的溢价（收藏、囤货、抽奖的人愿意多付），拆开后只剩单卡的价值。另外单卡市价是成交价，不扣平台费和运费，你在游戏里卖给同行只拿 ${Math.round(G.BUYLIST * 100)}%。</p>
+      <p>欧气检测把你开出的每张卡按<b>当前</b>单卡市价重算再和模拟玩家比，所以刷新价格数据不会让旧存档的百分位错位。只有本功能上线前开的包，无法重算，仍按开包当时的价格。</p>
+      <p>没建模：棱镜进化的 Demigod（3 张 SIR）/ God Pack 和 151 的 God Pack。TCGplayer 的文章明说样本里没开出 God Pack，给不出可靠概率，所以不编数字；文章里的 SIR 概率已经包含了这类包的贡献，因此单包期望大体不受影响，只是没有这种「一包全是大货」的极端开局。</p>
+      <p>游戏设定（不是市场数据）：展示柜共 ${G.CASE_BASE} 个柜位（展示柜每级 +2），货架每系列 ${G.SHELF_BASE} 包起（每级 +20），仓库每系列 ${G.WAREHOUSE} 包；每 ${G.HEAT_EVERY / 60} 分钟行情重排一次，一个系列热销（市价 +15%、顾客多一倍）、一个滞销（−10%、顾客少一半）；棱镜进化累计营业额 ${money(G.unlockAt('sv08.5'))}、151 累计 ${money(G.unlockAt('sv03.5'))} 后才能进货；离线收益最多按 ${G.OFFLINE_CAP / 3600} 小时结算。顾客的来意、预算、肯付的价、图鉴口碑和店员的规则见页面最下方的说明。</p>`, $('basis'));
+}

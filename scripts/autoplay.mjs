@@ -1,17 +1,14 @@
-// Balance harness: plays the real src/game.js with a scripted player on a fake clock and prints the growth curve.
+// Balance harness: plays the real src/game.ts with a scripted player on a fake clock and prints the growth curve.
 // Run: node scripts/autoplay.mjs [hours=3] [openShare=0.15] [pct=1] — pct = asking price as a share of market.
-import { readFileSync, readdirSync } from 'node:fs';
-import vm from 'node:vm';
+import { createGame } from '../src/game.ts';
+import * as S from '../src/sim.ts';
+import { SETS } from '../src/sets.ts';
 
 export function boot(seed = 1) {
   let T = 1_700_000_000_000, s = seed >>> 0;
   const rnd = () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const M = Object.create(Math); M.random = rnd;
-  const ctx = { window: {}, localStorage: { getItem: () => null, setItem() {} }, Date: { now: () => T }, Math: M, setTimeout, console };
-  ctx.window.window = ctx.window; vm.createContext(ctx);
-  for (const f of readdirSync('data').filter(f => f.endsWith('.js'))) vm.runInContext(readFileSync('data/' + f, 'utf8'), ctx);
-  for (const f of ['src/sets.js', 'src/sim.js', 'src/game.js']) vm.runInContext(readFileSync(f, 'utf8'), ctx);
-  return { G: ctx.window.PTCG_GAME, S: ctx.window.PTCG_SIM, SETS: ctx.window.PTCG_SETS, advance: sec => { T += sec * 1000; }, now: () => T };
+  const G = createGame({ now: () => T, random: rnd, storage: { getItem: () => null, setItem() {} } });
+  return { G, S, SETS, advance: sec => { T += sec * 1000; }, now: () => T };
 }
 
 // One "visit" every `step` seconds: buy upgrades first, then stock (kept back for opening or put on the shelf at `pct` of market),
