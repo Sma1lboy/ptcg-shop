@@ -1,8 +1,8 @@
 // 货柜 · 货架. Two parts in #shelf:
-// 1. The shelf wall: one drawn unit per shelf. Each 加层 level is one more board; a board holds DEPTH_STEP packs, shown as FACES
-//    pack faces with the set's logo (sold-out spots stay empty); the player's price label sits on the shelf edge. One <select> per
-//    unit puts a set on it, swaps it or clears it (events.ts), and says how many buyers each set lost lately, so the player knows
-//    who to make room for.
+// 1. The shelf wall: one bay of shop furniture per shelf (header card with the set's logo, pegboard back, one board per 加层 level
+//    holding DEPTH_STEP packs shown as FACES pack faces; sold-out spots show the bare back), the player's price label on the rail
+//    under the bottom board, and the next 加一个货架 as an unbuilt bay's outline at the end. One <select> per unit puts a set on it,
+//    swaps it or clears it (events.ts), and says how many buyers each set lost lately, so the player knows who to make room for.
 // 2. A's set table: one row per set (系列·行情 | 仓库 | 货架 | 标价 | 开包), a subgrid table from 1340px of shelf width, cards below. Only the next
 //    step for the set's state is the primary button: no stock → buy, stock but on no shelf → shelve, else → open.
 import { html, render, nothing } from 'lit-html';
@@ -26,11 +26,11 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
   // Options bind .selected through live(): after a swap the same template re-renders, and lit's cache would skip re-selecting
   // the current set, leaving the option the player clicked (now some other set) shown as chosen.
   return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'}" style="${id ? `--logo:url("${logoUrl(id)}")` : ''}">
-      <p class="r-sign">${id ? G.setById(id).name : '空货架'}</p>
-      <div class="r-boards" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
-        html`<i class="${(boards - 1 - b) * FACES + f < filled ? 'pk' : ''}"></i>`)}</div>`)}</div>
-      <p class="r-edge">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
-        <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>卖空了</b>`}</span>` : html`<span class="muted">放 ${deep} 包</span>`}</p>
+      <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>
+      <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
+        html`<i class="${(boards - 1 - b) * FACES + f < filled ? 'pk' : ''}"></i>`)}</div>`)}${id && !r.qty ? html`<span class="r-out">卖空了</span>` : nothing}</div>
+      <p class="r-rail">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
+        <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>0</b>/${deep}`}</span>` : html`<span>放 ${deep} 包</span>`}</p>
       ${swept.length ? html`<p class="r-miss" title="倒爷只收便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就整架收走，按标价付钱；收过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再收这个系列">倒爷整架收走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
       ${miss ? html`<p class="r-miss" title="${lately()}，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${lately()} <b>${miss}</b> 位没买到</p>` : nothing}
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
@@ -38,6 +38,15 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
           ${others.map(opt)}
           ${id ? html`<option value="" .selected=${live(false)} ?disabled=${full}>${full ? '撤下（仓库放不下）' : '撤下，空出货架'}</option>` : nothing}</select>
         ${id ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="999" ?disabled=${!s.stock[id] || r.qty >= deep} title="从仓库补满">补满</button>` : nothing}</div>
+    </li>`;
+}
+
+// The next 加一个货架, drawn where it would stand: the outline of an unbuilt bay (one board, so when it wraps to a row of its own it
+// is a small frame, not a wall-high hole) at the end of the wall, its price on the button.
+function ghost(cost: number) {
+  return html`<li class="rack ghost"><p class="r-sign"><span>还能加一个</span></p>
+      <div class="r-bay" aria-hidden="true"><div class="board">${Array.from({ length: FACES }, () => html`<i></i>`)}</div></div>
+      <div class="r-ctl"><button type="button" data-act="up" data-k="racks" ?disabled=${G.state.cash < cost}>加一个货架 ${money(cost)}</button></div>
     </li>`;
 }
 
@@ -59,10 +68,9 @@ function wall() {
   const nr = G.upgradeCost('racks'), nd = G.upgradeCost('depth');
   return html`<div class="wall">
       <p class="wall-h"><b>货架 ${shelves.length}/${G.RACK_BASE + G.UPGRADES.racks.costs.length}</b><span class="muted">每个 ${boards} 层、放 ${deep} 包，摆一个系列</span>
-        <span class="wall-up">${nr != null ? html`<button type="button" data-act="up" data-k="racks" ?disabled=${cash < nr}>加一个货架 ${money(nr)}</button>` : nothing}
-          ${nd != null ? html`<button type="button" data-act="up" data-k="depth" ?disabled=${cash < nd}>每个加一层 ${money(nd)}</button>` : nothing}</span></p>
+        <span class="wall-up">${nd != null ? html`<button type="button" data-act="up" data-k="depth" ?disabled=${cash < nd}>每个加一层 ${money(nd)}</button>` : nothing}</span></p>
       ${clerkNote()}
-      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}</ol>
+      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}${nr != null ? ghost(nr) : nothing}</ol>
       <p class="wall-note">想买的系列不在架上，拆包玩家一半改买别的，一半直接走。</p>
     </div>`;
 }
