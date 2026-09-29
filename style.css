@@ -380,7 +380,7 @@ button:disabled { cursor: not-allowed; }
 .pricer { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .pricer b { min-width: 3em; text-align: center; font-weight: 600; }
 .shelf .pricer button, .side .pricer button { width: 32px; padding: 0; }
-.margin { font-size: var(--fs-cap); }
+.margin { font-size: var(--fs-cap); } .margin.loss { font-weight: 700; } /* priced under wholesale: the one loss the player should act on */
 #casepanel .singles li { grid-template-columns: 2.2em minmax(0, 1fr) auto auto auto; }
 #goals h2 { margin-top: 28px; }
 #goals h2:first-child { margin-top: 0; }
