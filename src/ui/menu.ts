@@ -16,7 +16,8 @@ function layer(): HTMLElement | null {
   const open = [...document.querySelectorAll<HTMLElement>('dialog, [popover]:not([popover="manual"])')].filter(e => e.matches('dialog:modal, :popover-open'));
   return open[open.length - 1] ?? null;
 }
-const shown = (e: Element) => e.getClientRects().length > 0 && !e.closest('[hidden], [inert]') && getComputedStyle(e).visibility !== 'hidden';
+// inside a closed <details> only its summary is reachable: the rest still has client rects in some layouts but can't take focus
+const shown = (e: Element) => e.getClientRects().length > 0 && !e.closest('[hidden], [inert], details:not([open]) > :not(summary)') && getComputedStyle(e).visibility !== 'hidden';
 const items = (root: ParentNode) => [...root.querySelectorAll<HTMLElement>(ITEMS)].filter(shown);
 
 const cur = document.createElement('i');
@@ -48,9 +49,14 @@ function step(from: HTMLElement, key: string, list: HTMLElement[]) {
     if (ahead <= 4) continue;
     // inside a ~63° cone around the arrow beats anything outside it: → from a 3D pack label goes to the rail beside it, not to
     // the footer link that is barely to the right but far below
-    // the guide's own buttons (跳过引导) sit right under the tab it points at: nearest by geometry, but the page comes first, or
-    // the first ↓ from a tab lands on 跳过引导 and Z skips the guide
-    const inCone = side <= ahead * 2, score = ahead + side * 2.5 + (el.closest('#coach') && !from.closest('#coach') ? 600 : 0);
+    // the guide's own buttons (跳过引导) sit right under the tab it points at: nearest by geometry, but the page comes first — they
+    // count as outside the cone, so they're only reached when nothing on the page lies that way (else the first ↓ from a tab
+    // landed on 跳过引导 and Z skipped the guide)
+    const guide = !!el.closest('#coach') && !from.closest('#coach');
+    // and what's on screen before what's scrolled away: ↓ from the 开包 tab goes to the pack labels on the table, not to the
+    // footer's 数据来源 that lies more squarely below but off the bottom of the screen
+    const off = b.bottom <= 0 || b.top >= innerHeight;
+    const inCone = !guide && !off && side <= ahead * 2, score = ahead + side * 2.5 + (guide ? 600 : 0);
     if ((inCone && !cone) || (inCone === cone && score < bestScore)) { bestScore = score; best = el; cone = inCone; }
   }
   return best;
@@ -67,6 +73,9 @@ export function initMenu() {
       e.preventDefault(); // the page does not scroll under the cursor; focus() scrolls the new control into view
       cur.hidden = false;
       if (to && to !== a) { to.focus(); ui('cursor'); }
+      if (to && document.activeElement !== to) { // it wouldn't take focus after all: try the next one that way, not a dead key
+        const rest = list.filter(el => el !== to); const alt = here ? step(here, e.key, rest) : null; if (alt) { alt.focus(); }
+      }
       place();
     } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'z' || e.key === 'Z') {
       if (!a || !a.matches(ITEMS)) return;

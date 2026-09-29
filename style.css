@@ -1455,6 +1455,8 @@ button:disabled { cursor: not-allowed; }
   .page, .page-open, .page-shelf, .page-luck { grid-template-columns: minmax(0, 1fr); }
   .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1);
     border-width: 6px 0; border-image-width: 10px 0; }
+  /* the guide's strip over the bottom tabs (a step on another page) sits where the table's summary keys are: the table ends above it */
+  :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px - 64px); }
   /* panels keep the trim but thinner, so a 390 screen still has ~330px of content */
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
