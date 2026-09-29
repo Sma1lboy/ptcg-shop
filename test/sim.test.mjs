@@ -765,16 +765,42 @@ console.log('ok luck percentile');
   assert.ok(ms < 500, `hitTail on ${Object.values(big).reduce((a, b) => a + b, 0)} packs took ${ms.toFixed(0)} ms`);
   console.log(`ok hitTail: matches the per-pack DP (worst ${worst.toExponential(1)}); 9 rows over 90k packs in ${ms.toFixed(0)} ms`);
 }
-// luckPercentile draws a set with ≥ 1,000 packs 100 at a time from a pool of block sums: it must agree with the pack-by-pack
-// resampling it replaced (same 60k simulated packs per set, rebuilt here with the seed sim.ts uses), and take milliseconds.
+// luckPercentile at any pack count. (Replaces a test that checked block draws against resampling a 60k-pack pool: the pool itself was
+// the bug. Its mean was off by ~1/245 SD per pack, n packs multiplied that by n while the spread only grew as √n, and a 77k-pack save
+// read 66% where the true answer is 83%.) One pack's exact mean and variance are computed here from the card lists, independently of
+// sim.ts's sampler; the mean must equal packEV.
 {
-  const counts = { sv08: 2000 }, r0 = S.rng(0xC0FFEE ^ 'sv08'.length), pool = Float64Array.from({ length: 60000 }, () => S.packValue(S.openPack('sv08', r0)));
-  const r = S.rng(11), vs = Array.from({ length: 2000 }, () => { let v = 0; for (let i = 0; i < 2000; i++) v += pool[Math.floor(r() * pool.length)]; return v; }).sort((x, y) => x - y);
-  for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile(counts, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.03, `block-sampled percentile at pack-by-pack q=${q} came out ${got}`); }
-  const big = { sv08: 30000, 'sv08@1.05': 30000, sv10: 30000 }, ev = Object.entries(big).reduce((s, [k, n]) => s + n * S.packEV(k), 0);
-  S.luckPercentile(big, ev); const t0 = performance.now(); S.luckPercentile(big, ev); const ms = performance.now() - t0;
-  assert.ok(ms < 100, `luckPercentile on 90k packs took ${ms.toFixed(0)} ms`);
-  console.log(`ok luckPercentile: block draws agree with pack-by-pack resampling; 90k packs in ${ms.toFixed(0)} ms`);
+  const Phi = z => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+  const moments = key => {
+    const { id, m } = S.parseKey(key), set = PTCG_SETS.find(s => s.id === id), P = S.poolsFor(id), t = S.slotTables(set, m);
+    const list = k => { const ps = P[k].map(c => S.cardPrice(id, c.n, k)); return [ps.reduce((a, b) => a + b, 0) / ps.length, ps.reduce((a, b) => a + b * b, 0) / ps.length]; };
+    let mean = 0, v = 0;
+    const slot = pairs => { let m1 = 0, m2 = 0; for (const [p, k] of pairs) { const [a, b] = list(k); m1 += p * a; m2 += p * b; } mean += m1; v += m2 - m1 * m1; };
+    for (let i = 0; i < 4; i++) slot([[1, 'C']]); for (let i = 0; i < 3; i++) slot([[1, 'U']]);
+    for (const [tb, base] of [[t.rev1, 'REV'], [t.rev2, 'REV'], [t.rare, 'R']]) slot([...Object.entries(tb).map(([k, p]) => [p / 100, k]), [1 - Object.values(tb).reduce((a, b) => a + b, 0) / 100, base]]);
+    const fe = (set.rates.FE || 0) / 100, e = S.cardPrice(id, 'E', 'E'), f = S.cardPrice(id, 'E', 'FE');
+    mean += e + fe * (f - e); v += fe * (1 - fe) * (f - e) ** 2;
+    return { mean, v };
+  };
+  for (const set of PTCG_SETS) for (const key of [set.id, S.rateKey(set.id, 1.25)]) assert.ok(Math.abs(moments(key).mean - S.packEV(key)) < 1e-9, `packEV ${key} (the cosmos-foil Energy counts)`);
+  // The player's side counts the same cards (151 stocked directly, it unlocks later in the game): every pulled card (Energy and cosmos foil included) repriced from state.dex.
+  {
+    const mem = {}, Gv = createGame({ now: () => 1_700_000_000_000, random: S.rng(3), storage: { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } } });
+    Gv.state.stock['sv03.5'] = 60; const got = Gv.open('sv03.5', 60).flat();
+    assert.ok(got.some(c => c.kind === 'FE') && Math.abs(Gv.luck().value - S.packValue(got)) < 1e-6, 'luck value is every pulled card at the price openPack gave it');
+  }
+  // Large: 88k packs over three keys is a sum of 88k independent packs, so it is normal to within its skew (≈ 0.1 SD here).
+  const big = { sv08: 30000, 'sv08@1.05': 30000, 'sv08.5': 28000 };
+  let M = 0, V = 0; for (const k in big) { const x = moments(k); M += big[k] * x.mean; V += big[k] * x.v; }
+  for (const z of [-1.5, -1, 0, 1, 1.5]) { const got = S.luckPercentile(big, M + z * Math.sqrt(V)); assert.ok(Math.abs(got - Phi(z)) < 0.025, `88k packs at ${z} SD: ${got} vs normal ${Phi(z).toFixed(3)}`); }
+  // Medium: 1,000 packs (old bias ≈ 0.13 SD, invisible at 30 packs) against 800 players opening real packs with openPack.
+  const r = S.rng(4242), vs = Array.from({ length: 800 }, () => { let v = 0; for (let i = 0; i < 1000; i++) v += S.packValue(S.openPack('sv08.5', r)); return v; }).sort((x, y) => x - y);
+  for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile({ 'sv08.5': 1000 }, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.05, `1000 packs at true q=${q} came out ${got}`); }
+  // Cost doesn't grow with packs: 90k packs, and the slow middle (20 keys of ~1,500 packs: counts land in inversion and card-by-card picks).
+  const t0 = performance.now(); S.luckPercentile(big, M); const ms = performance.now() - t0;
+  const mid = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 1500], [S.rateKey(s.id, 1.25), 1500]])), t1 = performance.now(); S.luckPercentile(mid, 1e5); const ms2 = performance.now() - t1;
+  assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
+  console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
 
 // 街口 (GAMEPLAY.md §6.2): shop n stands on STREETS[n % 4]. The first shop (老街) is the old numbers exactly; later streets tilt
