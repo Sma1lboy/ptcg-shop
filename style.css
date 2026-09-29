@@ -175,19 +175,20 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
 .page-luck > #dex { grid-column: 1 / -1; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
-/* the five tabs and five readouts share one bar: below 1600 the readouts drop their names (icon + tooltip name them, as on phones) */
-@media (max-width: 1599px) { .sub dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .sub div { gap: 6px; } }
+/* the five tabs and five readouts share one bar: below 1760 the readouts drop their names (icon + tooltip name them, as on phones) */
+@media (max-width: 1759px) { .sub dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .sub div { gap: 6px; } }
 /* narrower, the readouts leave in reverse order of how much they tell you what to do next (all of them are on 货柜 too);
    货架 and 仓库 stay down to phones */
-@media (max-width: 1419px) { .sub [data-k="held"] { display: none; } }
-@media (max-width: 1299px) { .sub [data-k="sales"] { display: none; } }
-@media (max-width: 1199px) { .sub [data-k="rate"] { display: none; } }
-@media (min-width: 780px) and (max-width: 1099px) {
+@media (max-width: 1499px) { .sub [data-k="held"] { display: none; } }
+@media (max-width: 1399px) { .sub [data-k="sales"] { display: none; } }
+@media (max-width: 1299px) { .sub [data-k="rate"] { display: none; } }
+@media (min-width: 780px) and (max-width: 1199px) {
   .top { gap: 12px; }
   .brand { width: 48px; overflow: hidden; white-space: nowrap; text-indent: 60px; padding: 0; } /* the crest's fanned cards stay as the mark */
   .nav a { min-width: 0; padding: 0 10px; }
 }
-@media (min-width: 780px) and (max-width: 939px) { .nav a::before { display: none; } }
+@media (min-width: 780px) and (max-width: 939px) { .nav a::before { display: none; } .cash b { font-size: 24px; } .top { padding-inline: 12px; } }
+@media (min-width: 780px) and (max-width: 859px) { .sub [data-k="stock"] { display: none; } } /* the rail on 开包 lists the back room */
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
 }
