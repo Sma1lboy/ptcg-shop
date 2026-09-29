@@ -5,8 +5,9 @@ import type { DebtBeat } from './debt.ts';
 
 export type Who = 'jiu' | 'adou' | 'you' | ''; // '' = narration
 export type Bg = 'street' | 'shop' | 'dark';
-// Context the ui fills in before playing, already formatted: bill = the next bill's amount, week = its week, card/price = a pull, set = a set name
-export interface Ctx { bill?: string; week?: number; card?: string; price?: string; set?: string }
+// Context the ui fills in before playing, already formatted: bill = the next bill's amount, week = its week, card/price = a pull, set = a set name;
+// for 还清 / 开分店: bills = bills paid in this shop, fame = 名气 branching now would take, debt = what the (next) shop owes, shop = its number (1-based)
+export interface Ctx { bill?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number }
 export interface Line { who: Who; t: string | ((c: Ctx) => string) }
 export interface Scene { bg: Bg; lines: Line[] }
 
@@ -84,6 +85,42 @@ export const SCENES: Record<string, Scene[]> = {
       L('adou', '麻袋我洗过了。'),
     ] },
   ],
+  // the closing stretch: the next bill empties the opening debt (unless the player borrows again, so it is not called 「最后一张」)
+  last: [{ bg: 'shop', lines: [
+    L('jiu', '（翻了翻账本）下周那张付完，开店的本钱就清了。'),
+    L('jiu', '别在最后一周借钱。我见过的人里，最后一周借钱的，都不止借最后一周。'),
+    L('adou', '九姐的意思是：加油。'),
+  ] }],
+  // 债还清 (game.ts emits it once per shop): the payoff, then 九姐's offer, which is the 开分店 button
+  debt_cleared: [
+    { bg: 'shop', lines: [
+      L('', '最后一笔钱塞进九姐的信封。收银机叮了一声，跟卖出一包卡时一样。'),
+      L('jiu', '（按了很久的计算器）……对上了。'),
+      L('jiu', c => (c.bills ? `${c.bills} 张账，一张没赖。` : '一张没赖。')),
+      L('adou', '（从怀里摸出一张纸）你的借条。手印还是红的。'),
+      L('jiu', '撕了吧。这店从今天起是你的。'),
+      L('you', '……就这样？'),
+      L('jiu', '不然呢？放鞭炮？阿豆，把麻袋收起来。'),
+      L('adou', '（小声）九姐头一回让我把麻袋收起来。'),
+    ] },
+    { bg: 'street', lines: [
+      L('', '九姐走到门口，又停下来。'),
+      L('jiu', '城东有个铺面，比这间大。上一个老板……也说去进货了。'),
+      L('jiu', c => `本钱我出${c.debt ? `，${c.debt}` : ''}，照旧记账上。你在这攒的名气带得走${c.fame ? `——现在是 ${c.fame}` : ''}。`),
+      L('jiu', '不急。这店多开一天，你带走的就多一点。'),
+      L('', '债还清了：这家店不再有账单。「成长」页的「开分店」随时能去，这家店的营业额越高，带走的名气越多。'),
+    ] },
+  ],
+  // 开分店 (game.ts emits it with the new shop's debt): the same deal, but 九姐 knows your name now
+  branch: [{ bg: 'shop', lines: [
+    L('', c => `第 ${c.shop ?? 2} 家店。卷帘门拉上去，灰比上一家还厚。`),
+    L('adou', '这回没用麻袋。九姐说你是自己人了。'),
+    L('you', '自己人也要还钱？'),
+    L('jiu', c => `自己人也要还。本钱 ${c.debt ?? '照旧'}，还是分期、不算利息。`),
+    L('jiu', terms),
+    L('jiu', '名气是你的，账也是你的。开张吧，老板。'),
+    L('adou', '（小声）她对上一个老板说的是「开张吧」。后面没有「老板」。'),
+  ] }],
   // milestones (no debt needed)
   bigpull: [{ bg: 'shop', lines: [
     L('adou', '等等。'),
@@ -98,6 +135,9 @@ export const SCENES: Record<string, Scene[]> = {
     L('adou', '九姐的意思是：恭喜。'),
   ] }],
 };
+
+// the last line's button: what the player does next (default: back to the shop)
+export const END: Record<string, string> = { opening: '开张', branch: '开张', debt_cleared: '这店是我的了', bankrupt: '走吧' };
 
 export const BIG_PULL = 100; // a card at least this much (market) is the first 大货 阿豆 comes over for
 
