@@ -6,6 +6,7 @@
 // 2. A's set table: one row per set (系列·行情 | 仓库 | 货架 | 标价 | 开包), a subgrid table from 1280px, cards below. Only the next
 //    step for the set's state is the primary button: no stock → buy, stock but on no shelf → shelve, else → open.
 import { html, render, nothing } from 'lit-html';
+import { live } from 'lit-html/directives/live.js';
 import type { Shelf } from '../game.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
@@ -18,8 +19,10 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
   const s = G.state, id = r.id, per = G.DEPTH_STEP / FACES, filled = Math.ceil(r.qty / per), miss = id ? G.missed(id) : 0;
   const others = SETS.filter(x => G.unlocked(x.id) && x.id !== id), clerk = G.lvl('clerk') > 0; // with a clerk, a shelf can wait for the next round's buying
   const opt = (x: typeof SETS[number]) => { const st = s.stock[x.id] || 0, m = G.missed(x.id);
-    return html`<option value="${x.id}" ?disabled=${!st && !clerk}>${id ? '换成' : '摆'}${x.name}（${st ? `仓库 ${st}` : clerk ? '仓库没货，店员进货' : '仓库没货'}${m ? ` · ${m} 位没找到` : ''}）</option>`; };
+    return html`<option value="${x.id}" .selected=${live(false)} ?disabled=${!st && !clerk}>${id ? '换成' : '摆'}${x.name}（${st ? `仓库 ${st}` : clerk ? '仓库没货，店员进货' : '仓库没货'}${m ? ` · ${m} 位没找到` : ''}）</option>`; };
   const full = !!id && (s.stock[id] || 0) + r.qty > G.WAREHOUSE;
+  // Options bind .selected through live(): after a swap the same template re-renders, and lit's cache would skip re-selecting
+  // the current set, leaving the option the player clicked (now some other set) shown as chosen.
   return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'}" style="${id ? `--logo:url("${logoUrl(id)}")` : ''}">
       <p class="r-sign">${id ? G.setById(id).name : '空货架'}</p>
       <div class="r-boards" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
@@ -28,9 +31,9 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>卖空了</b>`}</span>` : html`<span class="muted">放 ${deep} 包</span>`}</p>
       ${miss ? html`<p class="r-miss" title="最近 ${MIN} 分钟，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${MIN} 分钟里 <b>${miss}</b> 位没买到</p>` : nothing}
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
-          ${id ? html`<option value="${id}" .selected=${true}>${G.setById(id).name}</option>` : html`<option value="-" .selected=${true} disabled>摆上…</option>`}
+          ${id ? html`<option value="${id}" .selected=${live(true)}>${G.setById(id).name}</option>` : html`<option value="-" .selected=${live(true)} disabled>摆上…</option>`}
           ${others.map(opt)}
-          ${id ? html`<option value="" ?disabled=${full}>${full ? '撤下（仓库放不下）' : '撤下，空出货架'}</option>` : nothing}</select>
+          ${id ? html`<option value="" .selected=${live(false)} ?disabled=${full}>${full ? '撤下（仓库放不下）' : '撤下，空出货架'}</option>` : nothing}</select>
         ${id ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="999" ?disabled=${!s.stock[id] || r.qty >= deep} title="从仓库补满">补满</button>` : nothing}</div>
     </li>`;
 }
