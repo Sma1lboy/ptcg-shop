@@ -98,9 +98,11 @@ function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, a
     if (L.price) { const nw = x.measureText(nm).width; x.font = `600 30px ${css('--font-tag')}`; x.fillText(L.price, tx + nw + 12, ly + 132); }
   }
   if (L.cert && L.bars) {
-    x.font = `20px ${css('--font-body')}`; const no = `No. ${L.cert}`, units = L.bars.reduce((a, b) => a + b, 0);
+    // barcode + number end at least a character (28 px) short of the grade's sub line: narrower bars first, then a shorter number
+    x.font = `20px ${css('--font-body')}`; const units = L.bars.reduce((a, b) => a + b, 0), fits = (t: string) => units * 1.5 + 14 + x.measureText(t).width <= room;
+    const no = [`No. ${L.cert}`, L.cert.replace(' ', ''), ''].find(t => !t || fits(t))!;
     const u = Math.max(1.5, Math.min(3, (room - 14 - x.measureText(no).width) / units)); let bx = tx; L.bars.forEach((w, i) => { if (!(i % 2)) { x.fillStyle = ink; x.fillRect(bx, ly + 150, w * u, 30); } bx += w * u; });
-    x.fillStyle = muted; x.fillText(no, bx + 14, ly + 173);
+    x.fillStyle = muted; if (no) x.fillText(no, bx + 14, ly + 173);
   }
   // card in its well
   const cx = (W - cw) / 2;
