@@ -21,7 +21,7 @@ function label(g: Grade) {
       ${g.best ? html`<p class="g-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></p>` : ''}
       <p class="g-cert">${barcode(g.bars)}<span>No. ${g.cert}</span></p>
     </div>
-    <p class="g-grade"><b>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
+    <p class="g-grade"><b class=${g.L.title.length > 3 ? 'long' : ''}>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
   </figure>`;
 }
 

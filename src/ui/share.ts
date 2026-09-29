@@ -147,8 +147,8 @@ async function drawPack(d: ShareSpec) {
   const art = await loadArt(d.best), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
   mat(x, W, H);
-  const y = slab(x, W, 48, 580, art, d.best.name, { k: `欧气卡铺 · ${d.set}${d.n > 1 ? ` × ${d.n} 包` : ''}`, what: d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : `这包开出 ${money(d.value)}`,
-    best: d.best.name, price: money(d.best.price), ...cert(`${d.set}|${d.n}|${Math.round(d.value * 100)}|${d.best.n}`), grade: top, gradeF: css('--font-tag'), sub: d.n > 1 ? '最好的一包' : '同系列的包里' });
+  const y = slab(x, W, 48, 580, art, d.best.name, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
+    best: d.best.name, price: money(d.best.price), ...cert(`${d.set}|${d.n}|${Math.round(d.value * 100)}|${d.best.n}`), grade: top, gradeF: css('--font-tag'), sub: d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里' });
   const diff = d.value - d.cost;
   x.textAlign = 'center';
   x.font = `30px ${body}`; x.fillStyle = mi; x.fillText(d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank, W / 2, y + 76);

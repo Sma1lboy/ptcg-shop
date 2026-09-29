@@ -277,6 +277,7 @@ button:disabled { cursor: not-allowed; }
 .g-best b { font: 600 var(--fs-body)/1 var(--font-tag); }
 .grade .g-cert { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
 .g-bar { width: 92px; height: 18px; flex: none; fill: var(--ink); }
+.g-cert span { white-space: nowrap; }
 .g-grade { display: grid; justify-items: end; text-align: right; }
 .g-grade b { font: 900 var(--fs-display)/1 var(--font-display); }
 .g-grade span { margin-top: 6px; font-size: var(--fs-body); font-weight: 600; }
@@ -448,6 +449,8 @@ button:disabled { cursor: not-allowed; }
   .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
   .tray figcaption { font-size: 9px; }
   .g-grade b { font-size: 36px; }
+  .g-grade b.long { font-size: 28px; }
+  .g-bar { width: 64px; }
   .grade { gap: 4px 14px; padding: 14px 16px; }
 }
 .tally td:nth-child(4) { padding-left: 8px; }
