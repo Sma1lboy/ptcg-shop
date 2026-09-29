@@ -365,6 +365,7 @@ console.log('ok luck percentile');
   const G = attach(createGame(env)), st = () => G.state, ids = got => got.map(a => a.id).sort();
   assert.equal(new Set(A.ACH.map(a => a.id)).size, A.ACH.length, 'achievement ids are unique');
   assert.ok(A.ACH.every(a => a.cash >= 0 && a.seal.length <= 4 && A.GROUPS.some(([g]) => g === a.group) && (a.group !== 'hidden' || a.hint)), 'every achievement has a reward ≥ 0, a short seal, a group, and a hint if hidden');
+  assert.ok(A.TIERS.every(([k]) => A.ACH.some(a => A.tier(a) === k)) && A.ACH.filter(a => A.tier(a) === 'black').every(a => !a.cash), 'every label stock has achievements; 黑标 are the honour-only ones');
   assert.deepEqual(A.check(G), [], 'a fresh shop has earned nothing');
 
   // One pack: 开张 is earned once, its reward paid once, and it is not revenue (set unlocks stay put).

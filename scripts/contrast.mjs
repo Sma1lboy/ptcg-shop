@@ -27,11 +27,12 @@ for (const [name, t] of [['light', light], ['dark', dark]]) {
     ['mat-ink', 'mat', 4.5], ['mat-muted', 'mat', 4.5], ['mat-gain', 'mat', 4.5], ['mat-loss', 'mat', 4.5], ['mat-gold', 'mat', 4.5],
     ['paper-ink', 'paper', 4.5], ['paper-muted', 'paper', 4.5], ['paper-gain', 'paper', 4.5],
     ['hud-ink', 'hud', 4.5], ['hud-muted', 'hud', 4.5], ['btn-ink', 'btn-face', 4.5], ['danger-ink', 'danger-face', 4.5],
-    ['ace', 'bg', 4.5], ['mat-ace', 'mat', 4.5], ['stock-ink', 'stock', 4.5]])
+    ['ace', 'bg', 4.5], ['mat-ace', 'mat', 4.5], ['stock-ink', 'stock', 4.5],
+    ['mat-ink', 'back-2', 4.5], ['mat-muted', 'back-2', 4.5], ['mat-gain', 'back-2', 4.5], ['foil-gold-3', 'back-2', 3]]) // 黑标: light print on the navy label, the grade in gold foil (large type: 3:1)
     check(ratio(t[a], t[b]) >= need, `${a} on ${b}: ${ratio(t[a], t[b]).toFixed(2)}:1 (≥ ${need})`);
   const dL = oklch(t.bg).L - oklch(t.mat).L;
   check(dL >= .1, `mat is the darkest surface: L(bg) − L(mat) = ${dL.toFixed(3)} (≥ 0.10)`);
-  for (const g of ['gold', 'mat-gold', 'fx-gold']) check(hueGap(t.sticker, t[g]) >= 20, `accent vs ${g} hue gap: ${hueGap(t.sticker, t[g]).toFixed(0)}° (≥ 20°)`);
+  for (const g of ['gold', 'mat-gold', 'fx-gold', 'foil-gold-1', 'foil-gold-3']) check(hueGap(t.sticker, t[g]) >= 20, `accent vs ${g} hue gap: ${hueGap(t.sticker, t[g]).toFixed(0)}° (≥ 20°)`);
   console.log(`     sticker on bg ${ratio(t.sticker, t.bg).toFixed(2)}:1 — below 3:1 the yellow control needs its --sticker-edge outline`);
 }
 process.exit(bad ? 1 : 0);
