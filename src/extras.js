@@ -12,14 +12,14 @@
     if (n >= 3) { el.hidden = true; return; }
     const cur = n ? 2 : stock ? 1 : 0;
     const steps = [
-      ['进货', `你有 ${money(s.cash)}。在货架点「进 10 包」。`],
+      ['进货', `你有 ${money(s.cash)}。点「进 10 包」，再点「全上架」，顾客才买得到。`],
       ['开包', '点「开 1 包」撕开，一张张翻，或按空格。'],
       ['测欧气', '开完看「欧气检测」：你的运气在几千个模拟玩家里排第几。可以生成分享图。'],
     ];
     el.hidden = false;
     el.innerHTML = `<h2 class="eyebrow">怎么玩</h2><ol>${steps.map(([h, p], i) =>
       `<li class="${i < cur ? 'done' : i === cur ? 'now' : ''}"><b>${i + 1} ${h}</b><span>${p}</span></li>`).join('')}</ol>
-      <p class="muted">卡价和开包概率都是真实统计；顾客会自己上门买货架上的整包，闲着也在赚钱。</p>`;
+      <p class="muted">卡价和开包概率都是真实统计；每位顾客有自己的来意和预算，嫌贵就走：上架的整包和展示柜里的卡自己定价。</p>`;
   }
 
   // ---------- share card ----------
