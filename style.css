@@ -1547,15 +1547,16 @@ button:disabled { cursor: not-allowed; }
 .story[open] { animation: dim .35s ease-out; }
 .story::backdrop { background: rgba(4, 8, 14, .8); }
 .story:focus-visible { outline: none; }
-.st-scene { position: absolute; inset: 0; background: var(--hud) center / cover no-repeat; animation: dim .6s ease-out; }
+/* the scene and the portraits are pixel art (public/gen/story, ~256 and ~170 px tall): scaled up with hard pixels */
+.st-scene { position: absolute; inset: 0; background: var(--hud) center / cover no-repeat; image-rendering: pixelated; animation: dim .6s ease-out; }
 .st-scene::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 45%, rgba(4, 8, 14, .78)); }
 .st-scene[data-bg="shop"] { background-image: url(gen/story/shop.webp); }
 .st-scene[data-bg="street"] { background-image: url(gen/story/street.webp); }
 .st-scene[data-bg="dark"] { box-shadow: inset 0 0 30vmin rgba(0, 0, 0, .8); } /* inside the sack */
-.st-who { position: absolute; bottom: 0; height: min(82vh, 760px); width: auto; pointer-events: none; user-select: none;
-  filter: brightness(.3) saturate(.5); transform: translateY(12px) scale(.97); transform-origin: 50% 100%; transition: filter .25s, transform .25s; }
+.st-who { position: absolute; bottom: 0; height: min(82vh, 680px); width: auto; pointer-events: none; user-select: none; image-rendering: pixelated;
+  filter: brightness(.35) saturate(.6); transform: translateY(12px); transition: filter .25s, transform .25s; }
 .st-who.left { left: max(0px, calc(50% - 700px)); } .st-who.right { right: max(0px, calc(50% - 700px)); }
-.st-who.on { filter: drop-shadow(0 0 22px var(--sel-glow)); transform: none; }
+.st-who.on { filter: none; transform: none; } /* the one speaking steps up into the light; the other waits in the dark, like BW's second trainer */
 /* the BW text box: white in both versions of the game, so white in both themes; pixel text at 2x with its hard shadow */
 .st-box { --panel: var(--paper); --ink: var(--paper-ink); --muted: var(--paper-muted); --ink-shadow: #CDD3DC; --frame: #3A4150; --frame-in: #C3CAD6; color: var(--ink);
   position: absolute; left: 50%; bottom: 28px; translate: -50% 0; width: min(900px, calc(100% - 32px)); min-height: 150px; padding: 22px 26px 18px;

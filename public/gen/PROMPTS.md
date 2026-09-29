@@ -63,33 +63,42 @@ UI 皮肤素材（上一版 DESIGN.md「皮肤」）。全部由 `gpt-image-2`�
 
 > （模板）+ Redraw exactly these three buttons in their PRESSED state, same size, same position, same rim, same screws, same outline as the reference: the enamel key is pushed down into the aluminium rim. The coloured lower lip strip under each button is gone (the key sits flush, no visible thickness). Each enamel face keeps its hue and is only slightly darker and flatter: button 1 stays clean lemon yellow (#EBC400, never mustard or gold), button 2 deep navy lacquer (#172647), button 3 dark oxide red (#5E1915). A thin dark inner shadow runs along the top and left inner edges of each face where the rim now overhangs it; no bright highlight on the face. The aluminium rim is unchanged. Empty flat face for a label. Fully transparent background, no checkerboard.
 
-# 剧情插画（public/gen/story/，src/ui/story.ts）
+# 剧情和角色（public/gen/story/，src/ui/story.ts）
 
-开场剧情和债主上门用的两张场景、两张立绘（DESIGN.md「剧情」）。全是原创角色，不像真人，不出现宝可梦的角色、卡面和 logo。同一段模板 + 各自的 SUBJECT；两张立绘前面再加一句 PORTRAIT，让两个人的线条和光一致。草稿（`--quality low`，模板相同）验证了画风和构图后出 high 定稿，草稿没提交。转换：场景 `cwebp -q 62 -resize 1280 0`，立绘 `--background transparent` 出 PNG 再 `cwebp -q 72 -alpha_q 80 -resize 0 900`。
+BW 风格的像素画：三张训练家式半身立绘（阿豆、九姐、店主）和两张场景（雨夜的街、倒闭的卡店）。全是原创角色和地方，不像任何官方角色，不画球形物体和宝可梦。同一段模板 + 立绘 / 场景各一句 + 各自的 SUBJECT，`gpt-image-2`，立绘 `--size portrait`、纯品红 #FF00FF 底，场景 `--size landscape`。草稿 `--quality low` 五张都出过一轮，画风、构图、调色板一次就对，没改提示词就出 high 定稿；草稿没提交。
+
+**还原成真像素**（`cut2.py`，没进仓库，要重出时照做；和图标的 `cut.py` 同一个取样法）：立绘先按品红键抠掉背景，从颜色边缘反推模型画的像素格距（4–24 px 之间最贴整数倍的那个，三张都在 8.6–9 左右），每格取中间 40% 的前景中位色，得到约 110×170 的真像素图；场景按 256 格宽强制取样（模型画场景时格距不够稳，反推不出来），得到 256×171。都存无损 webp（立绘约 17–20 KB，场景约 50–65 KB），页面上 `image-rendering: pixelated` 放大。
 
 ## 模板
 
-> Original noir-comedy graphic-novel illustration for a cutscene in an original trading-card-shop game. Bold confident ink brush linework, flat cel shading in two tones, fine halftone dots in the shadows. Palette strictly limited to card-back navy blues (#0E1A33 to #2A3F6E), warm shop-lamp white (#FFF3E4), desaturated paper grey, and one muted oxide-red accent (#6E1E1E); no purple, no neon, no gold. Single warm lamp key light from the upper-left, deep navy shadows. Slightly exaggerated comedic proportions, expressive, stylized adults, clearly drawn not photorealistic, not resembling any real person. No text, no letters, no numbers, no logos, no signage lettering, no Pokémon or any existing franchise characters or card art, no watermark.
+> Original pixel-art game art in the style of 2010 handheld monster-collecting RPGs (Nintendo DS era): original character and places, not copied from any existing game, not resembling any official character, no logos, no text, no letters, no numbers, no ball-shaped objects, no creatures. True pixel art: every pixel a crisp solid square scaled up with hard nearest-neighbour edges, no anti-aliasing, no gradients, no blur, no painterly texture. Light from the upper-left. Shared palette for every image in this game: charcoal #262B33 for outlines, off-white #F4F6F9, cool greys #C8CED8 #8C97A8 #59606D, sky blue #52B6F2, deep blue #2A74D0, navy #1D3F86, leaf green #3EC06E, coral red #E8483A, dark red #9A2A20, warm skin tones #F2C9A0 #D9A27A, dark hair #3A3030; no purple, no neon, no gold.
 
-PORTRAIT：
+立绘加：
 
-> Both character portraits in this game share one style: thick uniform black ink outlines, flat two-tone cel shading, halftone dots in the shadows, same line weight and same lighting from the upper-left.
+> A trainer battle sprite style half-body portrait (cut at the waist) on a 96 by 128 pixel grid: bold 1-pixel charcoal outline around the whole figure, flat cel shading with exactly two tones per material, big readable shapes, slightly chibi-leaning anime proportions like handheld RPG trainer sprites, expressive face. The figure fills the frame height. Background: completely flat pure magenta #FF00FF, nothing else behind the figure.
+
+场景加：
+
+> A full-screen background scene on a 256 by 160 pixel grid, like a handheld RPG town or indoor map shown from a low three-quarter angle, clean pixel clusters, no characters, the middle of the frame calm and uncluttered for people to stand in.
 
 ## SUBJECT
 
+### jiu.webp 九姐（站右边）
 
-### street.webp（landscape 1536x1024，high）
+> Jiu-jie, an original loan-shark boss woman in her late forties, stern and dry: sharp black bob with one grey streak, navy double-breasted coat draped over her shoulders, dark turtleneck, small red earrings, holding a small old desk calculator in one hand, thin unimpressed half-smile, half-lidded eyes, three-quarter view facing the left of the frame.
 
-> rainy night, a narrow old East Asian city side street: small shop fronts with blank unlettered signboards, air-conditioner units and tangled overhead wires, one small card shop with its rolling steel shutter pulled half down and a dim light inside, a dark unmarked van parked at the curb with headlights on and its side door slid open, puddles reflecting one streetlamp, wet asphalt, no people, wide establishing shot, the middle of the frame calm and uncluttered.
+### adou.webp 阿豆（站左边）
 
-### shop.webp（landscape，high）
+> A-Dou, an original loan-shark henchman in his twenties: very large and burly, buzz cut, small round sunglasses pushed up on his forehead, tight navy tracksuit with white side stripes, an empty burlap sack over one shoulder, a clear card sleeve with a blank card peeking from his chest pocket, a gentle worried expression that contradicts his size, three-quarter view facing the right of the frame.
 
-> interior of a small bankrupt trading-card shop at night, seen from behind the counter at eye level: empty metal shelves on the back wall, a dusty glass display case with navy aluminium trim, a counter with a worn rubber play mat, a few plain sealed booster packs in blank silver foil with no artwork, cardboard boxes, one hanging lamp over the counter casting a warm cone with dust floating in it, cobwebs, no people, the center of the frame left open for characters to stand in.
+### owner.webp 店主（玩家）
 
-### jiu.webp 九姐（portrait 1024x1536，high，透明底，站右边）
+> the shopkeeper, an original young adult card-shop owner in their early twenties, friendly and a bit tired, messy short brown hair, a green shop apron with a pocket over a white t-shirt, a pencil behind one ear, holding one sealed blank booster pack, three-quarter view facing the right of the frame.
 
-> Half-body character portrait of Jiu-jie, an original loan-shark boss woman in her late forties, stern and dry rather than glamorous: sharp black bob haircut with one grey streak, faint crow's feet, minimal makeup, oversized navy double-breasted coat draped over her shoulders, dark turtleneck, holding a small old desk calculator in one hand, thin unimpressed half-smile, half-lidded eyes, three-quarter view turned toward the left of the frame, cut at the waist, isolated on a fully transparent background.
+### street.webp
 
-### adou.webp 阿豆（portrait，high，透明底，站左边）
+> a rainy night street in an old East Asian city block: small shop fronts with blank unlettered signboards, air-conditioner units and overhead wires, one small card shop with its rolling steel shutter half down and a dim light inside, a dark unmarked van parked at the curb with its headlights on, puddles reflecting one streetlamp, rain streaks drawn as short pixel lines, deep navy night palette.
 
-> Half-body character portrait of A-Dou, an original loan-shark henchman in his twenties: very large and burly, buzz cut, small round sunglasses pushed up on his forehead, tight navy tracksuit, an empty burlap sack slung over one shoulder, a clear rigid card sleeve with a blank card peeking out of his chest pocket, a gentle worried expression that contradicts his size, three-quarter view turned toward the right of the frame, cut at the waist, isolated on a fully transparent background.
+### shop.webp
+
+> the inside of a small bankrupt trading-card shop at night seen from behind the counter: empty metal shelves on the back wall, a dusty glass display case, a counter with a worn play mat, a few plain sealed booster packs in blank silver foil, cardboard boxes, one hanging lamp casting a warm cone of light, cobwebs, dim navy shadows.
