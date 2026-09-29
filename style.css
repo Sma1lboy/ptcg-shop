@@ -239,7 +239,26 @@ button:disabled { cursor: not-allowed; }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
 
 /* luck detector: the verdict is one word in the card-name 黑体; the meter is a neutral ramp (colour belongs to money and rarity, not to rank) */
-.verdict { font: 900 var(--fs-display)/1.05 var(--font-display); margin: 4px 0 8px; }
+/* 欧气鉴定 (luck.ts label()): the verdict printed as the label of a graded-card slab: white label stock with the card-back navy
+   print and an inset navy frame, paper in both themes like the receipt. Left what was graded and the cert barcode, right the grade.
+   share.ts prints the same fields on the slab in the share image */
+.grade { --ink: var(--paper-ink); --muted: var(--paper-muted); --line-strong: rgba(20, 32, 58, .34);
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 20px; margin: 4px 0 16px; padding: 16px 20px;
+  background: var(--paper); color: var(--ink); border-radius: 3px;
+  box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 1px 2px rgba(0, 0, 0, .2); }
+.grade p { margin: 0; }
+.g-id { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-cap); line-height: 1.45; }
+.g-k { font-size: var(--fs-body); font-weight: 700; letter-spacing: .06em; }
+.g-best { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.g-best span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-best b { font: 600 var(--fs-body)/1 var(--font-tag); }
+.grade .g-cert { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
+.g-bar { width: 92px; height: 18px; flex: none; fill: var(--ink); }
+.g-grade { display: grid; justify-items: end; text-align: right; }
+.g-grade b { font: 900 var(--fs-display)/1 var(--font-display); }
+.g-grade span { margin-top: 6px; font-size: var(--fs-body); font-weight: 600; }
+.grade.blank { color: var(--muted); box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 6px var(--line-strong), 0 1px 2px rgba(0, 0, 0, .2); }
+.grade.blank .g-grade b { font-size: var(--fs-lg); color: var(--muted); }
 .verdict-sub { margin: 0 0 16px; color: var(--muted); }
 .verdict-sub b { color: var(--ink); }
 .meter { position: relative; display: flex; height: 10px; gap: 2px; }
@@ -410,7 +429,8 @@ button:disabled { cursor: not-allowed; }
   .stage { width: min(260px, 66vw); }
   .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
   .tray figcaption { font-size: 9px; }
-  .verdict { font-size: 38px; }
+  .g-grade b { font-size: 36px; }
+  .grade { gap: 4px 14px; padding: 14px 16px; }
 }
 .tally td:nth-child(4) { padding-left: 8px; }
 

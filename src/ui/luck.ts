@@ -1,22 +1,63 @@
-// 欧气检测: percentile among simulated players, meter, per-rarity tally with exact tail odds.
-import { html, render } from 'lit-html';
+// 欧气检测: the verdict as a grading label, percentile among simulated players, meter, per-rarity tally with exact tail odds.
+import { html, render, svg } from 'lit-html';
+import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, RAR, rarLabel } from './common.ts';
 
 const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
+export const pctText = (p: number) => p >= 99.5 ? '99.5+' : p.toFixed(0);
+
+// A cert number for what a label grades: a hash, so the same thing always prints the same number and one more pack a new one.
+// The barcode is drawn from its digits (bar and gap widths alternating, starting and ending on a bar).
+export function cert(of: string) {
+  let h = 2166136261;
+  for (const ch of of) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const d = String((h >>> 0) % 1e8).padStart(8, '0');
+  return { cert: `${d.slice(0, 4)} ${d.slice(4)}`, bars: [2, 1, 1, 1, ...[...d].flatMap(c => [1 + +c % 3, 1 + (+c >> 2 & 1), 1 + (+c >> 1 & 1), 1]), 1, 1, 2] };
+}
+
+// 欧气鉴定 (DESIGN.md「评级标签」): the verdict printed like the label on a graded-card slab. The page and the share image
+// (share.ts) print the same fields: what was graded (packs, sets, the best card), the grade word and percentile, a cert number.
+export function grade() {
+  const L = G.luck(), s = G.state, best = s.hits[0] || null;
+  const sets = SETS.filter(x => s.opened[x.id]).map(x => x.name);
+  return { L, pct: L.pct == null ? null : L.pct * 100, best, ...cert(`${L.packs}|${Math.round(L.value * 100)}|${best ? best.set + best.n : ''}`),
+    what: `${L.packs} 包 · ${sets.slice(0, 2).join(' · ')}${sets.length > 2 ? ` 等 ${sets.length} 个系列` : ''}`, short: `${L.packs} 包 · ${sets.length} 个系列` };
+}
+export type Grade = ReturnType<typeof grade>;
+
+function barcode(b: number[]) {
+  let x = 0;
+  const rects = b.map((w, i) => { const r = i % 2 ? null : svg`<rect x=${x} width=${w} height="1"></rect>`; x += w; return r; });
+  return html`<svg class="g-bar" viewBox="0 0 ${x} 1" preserveAspectRatio="none" aria-hidden="true">${rects}</svg>`;
+}
+
+function label(g: Grade) {
+  if (g.pct == null) return html`<figure class="grade blank"><div class="g-id"><p class="g-k">欧气卡铺 · 欧气鉴定</p><p>开几包就能鉴定</p></div>
+    <p class="g-grade"><b>待鉴定</b></p></figure>`;
+  return html`<figure class="grade" aria-label="欧气鉴定：${g.L.title}，超过 ${pctText(g.pct)}% 的模拟玩家">
+    <div class="g-id">
+      <p class="g-k">欧气卡铺 · 欧气鉴定</p>
+      <p>${g.what}</p>
+      ${g.best ? html`<p class="g-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></p>` : ''}
+      <p class="g-cert">${barcode(g.bars)}<span>No. ${g.cert}</span></p>
+    </div>
+    <p class="g-grade"><b>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
+  </figure>`;
+}
+
 // Exact binomial tail for one rarity: how likely a player is to be at least this lucky (or unlucky).
 function tailLabel(k: string, got: number, exp: number) {
   const p = S.hitTail(G.state.packsBy, k, got), pct = p * 100;
   return `${got >= exp ? '≥' : '≤'}${got}　${pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
 }
 export function renderLuck() {
-  const L = G.luck(), e = G.expectedTally(), t = G.state.tally;
-  const pct = L.pct == null ? null : L.pct * 100;
+  const g = grade(), L = g.L, e = G.expectedTally(), t = G.state.tally, pct = g.pct;
   const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 id="luck-h">欧气检测</h2>
-      <p class="verdict ${pct == null ? '' : pct >= 70 ? 'lucky' : pct < 30 ? 'unlucky' : ''}">${L.title}</p>
-      <p class="verdict-sub">${pct == null ? '开几包就能测。拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
-        : html`开了 ${L.packs} 包，开出总值超过 <b>${pct.toFixed(0)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
+      ${label(g)}
+      <p class="verdict-sub">${pct == null ? '拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
+        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
         ${BANDS.map(([a, b, n]) => html`<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`)}
         ${pct == null ? '' : html`<i style="left:${pct}%"></i>`}
