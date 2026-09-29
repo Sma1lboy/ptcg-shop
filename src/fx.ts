@@ -18,7 +18,7 @@ export function unlock() {
   const A = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext; if (!A) return;
   if (!ctx) {
     ctx = new A();
-    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4; comp.connect(ctx.destination);
+    const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -3; comp.knee.value = 3; comp.ratio.value = 12; // a limiter: transparent below −3 dB, so the opening keeps its dynamics comp.connect(ctx.destination);
     master = ctx.createGain(); master.gain.value = level(); master.connect(comp);
     buses = { mat: ctx.createGain(), shop: ctx.createGain(), amb: ctx.createGain() };
     buses.amb.gain.value = 0; Object.values(buses).forEach(b => b.connect(master));

@@ -911,6 +911,7 @@ button:disabled { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) { .grade.pop, .grade.pop .g-grade b { animation: none; } }
 @media (max-width: 779px) {
   .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .sound { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); } /* above the docked nav */
   .ach-pop { left: 16px; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); width: auto; max-width: 400px; margin-inline: auto; }
   .nav a { padding: 0 2px; }
 }

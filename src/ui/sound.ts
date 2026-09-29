@@ -30,7 +30,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
     if (sweep) play('sweep', FX.sweep);
     else if (sold.length && gate('till', GAP.till)) setTimeout(FX.till, rang ? 450 : 0); // the door first, then the till
   }
-  const b = debtBeat(ev, G); if (!b || (b.key && heard.has(b.key))) return;
+  const b = debtBeat(ev, G); if (hold || !b || (b.key && heard.has(b.key))) return; // held: bill_due comes again next tick, the rest play in their story
   heard.add(b.key); // bill_due fires every tick inside its window: one knock per bill ('' = loan/bankrupt, every time)
   if (b.kind === 'due') play('knock', FX.knock); // 九姐 at the shutter
   else if (b.kind === 'paid') { play('calc', () => FX.calc(5)); setTimeout(() => play('till', FX.till), 700); }

@@ -33,9 +33,9 @@ setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
 renderBasis(); bindLayout();
+initSound(); // after the boot tick: the hours the shop was closed ring nothing; before the story, which sets the opening's first scene
 initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();
 
 initGoals();
-initSound(); // after the boot tick: the hours the shop was closed ring nothing
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above
