@@ -23,10 +23,10 @@
 
   // ---------- header ----------
   function renderStats() {
-    const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0);
+    const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = Object.values(s.shelf).reduce((a, o) => a + o.qty, 0);
     const held = Object.values(s.singles).reduce((a, c) => a + c.price * c.count, 0);
     $('stats').innerHTML = [
-      ['现金', money(s.cash)], ['货架', `${stock} 包`], ['客流', `${(G.rate() * 60).toFixed(1)}/分`], ['来客', s.customers], ['手上单卡市值', money(held)],
+      ['现金', money(s.cash)], ['货架', `${shelf} 包`], ['仓库', `${stock} 包`], ['到店', `${(G.rate() * 60).toFixed(1)}/分`], ['成交', s.customers], ['手上单卡市值', money(held)],
     ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   }
 
@@ -34,23 +34,32 @@
   function renderShelf() {
     const s = G.state;
     $('shelf').innerHTML = SETS.map(set => {
-      const w = G.wholesale(set.id), ev = S.packEV(set.id), stock = s.stock[set.id] || 0;
-      const room = G.capacity() - stock, can = n => room > 0 && s.cash >= w * Math.min(n, room);
+      const w = G.wholesale(set.id), ev = S.packEV(set.id), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
+      const room = G.WAREHOUSE - stock, can = n => room > 0 && s.cash >= w * Math.min(n, room), shelfRoom = G.capacity() - onShelf, pct = G.pctOf(set.id);
       if (!G.unlocked(set.id)) return `<article class="set locked"><img class="logo" src="${logoUrl(set.id)}" alt="${esc(set.en)}" loading="lazy">
         <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
         <div class="set-stock">累计营业额 <b>${money(G.unlockAt(set.id))}</b> 解锁进货（现在 ${money(G.revenue())}）</div></article>`;
-      const heat = s.heat[set.id], sp = G.sealedPrice(set.id);
+      const heat = s.heat[set.id], mkt = G.sealedPrice(set.id), margin = G.ask(set.id) - w;
       return `<article class="set">
         <img class="logo" src="${logoUrl(set.id)}" alt="${esc(set.en)}" loading="lazy">
         <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
-        <div class="set-price"><span class="sticker">${money(sp)}</span>${heat ? `<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：柜台售价 ${heat > 1 ? '+15%' : '−10%'}（游戏设定）">${heat > 1 ? '热销' : '滞销'}</span>` : ''}
-          <span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 实测概率算出的单包期望">开出期望 ${money(ev)}</span></div>
-        <div class="set-stock">库存 <b>${stock}</b>/${G.capacity()} 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>
+        <div class="set-price"><span class="sticker" title="货架标价">${money(G.ask(set.id))}</span>${heat ? `<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销' : '滞销'}</span>` : ''}
+          <span>市价 ${money(mkt)}</span><span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 实测概率算出的单包期望">开出期望 ${money(ev)}</span></div>
+        <div class="set-stock">仓库 <b>${stock}</b>/${G.WAREHOUSE} · 货架 <b>${onShelf}</b>/${G.capacity()} 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>
         <div class="btns">
           <button type="button" data-act="buy" data-id="${set.id}" data-n="1" ${can(1) ? '' : 'disabled'}>进 1 包</button>
           <button type="button" data-act="buy" data-id="${set.id}" data-n="10" ${can(10) ? '' : 'disabled'}>进 10 包</button>
           <button type="button" class="primary" data-act="open1" data-id="${set.id}" ${stock ? '' : 'disabled'}>开 1 包</button>
           <button type="button" data-act="open10" data-id="${set.id}" ${stock ? '' : 'disabled'}>开 ${Math.min(10, stock) || 10} 包</button>
+        </div>
+        <div class="btns shelf-ctl" role="group" aria-label="${set.name} 货架">
+          <button type="button" data-act="shelve" data-id="${set.id}" data-n="10" ${stock && shelfRoom > 0 ? '' : 'disabled'}>上架 10</button>
+          <button type="button" data-act="shelve" data-id="${set.id}" data-n="999" ${stock && shelfRoom > 0 ? '' : 'disabled'}>全上架</button>
+          <button type="button" data-act="unshelve" data-id="${set.id}" data-n="999" ${onShelf ? '' : 'disabled'}>全撤下</button>
+          <span class="pricer"><button type="button" data-act="price" data-id="${set.id}" data-d="-1" aria-label="降价" ${pct <= G.MIN_PCT + 1e-9 ? 'disabled' : ''}>−</button>
+            <b title="标价占市价的比例">${Math.round(pct * 100)}%</b>
+            <button type="button" data-act="price" data-id="${set.id}" data-d="1" aria-label="涨价" ${pct >= G.MAX_PCT - 1e-9 ? 'disabled' : ''}>＋</button></span>
+          <span class="margin ${margin >= 0 ? 'gain' : 'loss'}" title="每包毛利 = 标价 − 进货价">每包 ${margin >= 0 ? '+' : '−'}${money(Math.abs(margin))}</span>
         </div>
       </article>`;
     }).join('');
@@ -148,7 +157,8 @@
   const ready = img => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
   const armThumb = (btn, c, peek) => { btn.classList.add('up'); btn.setAttribute('aria-label', c.name); if (peek) { btn.dataset.act = 'peek'; btn.removeAttribute('tabindex'); } };
 
-  function release() { if (hold) { hold = false; renderAll(); } }
+  function release() { if (hold) { hold = false; renderAll(); document.dispatchEvent(new Event('ptcg:release')); } }
+  window.PTCG_UI = { get hold() { return hold; } };
 
   // Flip time by rarity tier: bulk cards fly past, chase cards slow down. The last (rare) slot is always at least 1.2 s so a miss and a hit look the same until the flip lands.
   const FLIP_MS = [140, 380, 600, 900, 1300, 1300];
@@ -274,17 +284,17 @@
   }
 
   function renderCase() {
-    const s = G.state, t = s.trophy, tiers = G.CASE_PRICING;
+    const s = G.state, t = s.trophy;
     $('casepanel').innerHTML = `<h2 class="eyebrow">展示柜 ${s.shown.length}/${G.slots()} · 镇店之宝</h2>
-      <div class="tiers" role="group" aria-label="展示柜定价">${tiers.map((p, i) =>
-        `<button type="button" data-act="tier" data-i="${i}" aria-pressed="${s.casePrice === i}">${p.name} ${Math.round(p.mult * 100)}%</button>`).join('')}</div>
-      <p class="muted">逛柜台的顾客约 ${Math.round(G.BROWSE * 100)}%；${tiers[s.casePrice].name}档每位逛柜的顾客有 ${Math.round(tiers[s.casePrice].buy * 100)}% 会买下一张。价越高卖得越慢，占着柜位。</p>
+      <p class="muted">柜里每张卡自己定价（占市价的比例）。找卡的、收藏党会来翻柜；标得越高，肯买的人越少。</p>
       <ul class="singles">${s.shown.map((c, i) => `<li><span class="glyph t${rar(c).t}">${rar(c).g}</span>
-        <span class="s-name">${esc(c.name)}<small>${G.setById(c.set).name} #${c.n}</small></span>
-        <span class="s-count">${money(c.price * tiers[s.casePrice].mult)}</span>
+        <span class="s-name">${esc(c.name)}<small>${G.setById(c.set).name} #${c.n} · 市价 ${money(c.price)}</small></span>
+        <span class="pricer"><button type="button" data-act="cprice" data-i="${i}" data-d="-1" aria-label="降价" ${G.cardPct(c) <= G.MIN_PCT + 1e-9 ? 'disabled' : ''}>−</button><b>${Math.round(G.cardPct(c) * 100)}%</b>
+          <button type="button" data-act="cprice" data-i="${i}" data-d="1" aria-label="涨价" ${G.cardPct(c) >= G.MAX_PCT - 1e-9 ? 'disabled' : ''}>＋</button></span>
+        <span class="s-count">${money(G.cardAsk(c))}</span>
         <button type="button" data-act="unlist" data-i="${i}">撤下</button></li>`).join('') || '<li class="muted">空着。在单卡库存里点「上柜」。</li>'}</ul>
-      <div class="trophy">${t ? `<img src="${imgUrl(t)}" crossorigin="anonymous" alt="${esc(t.name)}"><span>${esc(t.name)} ${money(t.price)}<small>客流 +${Math.round(G.trophyBonus() * 100)}%，不会被卖掉</small></span>
-        <button type="button" data-act="untrophy">收回</button>` : '<span class="muted">没有镇店之宝。单卡越值钱，加成越高（上限 +50%）。</span>'}</div>`;
+      <div class="trophy">${t ? `<img src="${imgUrl(t)}" crossorigin="anonymous" alt="${esc(t.name)}"><span>${esc(t.name)} ${money(t.price)}<small>收藏党更常来、肯多付 ${Math.round(G.trophyBonus() * 60)}%，不会被卖掉</small></span>
+        <button type="button" data-act="untrophy">收回</button>` : '<span class="muted">没有镇店之宝。单卡越值钱，越能吸引收藏党（上限 +50%）。</span>'}</div>`;
   }
 
   function renderNotice() {
@@ -301,7 +311,10 @@
     $('sources').innerHTML = `<p>单卡价：TCGplayer 市价（经 <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>，${upd}）。
       开包概率：TCGplayer 实开统计 ${SETS.map(s => `<a href="${s.rateSource}" target="_blank" rel="noopener">${s.name}</a>（${s.sample.toLocaleString()} 包）`).join('、')}。
       整包市价：${SETS.map(s => `<a href="${s.priceSource}" target="_blank" rel="noopener">PriceCharting ${s.name}</a>`).join('、')}。</p>
-      <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%，平均每 ${Math.round(1 / G.CUSTOMERS_PER_SEC)} 秒来一位顾客（招牌每级 +${G.SIGN_STEP * 100}%）。卡图 © Pokémon / Nintendo / Creatures / GAME FREAK，本页仅供娱乐。</p>`;
+      <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%。
+      进货先进仓库（每系列 ${G.WAREHOUSE} 包），上架后才会卖；标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，货架每系列 ${G.SHELF_BASE} 包起，展示柜 ${G.CASE_BASE} 格起。
+      平均每 ${Math.round(1 / G.ARRIVAL)} 秒进来一位顾客，每位都有来意和预算：${Object.values(G.TYPES).map(t => `${t.name}最多肯付约 ${Math.round(t.tol * 100)}% 市价`).join('，')}（每人不同，招牌每级 +${G.SIGN_STEP * 100} 个百分点，倒爷不受影响；收藏党还看镇店之宝）。热销的系列顾客多一倍、滞销的少一半。
+      图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）。店员不领工资。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>`;
   }
 
   function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderCase(); renderNotice(); }
@@ -329,7 +342,10 @@
       case 'unlist': G.unlist(+b.dataset.i); break;
       case 'trophy': G.setTrophy(b.dataset.key); break;
       case 'untrophy': G.clearTrophy(); break;
-      case 'tier': G.setCasePrice(+b.dataset.i); break;
+      case 'shelve': G.shelve(id, +b.dataset.n); break;
+      case 'unshelve': G.unshelve(id, +b.dataset.n); break;
+      case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d * G.PCT_STEP); break;
+      case 'cprice': G.setCardPrice(+b.dataset.i, G.cardPct(G.state.shown[+b.dataset.i]) + +b.dataset.d * G.PCT_STEP); break;
       case 'up': G.upgrade(b.dataset.k); break;
       case 'ack': G.ackOffline(); break;
       case 'reset':
