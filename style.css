@@ -212,6 +212,9 @@ button:disabled { cursor: not-allowed; }
 .tab-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; vertical-align: 2px;
   background: var(--sticker); color: var(--sticker-ink); box-shadow: inset 0 0 0 1px var(--sticker-edge); font: 700 var(--fs-cap)/1 var(--font-body); }
 .tab-n[hidden] { display: none; }
+/* 货柜 dot: customers walked while you were elsewhere. News, not a button to press, so ink, not yellow; empty = a plain dot */
+.tab-dot { background: var(--ink); color: var(--bg); box-shadow: none; }
+.tab-dot.bare { min-width: 8px; height: 8px; padding: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* the playmat */
@@ -361,7 +364,7 @@ button:disabled { cursor: not-allowed; }
 .foot details { flex: 1 1 340px; min-width: 0; }
 .foot summary { cursor: pointer; color: var(--ink); font-size: var(--fs-body); font-weight: 600; padding: 6px 0; }
 .foot p { margin: 8px 0; max-width: 36em; line-height: 1.7; text-wrap: pretty; }
-.foot .ghost { margin-left: auto; }
+.foot .ghost { margin-left: auto; } .foot .ghost + .ghost { margin-left: 0; }
 
 /* pack opening: one big card on the stage, the pack as a tray, hit bursts (src/fx.js) */
 .slot:has(.card:not(.up)) figcaption { visibility: hidden; }
@@ -402,19 +405,20 @@ button:disabled { cursor: not-allowed; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-/* guide: three numbered steps over the shelf; position and weight mark the current one, no coloured bars */
-.guide { margin: 0 0 28px; }
-.guide[hidden] { display: none; }
-.guide ol { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 10px; }
-.guide li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; color: var(--muted); }
-.guide li i { grid-row: span 2; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 50%; font: 600 var(--fs-cap)/1 var(--font-body); font-style: normal; align-self: start; }
-.guide li b { font-weight: 500; }
-.guide li > span { display: none; }
-.guide li.now i { background: var(--ink); border-color: var(--ink); color: var(--bg); }
-.guide li.now b { color: var(--ink); font-weight: 600; }
-.guide li.now > span { display: block; color: var(--ink); }
-.guide li.done i { border-style: dashed; }
-.guide p { margin: 0; font-size: var(--fs-cap); }
+/* 新手引导: a popover pinned beside the button the step is about (src/ui/guide.ts places it). It floats, so it is a sleeve (--panel);
+   the button it points at gets a dashed ring, and the popover itself has no yellow: the yellow is the button you should press. */
+.coach { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px;
+  background: var(--panel); color: var(--ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .28); font-size: var(--fs-body); line-height: 1.6; overflow: visible; }
+.coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 6px); width: 10px; height: 10px; background: var(--panel); border: 1px solid var(--line-strong); transform: rotate(45deg); }
+.coach[data-side="below"]::before { top: -6px; border-right: 0; border-bottom: 0; }
+.coach[data-side="above"]::before { bottom: -6px; border-left: 0; border-top: 0; }
+.coach .co-k { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
+.coach h3 { margin: 2px 0 4px; font-size: var(--fs-h); }
+.coach h3 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); }
+.coach p { margin: 0; text-wrap: pretty; }
+.coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.coach-on { outline: 2px dashed var(--sticker-edge); outline-offset: 3px; }
+.nav a.coach-on { outline-offset: -6px; }
 
 /* share card (extras.js) */
 
@@ -495,6 +499,12 @@ button:disabled { cursor: not-allowed; }
 .c-rule .sticker { position: absolute; top: calc(var(--h) + var(--rail) - 1px); z-index: 1; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; }
 .c-rule small { position: absolute; top: calc(var(--h) + var(--rail) + 6px); font-size: var(--fs-cap); line-height: 1; color: var(--muted); white-space: nowrap; }
 .c-lo { left: 0; } .c-m { transform: translateX(-50%); }
+/* the rail is the price control: an invisible range input over the whole rail, its thumb 1px so a click lands on the step under
+   the pointer (the dots and the tag use the same full-width scale); the tag shows focus in its place */
+.c-set { position: absolute; inset: 0; z-index: 2; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
+.c-set::-webkit-slider-thumb { -webkit-appearance: none; width: 1px; height: 100%; }
+.c-set::-moz-range-thumb { width: 1px; height: 100%; border: 0; }
+.c-rule:has(.c-set:focus-visible) .sticker { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 .auto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .auto { gap: 4px; }
 .dx-h { display: flex; justify-content: space-between; }
@@ -569,7 +579,7 @@ button:disabled { cursor: not-allowed; }
 .rail-sets img { width: 56px; height: 32px; object-fit: contain; }
 .rs-name { font-weight: 600; line-height: 1.3; } .rs-name small { display: block; font-weight: 400; color: var(--muted); }
 .rs-btns { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
-.rail-more { margin: 12px 0 0; font-size: var(--fs-cap); } .rail-more a, .guide a { color: inherit; text-underline-offset: 3px; }
+.rail-more { margin: 12px 0 0; font-size: var(--fs-cap); } .rail-more a { color: inherit; text-underline-offset: 3px; }
 .rail-luck { display: grid; gap: 2px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
 .rail-luck span { font-size: var(--fs-cap); color: var(--muted); }
 .rail-luck b { font: 900 32px/1.1 var(--font-display); }
