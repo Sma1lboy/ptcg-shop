@@ -36,11 +36,12 @@ function watchDebt(G, clock) {
 // repay = pay loans back with what cash is above the reserve plus a float for stock (twice the next bill, at least $1,000), and buy no upgrade (but a shelf a set waits for) while a loan is out. clerkFirst = hire the clerk before any other upgrade. away = [minutes on, minutes off]: the player closes the page for the
 // off minutes (one catch-up tick on return, credited up to the offline cap), then plays the on minutes, and so on.
 // off = minutes of every hour the player leaves the page open without doing anything (the shop runs on its own; a clerk, if hired, restocks).
+// binder = keep hits under $25 in the counter binder for seekers (GAMEPLAY §14) instead of selling them to peers at 70% every visit.
 // heed = a player who reads the 店员没本钱 notes: buys no upgrade that leaves less than the clerk needs to fill the shelves (成长页
 // says so under the button), and presses 现在补货 whenever the clerk's last round came up short (货柜 page) and there is cash above the bill reserve.
 // spare = buys growth only out of 闲钱 (G.spare: cash beyond the next bill), as the 成长 badge counts (a shelf a set waits for excepted).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, heed = false, spare = false, log = 600, hook } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, heed = false, spare = false, binder = false, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), rows = [], buys = []; let spent = 0, pot = 0, rev = 0, t = 0, nextRow = 0;
   const debt = watchDebt(G, () => t);
   const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
@@ -58,7 +59,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     if (branch && G.canBranch() && (branch === 'paid' || G.revenue() >= branch)) { G.branch(); spent = 0; rev = 0; pot = 0; }
     for (let k; (k = Object.keys(G.PERKS).filter(k => G.perkCost(k) <= G.state.branch.fame).sort((a, b) => (b === 'regulars') - (a === 'regulars') || G.perkCost(a) - G.perkCost(b))[0]);) G.learnPerk(k); // 老主顾 first, then the cheapest
     G.sellBulk();
-    for (const [k, c] of Object.entries(G.state.singles)) if (c.price < 25) G.sell(k);
+    if (!binder) for (const [k, c] of Object.entries(G.state.singles)) if (c.price < 25) G.sell(k);
     if (G.state.overdue) { for (const k of Object.keys(G.state.singles)) G.sell(k); G.payBill(); } // short on a bill: sell every card to peers first
     for (const [k] of Object.entries(G.state.singles)) if (G.list(k)) G.state.shown[G.state.shown.length - 1].pct = cardPct;
     const bill = G.nextBill(), keep = reserve && bill && G.dueIn() < 300 ? bill.amount * reserve : 0, free = () => Math.max(0, G.state.cash - keep); // the last 5 minutes before a bill: cash kept back for it

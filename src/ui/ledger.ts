@@ -119,6 +119,7 @@ export function renderRaise() {
   const hits = sellPlan(Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, name: c.name, price: c.price, count: c.count })), short, rate);
   const caseP = sellPlan(s.shown.map((c, i) => ({ i, name: c.name, price: c.price, count: 1, ask: G.cardAsk(c) })), short, rate);
   const t = s.trophy, tGet = t ? t.price * rate : 0;
+  const backL = G.refundable(), backGet = backL.reduce((a, x) => a + x.cost * G.REFUND, 0), bname = (k: string) => (G.UPGRADES[k] || G.SKILLS[k]).name, blv = (k: string) => k in G.UPGRADES ? G.lvl(k) : G.skill(k);
   const stock = Object.entries(s.stock).filter(([, n]) => n > 0), back = stock.reduce((a, [, n]) => a + n, 0);
   const room = G.shelves().some(x => !x.id || x.qty < G.depth()), take5 = recentTake(300), onPace = take5 / 300 * Math.max(0, left);
   // opening: the back-room set whose one pack is likeliest to cover it all when its cards go to peers
@@ -139,7 +140,10 @@ export function renderRaise() {
   // the cheapest route that covers it all comes first (on a phone the sheet shows three rows before it scrolls)
   const rows: [string, unknown][] = [
     ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡本来就只能卖给同行', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
-    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比上柜（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
+    // 退回 (game.ts refundable): this week's levels back at REFUND — the same tenth a loan costs in a week, but it stops there
+    ['refund', backL.length ? row(backL.length > 1 ? `退回这周买的 ${backL.length} 样` : '退回这周买的', backL.map(x => `${bname(x.k)} Lv ${blv(x.k)}`).join('、'), `扣一成（${money(backL.reduce((a, x) => a + x.cost * (1 - G.REFUND), 0))}），和借一周的利息一样多，但不会再滚`, backGet,
+        html`${backL.map(x => html`<button type="button" data-act="refund" data-k="${x.k}">退回${bname(x.k)}</button>`)}`) : nothing], // events.ts routes data-act=refund
+    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比留在卡本里卖给找卡的（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
         html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],
     ['case', caseP.pick.length ? row(`撤下展示柜 ${caseP.pick.length} 张卖给同行`, cardsNote(caseP.pick), `柜台标价合计 ${money(caseP.pick.reduce((a, p) => a + p.c.ask, 0))}，少卖 ${money(lose.case)}`, caseP.got,
         html`<button type="button" class=${cls('case')} @click=${act(() => sellCase(caseP.pick.map(p => p.c.i)))}>撤下卖掉</button>`) : nothing],
