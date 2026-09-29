@@ -1,9 +1,10 @@
 // 成长 page, part 1: the incremental loop at a glance — shop level, the next thing cash can buy, what growth has bought so far,
-// and the next set that lifetime revenue unlocks — then 店铺升级 as pockets on a binder page.
-// Each pocket shows its level, current → next effect, and until it is affordable a bar filling toward the next price.
+// and the next set that lifetime revenue unlocks — then the 成长树: every upgrade and skill as a node on one of four lines.
+// A node shows its badge ringed with its levels, current → next effect, and until it is affordable a bar filling toward the price.
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, pips, logoUrl } from './common.ts';
+import { odds } from './skills.ts';
 
 const moneyOf = money;
 
@@ -150,9 +151,69 @@ export function renderUpgrades() {
     </header>
     ${milestones()}`, $('grow-top'));
   renderBranch();
-  render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
-    <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: G.canUpgrade(k) ? fxOf(k, l, UFX[k]) : [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
-      blocked: G.canUpgrade(k) ? '' : `口碑客流（图鉴 × 新系列）到 ×${G.CROWD_KNEE} 才能扩建（现在 ×${G.crowdRaw().toFixed(2)}）· 首级 ${money(G.upgradeCost(k)!)}` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
+  render(tree(G.canBranch() ? undefined : goal?.k), $('upgrades'));
+}
+
+// ---------- 成长树 ----------
+// Four lines by what they change in the shop. A line's rail is the 营业额 track's ink rail: it fills up to the last node with a
+// level, so it reads how far down that line you are — not an order to buy in. The only real prerequisites (带徒弟 needs 店员,
+// 扩建 needs 口碑客流 at G.CROWD_KNEE) are locked nodes that say what opens them.
+const LINES = [
+  { name: '货架', say: '摆几个系列、每架多少包、进货多便宜', ks: ['racks', 'depth', 'supplier'] },
+  { name: '客人', say: '进来多少人、肯付多少', ks: ['signage', 'talk', 'crowd', 'expand'] },
+  { name: '店员', say: '你不在柜台时谁看店', ks: ['clerk', 'apprentice', 'watch'] },
+  { name: '柜台', say: '单卡的柜位，和你自己开包的手气', ks: ['case', 'luck'] },
+];
+
+interface Node { k: string; act: string; name: string; desc: string; lv: number; max: number; cost: number | undefined; fx: [string, string]; end: string; blocked: string; gate?: [number, number] }
+function nodeOf(k: string): Node {
+  if (k in G.UPGRADES) {
+    const u = G.UPGRADES[k], lv = G.lvl(k), ok = G.canUpgrade(k);
+    return { k, act: 'up', name: u.name, desc: u.desc, lv, max: u.costs.length, cost: G.upgradeCost(k), fx: ok ? fxOf(k, lv, UFX[k]) : [UFX[k](lv), UFX[k](lv + 1)], end: UFX[k](u.costs.length),
+      blocked: ok ? '' : `口碑客流（图鉴 × 新系列）到 ×${G.CROWD_KNEE} 才能扩建`, gate: ok ? undefined : [G.crowdRaw(), G.CROWD_KNEE] };
+  }
+  const sk = G.SKILLS[k], lv = G.skill(k), max = G.skillMax(k);
+  return { k, act: 'learn', name: sk.name, desc: sk.desc, lv, max, cost: G.skillCost(k), fx: fxOf(k, lv, sk.fx), end: sk.fx(max), blocked: G.canLearn(k) ? '' : '先雇店员（店员 Lv 1）才能学' };
+}
+
+// The moment a level lands: its node stamps (badge pops, the new ring segment lights) for UP_MS, and sound.ts plays the stamp.
+// Tracked here by level rather than by click, so the ledger's buttons and 下一步 in the header stamp the node too.
+const UP_MS = 1200, seen = new Map<string, number>(), upAt = new Map<string, number>();
+function popped(k: string, lv: number) {
+  const was = seen.get(k), now = performance.now(); seen.set(k, lv);
+  if (was != null && lv > was) { upAt.set(k, now); document.dispatchEvent(new CustomEvent('ptcg:bought', { detail: k })); }
+  return now - (upAt.get(k) ?? -1e9) < UP_MS;
+}
+
+function node(n: Node, next: string | undefined, lit: boolean) {
+  const cash = G.state.cash, done = n.cost == null, can = !done && !n.blocked && cash >= n.cost!, free = can && n.cost! <= G.spare();
+  const back = G.refundable().find(x => x.k === n.k), up = popped(n.k, n.lv);
+  const st = done ? 'max' : n.blocked ? 'lock' : n.lv ? 'own' : 'new';
+  return html`<li class="tn ${st}${free ? ' can' : ''}${n.k === next ? ' next' : ''}${up ? ' up' : ''}${lit ? ' lit' : ''}" style="--lv:${n.lv};--max:${n.max}">
+    <span class="tn-badge" style="--i:url(gen/u-${n.k}.webp)" role="img" aria-label="${n.name} Lv ${n.lv}/${n.max}${done ? '，满级' : n.blocked ? '，锁着' : ''}"></span>
+    <p class="tn-top"><b>${n.name}</b><span class="gt-lv">Lv ${n.lv}<small>/${n.max}</small></span>${n.k === next ? html`<small class="tn-next">下一步</small>` : ''}</p>
+    <p class="gt-fx">${done ? n.fx[0] : html`${n.fx[0]} <span aria-hidden="true">→</span> <b>${n.fx[1]}</b>`}</p>
+    <p class="gt-desc">${n.desc}</p>
+    ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`<span class="gt-save" role="img" aria-label="口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}"><i style="width:${Math.min(100, n.gate[0] / n.gate[1] * 100)}%"></i></span><small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
+      : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
+        ${can ? billNote(n.cost!) : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / n.cost! * 100)}%"><i style="width:${Math.min(100, cash / n.cost! * 100)}%"></i></span><small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
+    ${back ? refundBtn(back.k, n.name, n.lv, back.cost) : ''}
+  </li>`;
+}
+
+function tree(next?: string) {
+  return html`<h2>成长树 <small>四条线，每一项是一个徽章，外圈一格一级</small></h2>
+    <div class="tree">${LINES.map(l => {
+      const ns = l.ks.map(nodeOf), lv = ns.reduce((a, n) => a + n.lv, 0), max = ns.reduce((a, n) => a + n.max, 0);
+      const reach = ns.reduce((a, n, i) => n.lv ? i : a, -1); // the rail is inked from the first node down to the last one with a level
+      return html`<section class="t-line" aria-label="${l.name}线">
+        <h3>${l.name}线 <small>${lv}/${max} 级</small></h3>
+        <p class="tl-say">${l.say}</p>
+        <ol>${ns.map((n, i) => node(n, next, i < reach))}</ol>
+        <p class="tl-end"><b>${lv === max ? '走到头了' : '走到头'}</b>${ns.map(n => n.end).join(' · ')}</p>
+        ${l.ks.includes('luck') ? odds() : ''}
+      </section>`;
+    })}</div>`;
 }
 
 // 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
