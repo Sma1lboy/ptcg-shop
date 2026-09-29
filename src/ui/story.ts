@@ -64,7 +64,7 @@ function draw() {
     <button type="button" class="ghost st-skip" @click=${(e: Event) => { e.stopPropagation(); end(); }}>跳过</button>
     <div class="st-box ${line.who ? '' : 'narr'}">
       ${line.who ? html`<p class="st-name ${SIDE[line.who] ?? ''}">${NAMES[line.who]}</p>` : nothing}
-      <p class="st-text" aria-live="polite"><span>${full.slice(0, cur.typed)}</span><span class="st-rest" aria-hidden="true">${full.slice(cur.typed)}</span></p>
+      <p class="st-text" aria-label=${full}><span aria-hidden="true">${full.slice(0, cur.typed)}</span><span class="st-rest" aria-hidden="true">${full.slice(cur.typed)}</span></p>
       <button type="button" class="st-next ${done ? 'ready' : ''}" autofocus @click=${(e: Event) => { e.stopPropagation(); next(); }}>${last && done ? '开张' : '继续'}</button>
     </div>`, dlg());
 }
@@ -97,6 +97,7 @@ export function initStory() {
   const d = dlg();
   d.addEventListener('click', e => { if (!(e.target as Element).closest('.st-skip')) next(); });
   d.addEventListener('cancel', e => { e.preventDefault(); end(); }); // Esc = skip
+  d.addEventListener('close', () => { if (cur) end(); }); // closed some other way: still release the guide
   G.on(onEmit);
   document.addEventListener('ptcg:release', () => setTimeout(flush, 600)); // after the pack's summary is on the mat
   document.addEventListener('click', e => { if ((e.target as Element).closest('[data-act="story"]')) play('opening', billCtx()); });

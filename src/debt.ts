@@ -24,6 +24,6 @@ export function debtBeat(ev: GameEvent | undefined, G: Game): DebtBeat | null {
   const e = (ev ?? {}) as Ev, kind = e.type ? KIND[e.type] : undefined;
   if (!kind) return null;
   const b = kind === 'due' ? bill(G) : null, week = num(e.week) ?? b?.week ?? weekNow(G), amount = num(e.amount) ?? b?.amount;
-  const key = kind === 'story' ? `story:${e.id}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${week ?? '?'}`; // '' = may play every time
+  const key = kind === 'story' ? `story:${e.id}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${week ?? amount ?? b?.dueAt ?? '?'}`; // '' = may play every time
   return { kind, key, week, amount, id: e.id };
 }

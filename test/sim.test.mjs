@@ -495,7 +495,7 @@ console.log('ok luck percentile');
     }
   }
   const g = createGame({ now: () => 0, random: S.rng(1), storage: { getItem: () => null, setItem() {} } });
-  assert.equal(D.bill(g), g.nextBill ? D.bill(g) : null);
+  if (!g.nextBill) assert.equal(D.bill(g), null); // no economy yet: nothing to read
   assert.equal(D.debtBeat(undefined, g), null); assert.equal(D.debtBeat({ open: [] }, g), null);
   const fake = Object.assign(Object.create(g), { nextBill: () => ({ week: 3, amount: 120, dueAt: 9 }) });
   const due = D.debtBeat({ type: 'bill_due' }, fake);
