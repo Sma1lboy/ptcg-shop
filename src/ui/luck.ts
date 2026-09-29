@@ -1,7 +1,8 @@
 // 欧气检测: the verdict as a grading label, percentile among simulated players, meter, per-rarity tally with exact tail odds.
 import { html, render, svg } from 'lit-html';
 import * as S from '../sim.ts';
-import { G, $, money, RAR, rarLabel } from './common.ts';
+import { G, $, money, rarLabel } from './common.ts';
+import { mark } from './card.ts';
 import { grade, pctText, type Grade } from './share.ts';
 
 const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
@@ -49,6 +50,6 @@ export function renderLuck() {
         <div><dt>进货成本</dt><dd>${money(L.cost)}</dd></div></dl>
       <p class="muted basis-note">开出市值按 TCGplayer <b>现在</b>的单卡市价重算，和模拟玩家同一口径${L.live ? '' : '（旧存档：早期开的包只能按开包当时的价格）'}。期望只有整包标价的 ${Math.round(L.expected / L.listEV * 100)}%，是因为标价里有密封溢价，见页脚「价格口径」。</p>
       <table class="tally"><thead><tr><th>稀有度</th><th>开出</th><th>期望</th><th title="按你开每一包时的概率（官方概率，有手气时是加成后的），开到这么多或更多（更少）的概率">开成这样的概率</th></tr></thead><tbody>
-        ${rows.map(k => html`<tr class="${(t[k] || 0) >= (e[k] || 0) ? 'up' : ''}"><td><span class="glyph">${RAR[k].g}</span>${rarLabel(k)}</td><td>${t[k] || 0}</td><td>${(e[k] || 0).toFixed(1)}</td><td>${tailLabel(k, t[k] || 0, e[k] || 0)}</td></tr>`)}
+        ${rows.map(k => html`<tr class="${(t[k] || 0) >= (e[k] || 0) ? 'up' : ''}"><td>${mark({ kind: k, r: k }, false)}${rarLabel(k)}</td><td>${t[k] || 0}</td><td>${(e[k] || 0).toFixed(1)}</td><td>${tailLabel(k, t[k] || 0, e[k] || 0)}</td></tr>`)}
       </tbody></table>` : ''}`, $('luck'));
 }
