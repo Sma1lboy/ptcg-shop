@@ -11,7 +11,7 @@ const set = (id?: string) => (id ? G.setById(id).name : '');
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 
 // A pack buyer who tore their packs open at the counter (收卡, GAMEPLAY §14): what came of it, after the packs they bought.
-const WHY: Record<string, string> = { low: '嫌你收得低', full: '卡本满了没收', owe: '欠着九姐的账没收', cash: '收银机的钱不够没收全' };
+const WHY: Record<string, string> = { low: '嫌你收得低', full: '卡本满了没收', owe: '欠着九姐的账没收', cash: '九姐快来收账了、钱要留着，没收全' };
 function counter(v: Visit) {
   if (v.offer == null) return '';
   if (!v.offer) return '，当场拆了，没出闪卡';

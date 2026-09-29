@@ -466,8 +466,11 @@ console.log('ok luck percentile');
   assert.ok(shop[3].net > shop[1].net * 2, 'income keeps growing, upgrades pay off');
   assert.ok(shop[3].up >= 5, `several upgrades bought within 3h (${shop[3].up})`);
   assert.ok(opener[3].net < shop[3].net, 'opening packs is a fun expense, not a money machine, even when hits are sold at +20%');
-  const lucky = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, luck: 'max', log: 3600, ...pay });
-  assert.ok(lucky[3].net < shop[3].net, `still a fun expense with 手气 maxed from the start ($${lucky[3].net} vs $${shop[3].net})`);
+  // 10 h, was 3 h: with the counter binder (GAMEPLAY §14) pulls ≥ $25 sell at 110% instead of waiting for a case slot, and at 3 h the
+  // 图鉴 walk-ins that early opening buys are front-loaded, so a luck-maxed opener draws level with the shop there (±3%; main already
+  // lost this on seed 4). Per pack it is a loss (the 单卡生意 block: 56% of market < 60%), and over 10 h it earns under half.
+  const lucky = play({ hours: 10, openShare: 0.05, pct: 0.92, cardPct: 1.2, luck: 'max', log: 3600, ...pay }), shop10 = play({ hours: 10, openShare: 0, pct: 0.92, log: 3600, ...pay });
+  assert.ok(lucky[10].net < shop10[10].net / 2, `still a fun expense with 手气 maxed from the start ($${lucky[10].net} vs $${shop10[10].net} at 10 h)`);
   console.log(`ok growth: net after 1h/3h = $${shop[1].net}/$${shop[3].net}; the same shop that opens 5% of its packs: $${opener[3].net}`);
   // Long game: a player who puts 2% of revenue into master sets has a next goal for hours, and it pays for itself.
   const ach = [], plain = play({ hours: 20, openShare: 0, pct: 1, log: 3600, ...pay }), chase = play({ hours: 20, openShare: 0, pct: 1, masterShare: 0.02, log: 3600, ...pay }); // 2% of the scaled revenue ≈ the dollars 10% was before the ×6 volume: card prices are market data and were not scaled
@@ -927,12 +930,12 @@ console.log('ok luck percentile');
   assert.ok(Math.abs(share - G.COUNTER_OPEN) < 0.1, `about COUNTER_OPEN of pack buyers tear at the counter (${share.toFixed(2)})`);
   assert.ok(offered.every(v => (v.floor <= G.buyPct() + 1e-9) === !!v.took || v.sell === 'full'), 'a seller takes your 收卡价 exactly when it clears their floor');
   const took = offered.reduce((a, v) => a + (v.took || 0), 0), paid = offered.reduce((a, v) => a + (v.paid || 0), 0);
-  assert.ok(took > 0 && took === st().bought.n && Math.abs(paid - st().bought.cost) < 0.01 && G.binderN() <= G.BINDER, `bought ${took} hits for $${paid.toFixed(2)}, binder ${G.binderN()}/${G.BINDER}`);
+  assert.ok(took > 0 && took === st().intake.n && Math.abs(paid - st().intake.cost) < 0.01 && G.binderN() <= G.BINDER, `bought ${took} hits for $${paid.toFixed(2)}, binder ${G.binderN()}/${G.BINDER}`);
   const accept = offered.filter(v => v.took).length / offered.length;
-  G.setBuyPct(G.BUY_MIN); const n0 = st().bought.n; go(300);
-  assert.ok(st().bought.n - n0 <= 2, `at ${G.BUY_MIN * 100}% hardly anyone sells (${st().bought.n - n0})`);
-  G.setBuyPct(1); st().overdue = { week: 1, amount: 1e9, inst: 0, until: Infinity }; const n1 = st().bought.n; go(120);
-  assert.ok(st().bought.n === n1 && st().recent.some(v => v.sell === 'owe'), 'nothing is bought while a bill is overdue');
+  G.setBuyPct(G.BUY_MIN); const n0 = st().intake.n; go(300);
+  assert.ok(st().intake.n - n0 <= 2, `at ${G.BUY_MIN * 100}% hardly anyone sells (${st().intake.n - n0})`);
+  G.setBuyPct(1); st().overdue = { week: 1, amount: 1e9, inst: 0, until: Infinity }; const n1 = st().intake.n; go(120);
+  assert.ok(st().intake.n === n1 && st().recent.some(v => v.sell === 'owe'), 'nothing is bought while a bill is overdue');
   st().overdue = null; go(600);
   assert.ok(G.binderN() === G.BINDER && st().recent.some(v => v.sell === 'full'), 'the binder fills and 收卡 stops there');
   // seekers: take up to SEEK_N cards from the binder at the 单卡标价, cheapest first
@@ -965,4 +968,16 @@ console.log('ok luck percentile');
   assert.deepEqual([p[0], p.at(-1), p.at(-2)], [3, 50, 50], 'the two cheapest went back to the binder');
   assert.equal(G.binderN(), 3, 'binder: the $1.50 and the two returned'); assert.equal(G.caseMoves(), 0);
   console.log('ok 换上大卡: a full case swaps in pricier binder cards, cheapest out first');
+}
+// The binder is shut while packs are being revealed (tick(busy)): their cards are in singles before they are flipped, and a seeker
+// must not buy one the player has not seen yet.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(8), storage: null }), st = () => G.state;
+  for (const k in G.TYPES) G.TYPES[k].w = k === 'seeker' ? 1 : 0;
+  for (const [k, n, r] of [['RR', 1.2, 'RR'], ['IR', 8, 'IR'], ['SIR', 30, 'SIR']]) st().singles[`sv08|${k}|${k}`] = { set: 'sv08', n: k, name: k, r, kind: k, price: n, count: 20 };
+  const n0 = G.binderN(); for (let i = 0; i < 120; i++) { T += 1000; G.tick(true); }
+  assert.equal(G.binderN(), n0, 'mid-reveal no seeker takes a card from the binder');
+  for (let i = 0; i < 120; i++) { T += 1000; G.tick(); }
+  assert.ok(G.binderN() < n0, 'and after it they do');
+  console.log(`ok 卡本 mid-reveal: shut for 2 min of ticks, then ${n0 - G.binderN()} cards sold`);
 }

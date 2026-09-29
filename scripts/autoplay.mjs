@@ -138,12 +138,12 @@ export function noob({ hours = 5, seed = 1, log = 1800 } = {}) {
 
 // The four kinds of player in GAMEPLAY.md「难度」, each over `seeds` seeds for `hours` of real time.
 export const KINDS = {
-  纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
-  普通: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, binder: true, log: 3600 }), // looks in every 90 s with the page open (ticks under G.AWAY apart are no absence), prices at market
-  爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
-  开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
+  纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
+  普通: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, log: 3600 }), // looks in every 90 s with the page open (ticks under G.AWAY apart are no absence), prices at market
+  爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
+  开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
   新手乱点: s => noob({ hours: s.hours, seed: s.seed }),
-  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, binder: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
+  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
 };
 export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } = {}) {
   return kinds.map(k => {

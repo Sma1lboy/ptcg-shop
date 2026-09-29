@@ -150,7 +150,7 @@ function sellerNote(vs: Visit[]) {
   const note = full && G.binderN() >= G.BINDER ? html`<b>卡本满了（${G.BINDER} 张）</b>，${full} 位没收成：大卡上柜、单卡标价降一档，或者卖一些给同行`
     : owe ? html`欠着九姐的账，${owe} 位的卡没收：账付了才收`
     : low > got.length ? html`按 ${pc(pct)} <b>${low} 位嫌你收得低</b>${up ? `，提到 ${pc(pct + G.PCT_STEP)} 能多收 ${up} 位` : ''}`
-    : html`收来的卡按单卡标价 ${pc(G.casePct())} 卖，每张赚市价的 ${Math.round((G.casePct() - pct) * 100)} 个百分点${cash ? `；${cash} 位的卡钱不够没收全` : ''}`;
+    : html`收来的卡按单卡标价 ${pc(G.casePct())} 卖，每张赚市价的 ${Math.round((G.casePct() - pct) * 100)} 个百分点${cash ? `；${cash} 位的卡没收全：九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机的钱先留够那张账` : ''}`;
   return html`<div class="c-row c-sellers"><b>来卖卡的（拆包玩家当场拆）</b><span class="c-n">${tally([['来问', vs.length], ['卖给你', got.length], ['嫌收得低', low]])}</span></div>
     ${priceRail('buy', vs, 0)}
     <p class="c-note">${n ? `收了 ${n} 张闪卡，花 ${money(paid)}。` : ''}${note}。</p>`;
@@ -162,7 +162,7 @@ function customers() {
   const since = Date.now() - G.MISS_WINDOW * 1000, rec = G.state.recent.filter(v => v.at > since), n = rec.length; // the shelf wall's window
   const atCase = rec.filter(v => v.r === 'none' && (v.t === 'seeker' || v.t === 'collector')).length, none = count(rec, 'none');
   const tab = (el: HTMLElement, k: number, what: string) => { el.hidden = !k; render(html`${k}<span class="visually-hidden"> 位${what}</span>`, el); };
-  tab($('n-packs'), none - atCase, '没买到整包'); tab($('n-case'), atCase, '在展示柜没找到');
+  tab($('n-packs'), none - atCase, '没买到整包'); tab($('n-case'), atCase, '在展示柜和卡本没找到');
   const quiet = html`<p class="muted">${G.state.cust.visits ? `${lately()}还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
   if (!n) { render(html`<span class="muted">顾客：${G.state.cust.visits ? `${lately()}还没有人进门` : '还没有人来过'}</span>`, $('cust-head')); render(html`<h2>顾客 · 来买整包的</h2>${quiet}`, $('customers')); render(html`<h2>顾客 · 单卡</h2>${quiet}`, $('case-cust')); return; }
   const [sold, pricey] = ['sold', 'pricey'].map(r => count(rec, r));
