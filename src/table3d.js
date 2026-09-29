@@ -75,8 +75,8 @@ function canvasTex(c, color = true) {
   t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t;
 }
 const loadImg = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.decoding = 'async'; i.onload = () => res(i); i.onerror = () => res(null); i.src = url; });
-// The display face (--font-display, Noto Sans SC 900 from Google Fonts) is split into unicode-range slices: load the slices
-// for every glyph painted with it before painting, or the canvas silently keeps the system fallback. Offline: give up after 2.5 s.
+// The display face (--font-display, the BW pixel face) arrives after first paint (font-display: swap): load it for every glyph
+// painted with it before painting, or the canvas silently keeps the system fallback. Offline: give up after 2.5 s.
 let fontsP = null;
 const fonts = () => (fontsP ||= Promise.race([
   document.fonts?.load(`900 100px ${DISP()}`, '欧气卡铺' + SETS.map(s => s.name).join('')) || null,
@@ -1338,7 +1338,7 @@ function relayout() {
 // ---------- table, theme ----------
 // The counter the player stands behind (DESIGN.md「题材」): a laminate top with a bevelled edge and an aluminium trim, the shop's
 // rubber playmat on it, and at the back what a card counter holds: a glass countertop showcase with graded slabs, a binder, a stack of toploaders, a pack of sleeves. Colours come from tokens (laminate = --bg, binder = card-back navy,
-// aluminium trim = --trim, the skin's navy anodized case frame); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
+// counter trim = --frame, the rim colour of the BW windows); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
 // None of the props casts a shadow; the whole world is ~16 draw calls.
 let world0 = null; // theme-dependent textures: { laminate canvas, mat canvas, binder canvas, materials }
 function drawMat(c) {
@@ -1420,7 +1420,7 @@ function world() {
   const matC = canvasOf(1536, Math.round(1536 * MH / MW)), matMap = canvasTex(matC); matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5);
   const binC = canvasOf(512, 600), binMap = canvasTex(binC);
   grain.repeat.set(1 / 5, 1 / 5);
-  const metal = new T.MeshStandardMaterial({ color: css('--trim'), metalness: 1, roughness: .36, envMapIntensity: 1.3 }); // anodized: satin, not mirror
+  const metal = new T.MeshStandardMaterial({ color: css('--frame'), metalness: 1, roughness: .36, envMapIntensity: 1.3 }); // anodized: satin, not mirror
   // Glass only adds light: a black body blended additively leaves what's behind it as it is and puts back the reflections, and
   // those rise at grazing angles on their own. A white body at 10% was a milky fog over the slabs, a white box at the phones' pitch.
   const glass = new T.MeshPhysicalMaterial({ color: 0x000000, transparent: true, blending: T.AdditiveBlending, roughness: .04, metalness: 0, envMapIntensity: 1.3, depthWrite: false });

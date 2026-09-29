@@ -13,6 +13,7 @@
 | CodePen 单文件 | `npm run pen` → `dist/pen.html`，超过 1,000,000 字符构建直接失败 |
 | 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
 | 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
+| 像素字 | `node scripts/pixel-font.mjs`（加了新文案后重切字体子集，要 `uv`）；`--check` 列出源码里有、字体里没有的字，缺就退出 1 |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
@@ -61,7 +62,7 @@
 | `src/ui/rail.ts` | 开包页右边的窄栏：仓库里的包（换系列开）、欧气结论 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
-| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
+| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast）、像素字子集（pixel-font） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

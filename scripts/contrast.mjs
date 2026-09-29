@@ -28,8 +28,11 @@ for (const [name, t] of [['light', light], ['dark', dark]]) {
     ['paper-ink', 'paper', 4.5], ['paper-muted', 'paper', 4.5], ['paper-gain', 'paper', 4.5],
     ['hud-ink', 'hud', 4.5], ['hud-muted', 'hud', 4.5], ['btn-ink', 'btn-face', 4.5], ['danger-ink', 'danger-face', 4.5],
     ['ace', 'bg', 4.5], ['mat-ace', 'mat', 4.5], ['stock-ink', 'stock', 4.5],
-    ['mat-ink', 'back-2', 4.5], ['mat-muted', 'back-2', 4.5], ['mat-gain', 'back-2', 4.5], ['foil-gold-3', 'back-2', 3]]) // 黑标: light print on the navy label, the grade in gold foil (large type: 3:1)
+    ['mat-ink', 'back-2', 4.5], ['mat-muted', 'back-2', 4.5], ['mat-gain', 'back-2', 4.5], ['foil-gold-3', 'back-2', 3], // 黑标: light print on the navy label, the grade in gold foil (large type: 3:1)
+    ['frame', 'bg', 3], ['frame', 'panel', 3], ['sel', 'bg', 3], ['sel', 'panel', 3], // the double frame's rim and the menu cursor are UI boundaries (WCAG 1.4.11)
+    ['hp-hi', 'hud', 3], ['hp-mid', 'hud', 3], ['hp-lo', 'hud', 3], ['exp', 'hud', 3]]) // HP / EXP fills against their dark track
     check(ratio(t[a], t[b]) >= need, `${a} on ${b}: ${ratio(t[a], t[b]).toFixed(2)}:1 (≥ ${need})`);
+  check(ratio(t.ink, t['ink-shadow']) >= 4.5 && ratio(t['ink-shadow'], t.panel) < 1.6, `pixel text shadow sits behind the ink (${ratio(t.ink, t['ink-shadow']).toFixed(2)}:1) and stays faint on the panel (${ratio(t['ink-shadow'], t.panel).toFixed(2)}:1 < 1.6)`);
   const dL = oklch(t.bg).L - oklch(t.mat).L;
   check(dL >= .1, `mat is the darkest surface: L(bg) − L(mat) = ${dL.toFixed(3)} (≥ 0.10)`);
   for (const g of ['gold', 'mat-gold', 'fx-gold', 'foil-gold-1', 'foil-gold-3']) check(hueGap(t.sticker, t[g]) >= 20, `accent vs ${g} hue gap: ${hueGap(t.sticker, t[g]).toFixed(0)}° (≥ 20°)`);
