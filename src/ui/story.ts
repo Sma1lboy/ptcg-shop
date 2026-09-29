@@ -8,8 +8,9 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money } from './common.ts';
 import { SETS } from '../sets.ts';
 import { hold } from './mat.ts';
-import { SCENES, NAMES, END, BIG_PULL, sceneFor, type Ctx, type Seen, type Who } from '../story.ts';
+import { SCENES, NAMES, END, BIG_PULL, sceneFor, slipFor, SLIP_NOTES, SLIP_LOAN, SLIP_LATE, type Ctx, type Seen, type Who } from '../story.ts';
 import { bill, inDebt, debtBeat } from '../debt.ts';
+import { printSlip } from './notice.ts';
 
 const KEY = 'ptcg.story';
 let seen: Seen = {};
@@ -26,12 +27,16 @@ const billCtx = (): Ctx => { const b = bill(G); return b ? { bill: money(b.amoun
 const text = (c: NonNullable<typeof cur>) => { const t = SCENES[c.id][c.scene].lines[c.line].t; return typeof t === 'string' ? t : t(c.ctx); };
 
 export function play(id: string, ctx: Ctx = {}, key?: string) {
-  if (!SCENES[id] || queue.some(q => q.id === id)) return;
+  if (!SCENES[id] || cur?.id === id || queue.some(q => q.id === id)) return; // e.g. the lapse's loan and the bailout's right after it: one scene
   queue.push({ id, ctx, key }); flush();
 }
 function flush() {
   if (cur || hold || !queue.length) return;
   const q = queue.shift()!;
+  if (q.id === 'missed') { // read when it starts (a reveal may have held it): already paid or borrowed → nothing to say
+    const o = G.state.overdue; if (!o) return flush();
+    q.ctx = { ...q.ctx, short: money(Math.max(0, o.amount - G.state.cash)), rate: `${Math.round(G.loanRate() * 100)}%` };
+  }
   seen[q.id] = 1; if (q.key) seen[q.key] = 1; save(); // marked on start, so skipping counts as seen
   cur = { id: q.id, ctx: q.ctx, scene: 0, line: 0, typed: 0 };
   draw(); dlg().showModal(); type();
@@ -72,8 +77,17 @@ function draw() {
 }
 
 // milestones that need no debt: the first 大货 pulled, and each set newly unlocked (baseline taken at start, so old saves don't replay)
+// forced: a forced loan just settled the bill that is about to be paid (loan_taken comes right before bill_paid);
+// missedWeek: the week whose bill went overdue, so its bill_paid is late
+let forced = 0, missedWeek = 0;
 function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
-  const b = debtBeat(ev, G), id = sceneFor(b, seen);
+  const b = debtBeat(ev, G), late = b?.kind === 'paid' && !!b.week && b.week === missedWeek, id = sceneFor(b, seen, late);
+  if (b?.kind === 'missed') missedWeek = b.week ?? 0;
+  if (b?.kind === 'loan' && b.forced) forced = b.amount ?? 0;
+  else if (b) {
+    if (slipFor(b, seen, late)) printSlip({ week: b.week ?? 0, amount: b.amount ?? 0, borrowed: forced, note: forced ? SLIP_LOAN : late ? SLIP_LATE : SLIP_NOTES[(b.week ?? 0) % SLIP_NOTES.length] });
+    if (b.kind === 'paid') forced = 0;
+  }
   if (id === 'branch') { seen.sets = unlockedSets().length; save(); } // the new shop relocks the later sets: each unlock plays again
   if (b && id) play(id, b.kind === 'story' ? { ...storyCtx(), ...(b.set ? { set: G.setById(b.set).name, fame: G.HAND_FAME } : {}) } : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);
   const big = ev?.open?.flat().filter(c => c.price >= BIG_PULL).sort((a, c) => c.price - a.price)[0];
