@@ -14,9 +14,24 @@ const UFX: Record<string, (lv: number) => string> = {
   depth: lv => `每架 ${G.DEPTH_BASE + G.DEPTH_STEP * lv} 包`,
   case: lv => `${G.CASE_BASE + G.CASE_STEP * lv} 个柜位`,
   supplier: lv => `进货打 ${+((G.WHOLESALE - G.WHOLESALE_STEP * lv) * 10).toFixed(1)} 折`,
-  expand: lv => `客流上限 ×${G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv}`,
+  expand: lv => `客流上限 ×${G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv}`, // the tile shows walk-ins instead (fxOf); this is the 目标 line's words when blocked
   clerk: lv => ['没有店员', '巡货架，补到半满', '补满，卖散卡'][lv],
 };
+
+// 人气 and 扩建 act through the 客流上限: past it, +10% 人气 can be +1% walk-ins. Their pockets show the walk-ins a level really
+// gives (G.peek), the others their own words, which are exact.
+const perMin = (r: number) => `进店 ${(r * 60).toFixed(1)} 人/分`;
+export function fxOf(k: string, lv: number, words: (lv: number) => string): [string, string] {
+  return k === 'crowd' || k === 'expand' ? [perMin(G.rate()), perMin(G.peek(k, G.rate))] : [words(lv), words(lv + 1)];
+}
+
+// When a cash buy would leave less than the bill 九姐 collects next: the bill is paid from the till, so say it before the click.
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+export function billNote(cost: number) {
+  const b = G.nextBill(), cash = G.state.cash;
+  if (!b || cash < cost || cash - cost >= b.amount) return '';
+  return html`<p class="gt-bill">买完剩 ${moneyOf(cash - cost)}，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b.amount)}</p>`;
+}
 
 // One upgrade, skill or 名气 perk pocket. fx = what the current / next level does. have / price = what pays for it (cash by default).
 export function tile(o: { name: string; tag?: string; desc: string; lv: number; max: number; cost: number | null | undefined; fx?: [string, string]; act: string; k: string; blocked?: string; have?: number; price?: (v: number) => string }) {
@@ -28,7 +43,7 @@ export function tile(o: { name: string; tag?: string; desc: string; lv: number; 
       <p class="gt-desc">${o.desc}</p>
       ${done ? html`<p class="gt-done">满级</p>` : o.blocked ? html`<p class="gt-done">${o.blocked}</p>`
         : html`<div class="gt-buy"><button type="button" data-act="${o.act}" data-k="${o.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${o.lv + 1} · </span>${money(o.cost!)}</button>
-          ${can ? '' : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / o.cost! * 100)}%"><i style="width:${Math.min(100, cash / o.cost! * 100)}%"></i></span><small>还差 ${money(o.cost! - cash)}</small>`}</div>`}
+          ${can ? (o.have == null ? billNote(o.cost!) : '') : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / o.cost! * 100)}%"><i style="width:${Math.min(100, cash / o.cost! * 100)}%"></i></span><small>还差 ${money(o.cost! - cash)}</small>`}</div>`}
     </li>`;
 }
 
@@ -38,9 +53,21 @@ export const pad = (n: number) => n % 2 ? html`<li class="gtile empty" aria-hidd
 // Everything cash can level, as one list: the goal the header points at is the cheapest of these.
 function buyables() {
   return [
-    ...Object.entries(G.UPGRADES).filter(([k]) => G.canUpgrade(k)).map(([k, u]) => ({ k, act: 'up', name: u.name, lv: G.lvl(k), cost: G.upgradeCost(k), fx: UFX[k] })),
-    ...Object.entries(G.SKILLS).filter(([k]) => G.canLearn(k)).map(([k, s]) => ({ k, act: 'learn', name: s.name, lv: G.skill(k), cost: G.skillCost(k), fx: s.fx })),
-  ].filter(b => b.cost != null) as { k: string; act: string; name: string; lv: number; cost: number; fx: (lv: number) => string }[];
+    ...Object.entries(G.UPGRADES).filter(([k]) => G.canUpgrade(k)).map(([k, u]) => ({ k, act: 'up', name: u.name, lv: G.lvl(k), cost: G.upgradeCost(k), fx: fxOf(k, G.lvl(k), UFX[k]) })),
+    ...Object.entries(G.SKILLS).filter(([k]) => G.canLearn(k)).map(([k, s]) => ({ k, act: 'learn', name: s.name, lv: G.skill(k), cost: G.skillCost(k), fx: fxOf(k, G.skill(k), s.fx) })),
+  ].filter(b => b.cost != null) as { k: string; act: string; name: string; lv: number; cost: number; fx: [string, string] }[];
+}
+
+// The header's 下一步, by rule rather than just the cheapest: a shelf while an unlocked set has none to go on; otherwise the
+// cheapest level that changes the running shop. 看店 only pays someone who closes the page and 手气 only someone who opens packs,
+// and 人气 / 扩建 under 2% more walk-ins are left out; those come back only when nothing else is left.
+const MIN_TRAFFIC = 0.02;
+function nextStep() {
+  const all = buyables().sort((a, b) => a.cost - b.cost);
+  if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return { ...r, why: '有解锁的系列还没有货架摆' }; }
+  const gain = (k: string) => G.peek(k, G.rate) / G.rate() - 1;
+  const live = all.filter(b => b.k !== 'watch' && b.k !== 'luck' && !((b.k === 'crowd' || b.k === 'expand') && gain(b.k) < MIN_TRAFFIC));
+  return { ...(live[0] || all[0]), why: '' };
 }
 
 // Short money for the milestone track on phones, where seven thresholds share the width.
@@ -64,14 +91,14 @@ export function renderUpgrades() {
   const ups = Object.entries(G.UPGRADES), sks = Object.entries(G.SKILLS), cash = G.state.cash;
   const lv = ups.reduce((a, [k]) => a + G.lvl(k), 0) + sks.reduce((a, [k]) => a + G.skill(k), 0);
   const max = ups.reduce((a, [, u]) => a + u.costs.length, 0) + sks.reduce((a, [k]) => a + G.skillMax(k), 0);
-  const goal = buyables().sort((a, b) => a.cost - b.cost)[0];
+  const goal = nextStep();
   render(html`<header class="grow-head">
       <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b> 没花` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
         <span class="gh-bar" role="img" aria-label="${lv}/${max}"><i style="--p:${lv / max}"></i></span></div>
       ${goal ? html`<div class="gh-goal">
-        <p class="gg-k">${cash >= goal.cost ? '现在就能升' : '下一个目标'}</p>
-        <p class="gg-what"><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx(goal.lv)} → <b>${goal.fx(goal.lv + 1)}</b></span></p>
-        ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>`
+        <p class="gg-k">${cash >= goal.cost ? '下一步，现在就能升' : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
+        <p class="gg-what"><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span></p>
+        ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
           : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / goal.cost * 100)}%"><i style="width:${cash / goal.cost * 100}%"></i></span>
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
       </div>` : html`<p class="gh-goal gg-k">都升满了。</p>`}
@@ -89,7 +116,7 @@ export function renderUpgrades() {
     ${milestones()}`, $('grow-top'));
   renderBranch();
   render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
-    <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
+    <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: G.canUpgrade(k) ? fxOf(k, l, UFX[k]) : [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
       blocked: G.canUpgrade(k) ? '' : `客流加成到 ×${G.CROWD_KNEE} 才能扩建（现在 ×${G.crowdRaw().toFixed(2)}）· 首级 ${money(G.upgradeCost(k)!)}` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
 }
 

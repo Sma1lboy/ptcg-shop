@@ -674,3 +674,18 @@ console.log('ok luck percentile');
   assert.deepEqual(kinds.filter(k => k === 'due' || k === 'missed'), ['due', 'missed'], `a short week still says so: ${kinds}`);
   console.log('ok a covered bill is one beat, a missed one still two');
 }
+
+// 成长: G.peek shows what one more level does and leaves the save exactly as it was (货架 must not pad a shelf in).
+// Past the 客流上限 a 人气 level moves walk-ins by far less than its nominal +10%, which is why the pockets show walk-ins.
+{
+  const P = createGame({ now: () => 1_700_000_000_000, random: S.rng(9), storage: { getItem: () => null, setItem() {} } });
+  P.state.skills.crowd = 6; P.state.dexSeen = Object.fromEntries(PTCG_SETS.flatMap(s => PTCG_DATA[s.id].cards.map(c => [`${s.id}|${c.n}`, 1])));
+  const before = JSON.stringify(P.state);
+  for (const k of [...Object.keys(P.UPGRADES), ...Object.keys(P.SKILLS)]) P.peek(k, () => [P.rate(), P.racks(), P.depth(), P.slots(), P.wholesaleRate(), P.luckMult()]);
+  assert.equal(JSON.stringify(P.state), before, 'peek leaves no trace');
+  assert.equal(P.peek('racks', P.racks), P.racks() + 1); assert.ok(P.peek('supplier', P.wholesaleRate) < P.wholesaleRate());
+  const gain = P.peek('crowd', P.rate) / P.rate() - 1;
+  assert.ok(P.crowdRaw() > P.crowdCap() && gain > 0 && gain < 0.03, `人气 past the cap: +${(gain * 100).toFixed(1)}% walk-ins, not +10%`);
+  assert.ok(P.peek('expand', P.rate) / P.rate() - 1 > gain, '扩建 is the level that moves a capped shop');
+  console.log(`ok 成长 peek: no trace in the save; past the cap 人气 +10% = +${(gain * 100).toFixed(1)}% walk-ins`);
+}

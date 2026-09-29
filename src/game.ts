@@ -419,17 +419,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function learn(k: string) {
     const cost = skillCost(k);
     if (cost == null || state.cash < cost || !canLearn(k)) return false;
+    const r0 = rate();
     state.cash -= cost; state.skills[k] = skill(k) + 1;
-    log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}）`, '', -cost);
+    log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}${walkIns(r0)}）`, '', -cost);
     emit(); return true;
   }
   const canUpgrade = (k: string) => k !== 'expand' || crowdRaw() > CROWD_KNEE; // 扩建 only lifts a cap the shop has reached
+  // fn() as if upgrade or skill k were one level higher, state untouched afterwards: the 成长 page shows what a level really does
+  // (人气 and 扩建 go through the 客流上限, so their nominal step can be far from the walk-ins you get). fn must not pad shelves().
+  function peek<T>(k: string, fn: () => T): T {
+    const o = k in UPGRADES ? state.up : state.skills, had = o[k];
+    o[k] = (had || 0) + 1;
+    try { return fn(); } finally { if (had == null) delete o[k]; else o[k] = had; }
+  }
+  const perMin = (r: number) => (r * 60).toFixed(1);
+  const walkIns = (r0: number) => rate() !== r0 ? `，进店 ${perMin(r0)} → ${perMin(rate())} 人/分` : ''; // for the log line of a level that moved traffic
   function upgrade(k: string) {
     const cost = upgradeCost(k);
     if (cost == null || state.cash < cost || !canUpgrade(k)) return false;
+    const r0 = rate();
     state.cash -= cost; state.up[k] = lvl(k) + 1;
     if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelves().some(o => o.id === s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
-    log(`升级：${UPGRADES[k].name} Lv${lvl(k)}`, '', -cost);
+    log(`升级：${UPGRADES[k].name} Lv${lvl(k)}${walkIns(r0)}`, '', -cost);
     emit(); return true;
   }
 
@@ -724,7 +735,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,

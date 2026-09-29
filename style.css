@@ -1062,3 +1062,5 @@ button:disabled { cursor: not-allowed; }
 .wr-list dt { color: var(--muted); } .wr-list dd { margin: 0; font-weight: 600; text-align: right; }
 .wr-keep b { margin-right: 8px; }
 .wreck button { width: 100%; margin-top: 6px; }
+/* 成长: a buy that leaves less cash than the bill 九姐 collects next. Bold ink, no color: it asks you to act, it is not money. */
+.gt-bill { margin: 0; font-size: var(--fs-cap); font-weight: 700; color: var(--ink); }
