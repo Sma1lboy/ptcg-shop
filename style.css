@@ -182,10 +182,10 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .cust-head { flex: 1 1 360px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0; }
 .cust-head .c-meta { margin: 0; }
 .cust-head .cust-bar { flex: 1 1 120px; max-width: 320px; margin: 0; }
-/* 欧气: the detector | share and trophies, then the dex as a collection grid across the page (one cell per set, however many) */
-.page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.page-luck > #dex { grid-column: 1 / -1; }
-.dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
+/* 欧气: the detector across the page (label and distribution | the numbers), then the binder (src/ui/binder.ts) under it */
+.page-luck { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1100px) { #luck:has(.lk-b) { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; align-items: start; }
+  #luck > h2 { grid-column: 1 / -1; } #luck .lk-b > .kv:first-child { margin-top: 0; } }
 /* the five tabs and five readouts share one bar: below 1760 the readouts drop their names (icon + tooltip name them, as on phones) */
 @media (max-width: 1759px) { .sub dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .sub div { gap: 6px; } }
 /* narrower, the readouts leave in reverse order of how much they tell you what to do next (all of them are on 货柜 too);
@@ -500,9 +500,7 @@ button:disabled { cursor: not-allowed; }
 .tally td:nth-child(n+2), .tally th:nth-child(n+2) { text-align: right; width: 3.5em; padding-left: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; } /* five-digit counts (late saves) touched the next column */
 .tally tr.up td:nth-child(2) { font-weight: 700; }
 
-/* binder + singles */
-.binder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.binder li { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* singles */
 .bulk { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .singles { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
 .singles li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
@@ -563,7 +561,6 @@ button:disabled { cursor: not-allowed; }
 .page summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 #skills details .tally { margin-top: 12px; }
 .master { font-weight: 600; color: var(--ink); }
-#dex .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
 #casepanel .singles { max-height: 220px; }
 #casepanel p { margin: 0 0 6px; font-size: 12px; }
 .case-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; font-size: var(--fs-body); }
@@ -788,16 +785,83 @@ button:disabled { cursor: not-allowed; }
 .c-rule:has(.c-set:focus-visible) .sticker { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 .auto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .auto { gap: 4px; }
-.dx-h { display: flex; justify-content: space-between; }
-.dx-bar { position: relative; height: 6px; background: var(--line); border-radius: 1px; margin: 6px 0 4px; }
-.dx-bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
-.dx-bar u { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--bg); }
-.dx-hand { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
-.dx-hand .dx-h { font-size: var(--fs-cap); color: var(--muted); }
-.dx-hand .dx-bar { height: 3px; }
-.dx-hand .dx-bar i { background: var(--muted); }
+.dx-hand .btns { margin-top: 6px; }
 .dx-sum { margin: 16px 0 0; }
 .dx-total { float: right; font-size: var(--fs-body); font-weight: 500; color: var(--muted); }
+/* 卡册 (src/ui/binder.ts, DESIGN.md「卡册」): the binder that sits back left on the 3D counter, opened. Index tabs (--foil-*, the
+   same stock as the 3D binder's tabs) along the top, one per set; the cover is card-back navy (--back-2, both themes, like the
+   mat); two pages of nine pockets open on it with the rings in the spine (one page on phones). A pocket is a hairline seam; the
+   card sits in it flat (no shadow: the page is flat); 补 is an ink tag; a gap prints its number, mark and name in outline. */
+#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot) { all: unset; box-sizing: border-box; cursor: pointer; }
+#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot):focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+.bk-tabs { display: flex; gap: 3px; overflow-x: auto; padding: 0 10px; scrollbar-width: thin; }
+#dex .bk-tab { flex: none; display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; gap: 0 7px; margin-top: 6px; padding: 6px 16px 6px;
+  background: var(--foil-1); color: var(--paper-ink); clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 100%, 0 100%); font-size: 13px; font-weight: 600; line-height: 1.25; }
+.bk-tab img { grid-row: span 2; height: 26px; width: auto; max-width: 58px; object-fit: contain; }
+.bk-tab span { white-space: nowrap; }
+.bk-tab small { font: 600 13px/1.1 var(--font-tag); color: var(--paper-muted); }
+#dex .bk-tab:hover { background: var(--foil-2); }
+#dex .bk-tab[aria-selected="true"] { margin-top: 0; padding-bottom: 12px; background: var(--foil-2); box-shadow: inset 0 3px 0 var(--lamp), inset 0 12px 14px -10px var(--lamp-glow); }
+.bk-book { background: var(--back-2); border-radius: 6px; padding: 14px 10px; outline: none; }
+.bk-open { display: flex; align-items: center; justify-content: center; gap: 8px; }
+#dex .bk-turn { flex: none; width: 34px; height: 96px; padding: 0; font: 400 26px/1 var(--font-body); }
+.bk-spread { position: relative; flex: 0 1 auto; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 440px); gap: 30px; }
+.bk-spread[data-n="2"]::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 30px; transform: translateX(-50%);
+  background: radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 18% / 30px 14px no-repeat,
+    radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 50% / 30px 14px no-repeat,
+    radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 82% / 30px 14px no-repeat; }
+.bk-page { list-style: none; margin: 0; padding: 9px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--panel); border-radius: 3px; min-width: 0; }
+.pk { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; padding: 8px 7px 5px; border: 1px solid var(--line); margin: -1px 0 0 -1px;
+  background: linear-gradient(172deg, var(--hover), transparent 38%); } /* the pocket's clear sleeve: a faint sheen from the top lip down */
+.pk.blank { background: none; }
+.pk .cf-cap { min-height: 1.3em; }
+#dex .pk-card { position: relative; display: block; cursor: zoom-in; }
+#dex .pk-card:hover .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 0 12px 2px var(--lamp-glow); }
+.pk.bought .cf-art { filter: saturate(.4); } /* bought, not pulled: the print is there, the thrill isn't */
+.pk-buy { position: absolute; right: 4px; bottom: 4px; padding: 0 5px; border-radius: 2px; background: var(--ink); color: var(--bg); font: 700 12px/1.5 var(--font-body); font-style: normal; }
+#dex .pk-slot { width: 100%; aspect-ratio: 63 / 88; display: grid; align-content: center; justify-items: center; gap: 5px; padding: 8%; border: 1px dashed var(--line-strong);
+  border-radius: 5.08% / 3.64%; color: var(--muted); text-align: center; cursor: zoom-in; font-size: var(--fs-cap); line-height: 1.3; }
+#dex .pk-slot:hover { border-style: solid; }
+.pk-slot b { font: 600 24px/1 var(--font-tag); letter-spacing: .02em; }
+.pk-slot small { font-size: var(--fs-cap); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.pk.none .cf-price { color: var(--muted); font-weight: 500; }
+.bk-map { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; margin: 10px 0 0; }
+#dex .bk-mm { display: grid; grid-template-columns: repeat(3, 5px); gap: 1px; padding: 3px; border: 1px solid transparent; border-radius: 2px; }
+#dex .bk-mm:hover { background: var(--hover); }
+#dex .bk-mm.on { border-color: var(--ink); }
+.bk-mm i, .bk-key i { display: inline-block; width: 5px; height: 7px; background: var(--line); }
+:is(.bk-mm, .bk-key) i.got { background: var(--ink); }
+:is(.bk-mm, .bk-key) i.bought { background: none; box-shadow: inset 0 0 0 1px var(--ink); }
+.bk-pn { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
+.bk-head { margin: 12px 0 0; }
+.bk-head p { margin: 0 0 4px; }
+.bk-count b { font: 600 var(--fs-lg)/1 var(--font-tag); }
+.bk-hand { margin-left: 14px; color: var(--muted); } .bk-hand b { color: var(--ink); }
+.bk-key { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: 12px; font-size: var(--fs-cap); } .bk-key i + * { margin-right: 6px; }
+.bk-key i:not(:first-child) { margin-left: 8px; }
+.bk-head .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+/* the card up close: a popover in the case trim, the card at hand size beside its line */
+.bk-zoom { width: min(600px, calc(100vw - 32px)); padding: 16px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 16px / 0 stretch; background: var(--panel) padding-box; color: var(--ink); }
+.bk-zoom:popover-open { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
+.bk-zoom::backdrop { background: rgba(4, 8, 14, .55); }
+.bk-zoom p { margin: 0 0 6px; }
+.bk-zoom-n { font: 900 var(--fs-lg)/1.25 var(--font-display); }
+.bk-zoom .cf-cap { margin-bottom: 8px; }
+.pk-ghost { display: grid; align-content: center; justify-items: center; gap: 8px; background: none; box-shadow: none; border: 1px dashed var(--line-strong); color: var(--muted); }
+.pk-ghost b { font: 600 56px/1 var(--font-tag); } .pk-ghost .mk { font-size: 22px; }
+@media (max-width: 779px) {
+  .bk-book { padding: 8px 6px; }
+  .bk-open { flex-wrap: wrap; }
+  .bk-spread { order: -1; flex: 1 1 100%; grid-auto-columns: minmax(0, 1fr); }
+  #dex .bk-turn { flex: 1; width: auto; height: 44px; }
+  .bk-page { padding: 4px; }
+  .pk { padding: 5px 4px 3px; }
+  .pk-slot b { font-size: 18px; }
+  .pk .cf-price { font-size: 14px; }
+  .bk-zoom:popover-open { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .bk-zoom > .cf { max-width: 240px; }
+  .bk-key { display: flex; margin: 4px 0 0; }
+}
 
 /* price-basis footer + luck notes */
 .basis table { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
