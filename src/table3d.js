@@ -32,6 +32,10 @@ const MW = 76, MH = 56, MZ = -8; // playmat size and where its centre sits
 const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
+// Render on demand: a frame is drawn only while something moves (tweens, drag, pointer tilt, particles, a show) and for IDLE ms
+// after it, while the mat keeps breathing; then the idle-sway fades out and the loop stops. The shop runs for hours.
+let awake = 0, breath = 0, aliveUntil = 0;
+const IDLE = 2500;
 let hand, grip, L, parts, rays, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
 let R = null; // the pack on the mat right now
 let lean = 0;
@@ -42,11 +46,17 @@ const cam = { t: null, p: PITCH, d: 36 };
 const E = { io: p => (p < .5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2), out: p => 1 - (1 - p) ** 3, in: p => p * p * p,
   back: p => 1 + 2.70158 * (p - 1) ** 3 + 1.70158 * (p - 1) ** 2, lin: p => p };
 let tws = [];
-const tween = (ms, fn, ease = E.io) => new Promise(res => tws.push({ t0: now, ms: ms * speed, fn, ease, res }));
+const tween = (ms, fn, ease = E.io) => { wake(); return new Promise(res => tws.push({ t0: now, ms: ms * speed, fn, ease, res })); };
 const wait = ms => tween(ms, () => {});
+// Starts the loop if it is parked (and restarts the clock, so a tween made while idle starts now), and keeps it running ms more.
+function wake(ms = 0) {
+  const t = performance.now();
+  if (!raf) { if (!host || !seen) return; now = last = t; raf = requestAnimationFrame(frame); }
+  awake = Math.max(awake, t + ms);
+}
 function stepTweens() {
   const list = tws; tws = [];
-  for (const w of list) { const p = w.ms > 0 ? Math.min(1, (now - w.t0) / w.ms) : 1; w.fn(w.ease(p)); if (p < 1) tws.push(w); else w.res(); }
+  for (const w of list) { const p = w.ms > 0 ? clamp((now - w.t0) / w.ms, 0, 1) : 1; w.fn(w.ease(p)); if (p < 1) tws.push(w); else w.res(); }
 }
 
 // ---------- canvases → textures ----------
@@ -378,6 +388,7 @@ function makeParticles(N) {
     const i = head; head = (head + 1) % N;
     pos.set([p.x, p.y, p.z], i * 3); vel.set([v.x, v.y, v.z], i * 3); col.set([c.r, c.g, c.b], i * 3);
     s0[i] = sz; life[i] = max[i] = lf; grav[i] = gr;
+    aliveUntil = Math.max(aliveUntil, now + lf * 1000); wake();
   }
   function update(dt) {
     const drag = Math.pow(.2, dt);
@@ -646,7 +657,7 @@ function onDown(e) {
   drag = { id: e.pointerId, x: e.clientX, y: e.clientY, mode: null }; setPtr(e);
 }
 function onMove(e) {
-  setPtr(e);
+  setPtr(e); if (ptr.in) wake(IDLE);
   if (!drag || e.pointerId !== drag.id || !R) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y, run = R;
   if (!drag.mode && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
@@ -694,16 +705,22 @@ function tap(e) {
 
 // ---------- frame ----------
 function frame(t) {
-  raf = requestAnimationFrame(frame);
+  raf = 0;
   const dt = Math.min(.05, Math.max(0, (t - last) / 1000)); last = t; now = t;
   stepTweens();
-  const k = Math.min(1, dt * 6), run = R;
-  tilt.x += ((ptr.in ? ptr.x : 0) - tilt.x) * k; tilt.y += ((ptr.in ? ptr.y : 0) - tilt.y) * k;
+  const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
+  tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
   const s = t / 1000; let sway = 0;
   if (run && run.show) { const a = (t - run.show.t0) / 1000; sway = Math.sin(a * 3.4) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
-  lean += ((run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0) - lean) * k; // a sealed pack is held at a slight angle so its pillow shows
-  grip.rotation.set(-tilt.y * .2 + Math.sin(s * .7) * .02 + lean * .05, tilt.x * .3 + Math.sin(s * .45) * .05 + sway - lean * .2, Math.sin(s * .6) * .012 + lean * .03);
-  grip.position.y = Math.sin(s * 1.1) * .07;
+  lean += (leanTo - lean) * k; // a sealed pack is held at a slight angle so its pillow shows
+  const sh = shake.amp * Math.max(0, 1 - (t - shake.t0) / shake.ms);
+  const busy = tws.length > 0 || !!drag || sh > 0 || now < aliveUntil || !!(run && (run.show || run.embers)) ||
+    Math.abs(tx - tilt.x) + Math.abs(ty - tilt.y) + Math.abs(leanTo - lean) > 1e-4;
+  if (busy) awake = Math.max(awake, now + IDLE);
+  breath += ((now < awake ? 1 : 0) - breath) * Math.min(1, dt * 3); // the idle sway fades in on wake and out before the loop parks
+  const b = breath;
+  grip.rotation.set(-tilt.y * .2 + Math.sin(s * .7) * .02 * b + lean * .05, tilt.x * .3 + Math.sin(s * .45) * .05 * b + sway - lean * .2, Math.sin(s * .6) * .012 * b + lean * .03);
+  grip.position.y = Math.sin(s * 1.1) * .07 * b;
   if (run && run.look && run.look.up) {
     run.look.card.quaternion.copy(run.look.base).multiply(new T.Quaternion().setFromEuler(new T.Euler(-tilt.y * .35, tilt.x * .45, 0)));
   }
@@ -715,19 +732,18 @@ function frame(t) {
   applyMood();
   shared.u.time.value = s; rays.material.uniforms.uTime.value = s;
   placeCam(camera, cam);
-  const sh = shake.amp * Math.max(0, 1 - (t - shake.t0) / shake.ms);
   if (sh > 0) { camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
   composer.render(dt);
   if (run && run.stage === 'spread' && run.tagEls) placeTags(run);
+  frames++;
+  if (busy || now < awake || breath > .002) raf = requestAnimationFrame(frame);
 }
-function loop(on) {
-  if (on && !raf && seen) { last = performance.now(); raf = requestAnimationFrame(frame); }
-  if (!on && raf) { cancelAnimationFrame(raf); raf = 0; }
-}
+let frames = 0; // drawn frames, for the dev probe below
+function park() { if (raf) cancelAnimationFrame(raf); raf = 0; }
 function resize() {
   if (!host) return;
   const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
-  renderer.setSize(w, h, false); composer.setSize(w, h);
+  renderer.setSize(w, h, false); composer.setSize(w, h); wake(100);
   camera.aspect = w / h; camera.updateProjectionMatrix();
   parts.mat.uniforms.uScale.value = h * renderer.getPixelRatio() / (2 * TAN);
   if (R && !tws.length) { // settle the camera for the new shape (mid-animation the next tween does it)
@@ -759,6 +775,7 @@ function theme() {
   L.hemi.groundColor.set(css('--mat'));
   shared.back.value.image = backCanvas(); shared.back.value.needsUpdate = true;
   drawMat(playmat.material.map.image); playmat.material.map.needsUpdate = true;
+  wake(100);
 }
 
 function init() {
@@ -829,13 +846,14 @@ function init() {
 
   canvas.addEventListener('pointerdown', onDown); canvas.addEventListener('pointermove', onMove);
   canvas.addEventListener('pointerup', onUp); canvas.addEventListener('pointercancel', onCancel);
-  canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !drag) ptr.in = false; });
+  canvas.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse' && !drag) { ptr.in = false; wake(); } });
   canvas.addEventListener('webglcontextlost', e => { // drop back to the 2D mat; ui/mat.ts keeps the pack's state
     e.preventDefault(); dead = true;
     const o = opts; close?.(); o?.onLost?.();
   });
   ro = new ResizeObserver(resize);
-  io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; loop(seen && !!R); });
+  if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; } }; // dev probe: frame count and renderer.info
+  io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; if (seen && R) wake(IDLE); else if (!seen) park(); });
 }
 
 // ---------- teardown ----------
@@ -874,7 +892,7 @@ function mountTable(el, o) {
   for (const k in moodNow) moodNow[k] = MOODS.base[k];
   const shut = () => {
     if (opts !== o) return;
-    loop(false); tws = []; drag = null; parts.clear();
+    park(); tws = []; drag = null; parts.clear();
     if (R) { clearRun(R, false); R = null; }
     canvas.remove(); host = null; opts = null; close = null; ro.disconnect(); io.disconnect();
   };
@@ -884,7 +902,7 @@ function mountTable(el, o) {
       if (opts !== o) return;
       tws = []; parts.clear(); drag = null;
       if (R) clearRun(R, true);
-      R = build(set, cards); loop(true); enter(R);
+      R = build(set, cards); enter(R);
     },
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {
