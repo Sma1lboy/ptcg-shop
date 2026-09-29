@@ -41,3 +41,15 @@ export function debtBeat(ev: GameEvent | undefined, G: Game): DebtBeat | null {
   const key = kind === 'story' ? `story:${e.id}:${e.set ?? r.split('.')[0]}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${r}:${week ?? amount ?? b?.dueAt ?? '?'}`;
   return { kind, key, week, amount, id: e.id, set: e.set, forced: e.forced };
 }
+
+// 凑钱 (ui/ledger.ts): which cards to sell to peers, at `rate` of market, to cover `short` — cheapest first, so the cards worth the
+// most stay in the shop. The last pick may overshoot; `got` is what the picks bring in (may fall short if everything is not enough).
+export function sellPlan<C extends { price: number; count: number }>(cards: C[], short: number, rate: number) {
+  const pick: { c: C; n: number }[] = []; let got = 0;
+  for (const c of cards.filter(c => c.price > 0 && c.count > 0).sort((a, b) => a.price - b.price)) {
+    if (got >= short - 1e-9) break;
+    const n = Math.min(c.count, Math.ceil((short - got) / (c.price * rate) - 1e-9));
+    pick.push({ c, n }); got += n * c.price * rate;
+  }
+  return { pick, got };
+}

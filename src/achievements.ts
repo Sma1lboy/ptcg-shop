@@ -71,7 +71,7 @@ export const ACH: Ach[] = [
   { id: 'rev-100k', group: 'shop', seal: '百万', name: '营业额百万', desc: '累计营业额 $1,000,000', cash: 1000, money: true, prog: G => [Math.min(G.revenue(), 1e6), 1e6] },
   { id: 'collector', group: 'shop', seal: '大单', name: '收藏党的大单', desc: '一位收藏党花 $100 以上买走柜里的一张卡', cash: 100, money: true, prog: G => [Math.min(f(G, 'coll'), 100), 100] },
   { id: 'clerk', group: 'shop', seal: '请人', name: '请了店员', desc: '雇第一个店员', cash: 50, prog: G => yes(G.lvl('clerk') > 0) },
-  { id: 'offline-1k', group: 'shop', seal: '躺赚', name: '打烊也赚', desc: '一张打烊小票入账 $10,000 以上', cash: 100, money: true, prog: G => [Math.min(f(G, 'off'), 1e4), 1e4] },
+  { id: 'offline-1k', group: 'shop', seal: '躺赚', name: '打烊也赚', desc: '一张离店小票入账 $10,000 以上', cash: 100, money: true, prog: G => [Math.min(f(G, 'off'), 1e4), 1e4] },
   { id: 'all-sets', group: 'shop', seal: '全系列', name: '全系列在售', desc: `${SETS.length} 个系列同时摆在货架上`, cash: 500, prog: G => [SETS.filter(s => G.shelfQty(s.id) > 0).length, SETS.length] },
   { id: 'level-20', group: 'shop', seal: '老店', name: '二十级老店', desc: '店铺等级 20（成长页的升级和技能级数之和）', cash: 300, prog: G => [Math.min(level(G), 20), 20] },
   { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡铺', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },

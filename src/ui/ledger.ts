@@ -3,9 +3,15 @@
 //   short of the bill, or while a bill is overdue. It ticks every second on its own, since a quiet second emits nothing.
 // - 账本 (#ledger, top of 成长): what is still owed (installments / loan), the next bill and the ones after it, the credit line,
 //   and the three actions: pay an overdue bill, borrow (two clicks: the first shows what it grows to), repay.
+// - 凑钱 (#raise): while a bill is overdue, a sheet under the chip with every way to cover it in the grace — what each brings, what it
+//   costs, one button each (below renderRaise).
 // - 破产结算 (#wreck): a <dialog> listing what 九姐 took and what stayed, open until acknowledged.
-import { html, render } from 'lit-html';
+import { html, render, nothing } from 'lit-html';
+import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
+import { hold } from './mat.ts';
+import { storyOpen } from './story.ts';
+import { sellPlan } from '../debt.ts';
 
 const clock = (s: number) => { s = Math.max(0, Math.ceil(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
 const pct = (r: number) => `${Math.round(r * 100)}%`;
@@ -14,7 +20,7 @@ const pct = (r: number) => `${Math.round(r * 100)}%`;
 let armed = { n: 0, at: 0 };
 export function loanClick(n: number) {
   if (armed.n === n && Date.now() - armed.at < 4000) { armed = { n: 0, at: 0 }; G.takeLoan(n); return; }
-  armed = { n, at: Date.now() }; renderLedger(); setTimeout(renderLedger, 4100);
+  armed = { n, at: Date.now() }; renderLedger(); setTimeout(renderLedger, 4100); // renderLedger redraws the 凑钱 sheet too
 }
 const isArmed = (n: number) => armed.n === n && Date.now() - armed.at < 4000;
 
@@ -55,8 +61,8 @@ export function renderLedger() {
       </div>
       <div class="lg-bill">
         ${o ? html`<p class="lg-k lg-late">第 ${o.week} 周的账逾期</p><p class="lg-big">${money(o.amount)}</p>
-            <p>宽限还剩 <b>${clock(o.until - s.shopT)}</b>。${short ? html`手上 ${money(s.cash)}，还差 <b>${money(short)}</b>：卖卡、开包赌一把，或者借。宽限到了九姐会替你借上${short > credit ? html`——<b>额度只剩 ${money(credit)}，不够就是破产</b>` : ''}。` : '钱够了，付掉吧。'}</p>
-            <div class="lg-act">${short ? loanBtn(Math.ceil(short), `借 ${money(Math.ceil(short))} 付账`, short <= credit) : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>`
+            <p>宽限还剩 <b>${clock(o.until - s.shopT)}</b>。${short ? html`手上 ${money(s.cash)}，还差 <b>${money(short)}</b>。` : '钱够了，付掉吧。'}</p>
+            <div class="lg-act">${short ? html`<button type="button" class="primary" @click=${openRaise}>去凑钱</button>` : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>`
         : b ? html`<p class="lg-k">第 ${b.week} 周的账 · ${clock(G.dueIn())} 后来收</p><p class="lg-big">${money(b.amount)}</p>
             <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>
             ${upcoming.length ? html`<ol class="lg-next">${upcoming.map(([w, v]) => html`<li><span>第 ${w} 周</span><b>${money(v)}</b></li>`)}</ol>
@@ -71,6 +77,81 @@ export function renderLedger() {
         </div>
       </div>
     </div>`, $('ledger'));
+  renderRaise();
+}
+
+// ---------- 凑钱: the grace minutes of an overdue bill, laid out as choices. Every way the till can reach the bill before 九姐 borrows
+// it for you — sell cards to peers (散卡, 单卡库存, the case, the trophy), put the back room on the shelves, open a pack and hope,
+// borrow — each with what it brings, what it costs and one button, and the cheapest one that covers it all in yellow. It is not a
+// dialog: the player keeps shelving and selling around it. It opens by itself once per overdue week (after 九姐's scene), the red chip
+// reopens it, and it hides while a pack is being revealed (the cards are already in 单卡库存 before they are flipped) or a scene plays.
+// Nothing here is a new number: BUYLIST, the loan rate and the grace are the economy's (game.ts). ----------
+let shutWeek = -1; // the week whose sheet the player closed; the chip opens it again
+export function openRaise() { shutWeek = -1; renderRaise(); }
+// after a sale or a loan the bill is paid on the spot, not on the next second's tick
+const act = (f: () => unknown) => () => { f(); const o = G.state.overdue; if (o && G.state.cash >= o.amount) G.payBill(); };
+const recentTake = (secs: number) => G.state.recent.reduce((a, v) => a + (v.at > Date.now() - secs * 1000 ? v.gain || 0 : 0), 0);
+function sellCase(idx: number[]) { for (const i of [...idx].sort((a, b) => b - a)) { const key = G.state.shown[i]?.key; G.unlist(i); if (key) G.sell(key, 1); } }
+const cardsNote = (pick: { c: { name: string }; n: number }[]) => pick.length <= 2 ? pick.map(p => `${p.c.name}${p.n > 1 ? ` ×${p.n}` : ''}`).join('、') : `${pick[0].c.name} 等 ${pick.reduce((a, p) => a + p.n, 0)} 张`;
+
+export function renderRaise() {
+  const el = $('raise'), s = G.state, o = s.overdue;
+  if (!o || hold || storyOpen() || shutWeek === o.week) { if (el.matches(':popover-open')) el.hidePopover(); return; }
+  const rate = G.BUYLIST, cash = s.cash, short = Math.max(0, o.amount - cash), left = o.until - s.shopT, r = G.loanRate(), credit = G.credit();
+  const loanN = Math.ceil(short), canLoan = loanN > 0 && loanN <= credit;
+  // each route on its own, for the whole of what is short now
+  const bulk = G.bulkValue();
+  const hits = sellPlan(Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, name: c.name, price: c.price, count: c.count })), short, rate);
+  const caseP = sellPlan(s.shown.map((c, i) => ({ i, name: c.name, price: c.price, count: 1, ask: G.cardAsk(c) })), short, rate);
+  const t = s.trophy, tGet = t ? t.price * rate : 0;
+  const stock = Object.entries(s.stock).filter(([, n]) => n > 0), back = stock.reduce((a, [, n]) => a + n, 0);
+  const room = G.shelves().some(x => !x.id || x.qty < G.depth()), take5 = recentTake(300), onPace = take5 / 300 * Math.max(0, left);
+  // opening: the back-room set whose one pack is likeliest to cover it all when its cards go to peers
+  const odds = stock.map(([id]) => { const key = S.rateKey(id, G.luckMult()); return { id, ev: S.packEV(key) * rate, ask: G.ask(id), p: short ? 1 - S.packPercentile(key, short / rate) : 1 }; }).sort((a, b) => b.p - a.p)[0];
+  // what a route gives up: sold cards the gap to what the case would ask; a loan a week's interest
+  const lose = { hits: hits.pick.reduce((a, p) => a + p.n * p.c.price * (G.casePct() - rate), 0), case: caseP.pick.reduce((a, p) => a + p.c.ask - p.c.price * rate, 0), loan: loanN * r };
+  // the yellow key, by what each dollar costs: 散卡 nothing, a loan a week's interest (10%), a card sold to peers what the case would
+  // have paid on top (~57% of what it brings) — so bulk first, then borrow what is left, and only without credit sell the most you can
+  const sells = ([['hits', hits.got], ['case', caseP.got], ['trophy', tGet]] as const).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const best = !short ? undefined : bulk.v >= 1 ? 'bulk' : canLoan ? 'loan' : sells[0]?.[0];
+  const cls = (k: string) => (k === best ? 'primary' : '');
+  const row = (k: string, what: unknown, cost: unknown, get: number | null, btn: unknown) => html`<li><div class="rs-t"><p class="rs-k">${k}</p><p>${what}</p><p class="rs-cost">${cost}</p></div>
+    <b class="rs-get">${get == null ? '' : `+${money(get)}`}</b>${btn}</li>`;
+  // the cheapest route that covers it all comes first (on a phone the sheet shows three rows before it scrolls)
+  const rows: [string, unknown][] = [
+    ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡本来就只能卖给同行', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
+    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比上柜（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
+        html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],
+    ['case', caseP.pick.length ? row(`撤下展示柜 ${caseP.pick.length} 张卖给同行`, cardsNote(caseP.pick), `柜台标价合计 ${money(caseP.pick.reduce((a, p) => a + p.c.ask, 0))}，少卖 ${money(lose.case)}`, caseP.got,
+        html`<button type="button" class=${cls('case')} @click=${act(() => sellCase(caseP.pick.map(p => p.c.i)))}>撤下卖掉</button>`) : nothing],
+    ['trophy', t ? row('卖掉镇店之宝', t.name, `收藏党不再多来、不再多付 ${Math.round(G.trophyBonus() * 60)}%`, tGet,
+        html`<button type="button" class=${cls('trophy')} @click=${act(() => { G.clearTrophy(); G.sell(t.key, 1); })}>卖掉</button>`) : nothing],
+    ['shelf', row('等货架卖', take5 ? html`过去 5 分钟店里进账 ${money(take5)}，照这个速度宽限内约再进 <b>${money(onPace)}</b>${onPace >= short ? '，自己就能凑齐' : ''}` : '过去 5 分钟店里没进账',
+        back ? `仓库还有 ${back} 包没上架${room ? '' : '，货架满了'}` : '仓库空了；进货会花掉手上的钱', null,
+        back && room ? html`<button type="button" @click=${act(() => { for (const [id, n] of stock) G.shelve(id, n); })}>仓库全部上架</button>` : nothing)],
+    ['open', odds ? row(`开包赌一把 · ${G.setById(odds.id).name}`, html`一包就开出够数的机会 <b>${odds.p < 0.001 ? '不到 0.1%' : `${(odds.p * 100).toFixed(1)}%`}</b>`,
+        `开出的卡卖给同行平均 ${money(odds.ev)} 一包，这包放货架能卖 ${money(odds.ask)}`, null,
+        html`<button type="button" @click=${() => { location.hash = 'open'; }}>去开包</button>`) : nothing],
+    ['loan', row(`借 ${money(loanN)}`, canLoan ? `每周利息 ${money(lose.loan)}` : html`额度只剩 <b>${money(credit)}</b>，借不够`,
+        canLoan ? `周息 ${Math.round(r * 100)}%，3 周不还滚到 ${money(loanN * (1 + r) ** 3)} · 额度 ${money(credit)}` : '先卖掉能卖的，差的再借', canLoan ? loanN : null,
+        canLoan ? html`<button type="button" class=${cls('loan')} @click=${act(() => loanClick(loanN))}>${isArmed(loanN) ? '再点一次借' : `借 ${money(loanN)}`}</button>` : nothing)],
+  ];
+  rows.sort((x, y) => +(y[0] === best) - +(x[0] === best));
+  render(html`<h2>凑钱 <small>第 ${o.week} 周的账 ${money(o.amount)}</small><button type="button" class="rs-x" aria-label="收起" @click=${() => { shutWeek = o.week; renderRaise(); }}>×</button></h2>
+    <div class="rs-head">
+      <p class="rs-short">${short ? html`还差 <b>${money(short)}</b>` : html`<b>钱够了</b>`}</p>
+      <p class="rs-clock"><span class="rs-k">宽限</span><b>${clock(left)}</b></p>
+      <span class="gh-bar" role="img" aria-label="手上 ${money(cash)}，账 ${money(o.amount)}"><i style="--p:${Math.min(1, cash / o.amount)}"></i></span>
+      <p class="rs-note">手上 ${money(cash)} / 账 ${money(o.amount)} · 钱一够就自动付掉 · 开包、离开时宽限不走</p>
+    </div>
+    ${short ? html`<ul class="rs-list">
+      ${rows.map(x => x[1])}
+    </ul>
+    <p class="rs-foot">${canLoan ? `什么都不做：宽限到了，九姐替你借 ${money(loanN)}，周息 ${Math.round(r * 100)}%。` : html`<b>宽限到了还差的超过额度，店就收走。</b>`}</p>`
+    : html`<div class="rs-list"><button type="button" class="primary" @click=${() => G.payBill()}>付账 ${money(o.amount)}</button></div>`}`, el);
+  if (!el.matches(':popover-open')) el.showPopover();
+  const due = $('due').getBoundingClientRect(); // under the chip on wide screens (phones: a sheet above the tab bar, style.css)
+  el.style.setProperty('--x', `${Math.max(8, Math.min(innerWidth - el.offsetWidth - 8, due.left + due.width / 2 - el.offsetWidth / 2))}px`);
 }
 
 export function renderWreck() {
@@ -96,6 +177,8 @@ export function renderWreck() {
 
 // The chip counts down between renders (a quiet second emits nothing); it is a link to 成长, where the ledger is.
 export function initLedger() {
-  setInterval(renderDue, 1000);
+  setInterval(() => { renderDue(); renderRaise(); }, 1000);
+  $('due').addEventListener('click', e => { if (G.state.overdue) { e.preventDefault(); openRaise(); } }); // overdue: the chip opens 凑钱, not the ledger
+  for (const ev of ['ptcg:story', 'ptcg:release']) document.addEventListener(ev, () => setTimeout(renderRaise, 450)); // after 九姐's scene / the pack
   $('wreck').addEventListener('cancel', e => e.preventDefault()); // Esc does not dismiss the statement; 重新开张 does
 }
