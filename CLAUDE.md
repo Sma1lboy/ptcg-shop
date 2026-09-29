@@ -4,7 +4,8 @@
 
 ## 规矩（每个 worker 必读）
 
-- **原生 HTML/CSS/JS，零依赖，没有构建步骤。** 不要引入 npm 包、框架、打包器、TypeScript、i18n 层。脚本用经典 `<script src>` + `window.PTCG_*` 全局，因为 `type="module"` 在 `file://` 下会被 Chrome 拦。
+- **原生 HTML/CSS/JS，没有构建步骤。** 不要引入 npm 包、框架、打包器、TypeScript、i18n 层。本地脚本用经典 `<script src>` + `window.PTCG_*` 全局，因为本地文件的 `type="module"` 在 `file://` 下会被 Chrome 拦。
+- **唯一的外部库：three.js，只用于开包台的 3D 场景。** 从 CDN 按固定版本加载（例如 `<script type="importmap">` + jsdelivr/unpkg 的 `three.module.js` 和 `examples/jsm` 附加模块；https CDN 上的 module 在 `file://` 下能用，本地 module 不行）。别的库一律不加。WebGL 不可用或 `prefers-reduced-motion` 时要退回 2D 开包台。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
   - `data/cards-*.js` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
