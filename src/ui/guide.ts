@@ -35,7 +35,7 @@ const STEPS: Step[] = [
     p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认等于市价${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
-    p: el => `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },
+    p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
     p: () => '看看这包的运气在几千个模拟玩家里排第几，还能生成分享图。' },
 ];
@@ -68,7 +68,7 @@ export function renderGuide() {
   anchor.classList.add('coach-on');
   const n = replay >= 0, end = i === STEPS.length - 1;
   render(html`<p class="co-k">新手 ${i + 1}/${STEPS.length}</p>
-    <h3>${step.h}${here ? nothing : html`<small>：到「${TAB[step.page]}」页</small>`}</h3>
+    <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到「${TAB[step.page]}」页</small>`}</h3>
     <p>${step.p(here)}</p>
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
@@ -81,10 +81,9 @@ export function renderGuide() {
 }
 
 export function bindGuide() {
-  addEventListener('hashchange', () => {
-    if (page() === 'luck' && !rec.luck && sum(G.state.opened)) { rec.luck = 1; save(); }
-    renderGuide();
-  });
+  const sawLuck = () => { if (page() === 'luck' && !rec.luck && sum(G.state.opened)) { rec.luck = 1; save(); } };
+  sawLuck(); // a reload straight onto #luck counts too
+  addEventListener('hashchange', () => { sawLuck(); renderGuide(); });
   addEventListener('resize', place); addEventListener('scroll', place, { passive: true });
   document.addEventListener('ptcg:release', renderGuide);
   document.addEventListener('click', e => {
