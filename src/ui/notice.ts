@@ -11,6 +11,7 @@ export function renderNotice() {
   el.hidden = false;
   render(html`<div class="paper"><h2>打烊小票</h2>
       <dl><dt>关店</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
-        ${o.lost ? html`<dt>货架空了，错过</dt><dd>${o.lost} 位顾客</dd>` : ''}</dl>
+        ${o.lost ? html`<dt>货架空了，错过</dt><dd>${o.lost} 位顾客</dd>` : ''}
+        ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}</dl>
       <button type="button" data-act="ack">收起小票</button></div>`, el);
 }

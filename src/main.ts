@@ -21,10 +21,11 @@ import { bindGuide } from './ui/guide.ts';
 import { initStory } from './ui/story.ts';
 import { initGoals } from './ui/goals.ts';
 import { initAch } from './ui/ach.ts';
+import { renderDue, renderLedger, renderWreck, initLedger } from './ui/ledger.ts';
 import { initSound } from './ui/sound.ts';
 
 // While a pack is being revealed only the shelf and the rail update (both with their open buttons off); the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
+function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);
@@ -32,7 +33,7 @@ G.on(renderAll);
 setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
-renderBasis(); bindLayout();
+renderBasis(); bindLayout(); initLedger();
 initSound(); // after the boot tick: the hours the shop was closed ring nothing; before the story, which sets the opening's first scene
 initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();

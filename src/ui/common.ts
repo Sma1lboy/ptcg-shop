@@ -6,7 +6,8 @@ import { card, logo } from '../assets.ts';
 
 export const G = createGame();
 export const $ = (id: string) => document.getElementById(id)!;
-export const money = (v: number) => '$' + (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
+// Big sums shorten: $123.4K from $100,000, $1.23M from a million (the debt, late revenue); below that, whole dollars from $1,000.
+export const money = (v: number): string => v < 0 ? '−' + money(-v) : '$' + (v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e5 ? `${(v / 1e3).toFixed(1)}K` : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
 export const imgUrl = (c: { set: string; n: string }, size = 'low') => card(c.set, c.n, size);
 export const logoUrl = (id: string) => logo(id);
 // Level as a row of pips (成长 tab): filled up to lv, one per level.
@@ -35,4 +36,10 @@ export function toShelf(id: string) {
 // The 顾客 / 没买到 window's name: the last MISS_WINDOW, or 开店以来 while every walk-in so far still falls inside it (a new shop
 // 1 minute in has not had 10 minutes of customers).
 export const lately = () => (G.state.cust.visits <= G.state.recent.length ? '开店以来' : `${G.MISS_WINDOW / 60} 分钟里`);
+// The batch button: with 2–9 packs in the back room and cash for the rest, it tops up to 10 first — only a batch of exactly 10 is
+// a 十连 (the achievement and the 十连 stats count those), and a player reading 「开 9 包」 takes it for one.
+export function batchBtn(id: string, again = false) {
+  const n = G.state.stock[id] || 0, fill = n > 1 && n < 10 && G.state.cash >= G.wholesale(id) * (10 - n) ? 10 - n : 0;
+  return { act: fill ? 'fill10' : 'open10', text: fill ? `补 ${fill} 包，开十连` : `${again ? '再开' : '开'} ${Math.min(10, n)} 包` };
+}
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };

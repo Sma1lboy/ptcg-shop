@@ -34,7 +34,7 @@ const STEPS: Step[] = [
     p: () => (sum(G.state.stock) ? '点「摆上空货架」。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。' : '仓库空了：先进货，再点「摆上空货架」。只有货架上的包才卖得出去。') },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
-    p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认等于市价${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，还可能碰上倒爷按这个价整架收走。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
+    p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，还可能碰上倒爷按这个价整架收走。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },

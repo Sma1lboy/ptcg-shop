@@ -36,7 +36,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
 const MW = 64, MH = 54, MZ = -8; // playmat size and where its centre sits: the shelf, the single-pack spread and the fan stay on it; a ten-pack deal's back row reaches the counter
 const CZ0 = 34, CZ1 = -60, CX = 72; // the counter top: near edge (under the player's hands), back edge, half width
-const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
+const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18, SPREAD_PITCH_TALL = 1.42;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
 // Render on demand: a frame is drawn only while something moves (tweens, drag, pointer tilt, particles, a show) and for IDLE ms
@@ -282,7 +282,7 @@ const CARD_VS = `
 // hand light, not the room's: away from the lamp's cone and under the dimmed show moods it still shows the printed colours.
 // Foil only ADDS reflection (a white sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
 const CARD_FS = `
-  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
+  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uScan, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
   varying vec2 vUv; varying float vFront; varying vec3 vN, vP, vR, vU;
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -304,9 +304,11 @@ const CARD_FS = `
     float gl = (vUv.x + vUv.y) * 0.5 - 0.5 - ang.x * 1.7 - ang.y * 1.2; // laminate glare sliding across as the card tilts
     col += exp(-gl * gl * 28.0) * 0.06 * shine;
     if (front && uKind > 0.5) {
-      float k = uKind, luma = dot(base, vec3(0.299, 0.587, 0.114));
+      // uScan 0: the scan didn't load and the face is blank stock (card.ts stock()). The 2D face keeps its foil layer over it, so
+      // this one keeps a plain sheen too, but nothing that reads the print (art box, etch ridges, ink roughness, printed patterns).
+      float k = uScan > 0.5 ? uKind : 0.0, luma = dot(base, vec3(0.299, 0.587, 0.114));
       float art = step(0.075, vUv.x) * step(vUv.x, 0.925) * step(0.525, vUv.y) * step(vUv.y, 0.903);
-      float mask = k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
+      float mask = k < 0.5 ? 1.0 : k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
       vec3 rb = vec3(1.0); // white light only: the print keeps its own colours, gold cards included (DESIGN.md「闪面」)
       float tx = 1.0;
       if (k > 3.5 && k < 4.5) tx = 0.45 + 0.8 * vnoise(vUv * vec2(64.0, 90.0)) * vnoise(vUv * vec2(9.0, 12.6) + 3.0);
@@ -316,7 +318,7 @@ const CARD_FS = `
       float spark = step(0.9, h) * smoothstep(0.45, 0.1, length(fract(vUv * vec2(84.0, 118.0)) - 0.5)) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
       float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
       float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
-      if (k < 3.5) { // plain foil under ink: where the print is light the foil is a mirror (a tight, bright streak), where the ink
+      if (k > 0.5 && k < 3.5) { // plain foil under ink: where the print is light the foil is a mirror (a tight, bright streak), where the ink
         // is heavy it scatters (a wide, dim wash). Same light either way, only spread differently: the print's colour never moves.
         // Full-card holo is also brushed: fine lengthwise grain breaks its sweep into streaks, so it never reads as reverse foil.
         float rough = 1.0 - dot(texture2D(uFace, vUv, 3.0).rgb, vec3(0.299, 0.587, 0.114)), b = band, gr = 1.0;
@@ -367,19 +369,22 @@ async function loadFace(c) {
     const img = await loadImg(ASSETS.card(c.set, c.n, size));
     if (img) { const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; renderer.initTexture(t); return t; }
   }
-  return svgTex(stockSVG(c.name));
+  const t = await svgTex(stockSVG(c.name)); t.userData.stock = true; return t;
 }
+// uScan starts at 0: until the scan is in, the face is the blank placeholder, which has no print for the foil to read.
 function cardMesh(c) {
   const [kind, foil] = foilOf(c), u = shared.u;
   const cap = new T.ShaderMaterial({ vertexShader: CARD_VS, fragmentShader: CARD_FS,
-    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
+    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uScan: { value: 0 }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
   const m = new T.Mesh(shared.cardGeo, [cap, shared.edge]); m.castShadow = true;
-  m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; m.userData.face = t; });
+  m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; cap.uniforms.uScan.value = t.userData.stock ? 0 : 1; m.userData.face = t; });
   return m;
 }
 // Sized in CSS pixels, not cm, like the 2D mat's 26 px glow (DESIGN.md「卡面」): d over its own screen derivative is the distance
 // from the card's edge in device pixels, uDpr takes it to CSS pixels. So a small card in a ten-pack spread gets the same thin rim
 // as the one held up close, instead of a glow a third of its width (a phone's small cards get it narrower still). The world fade only keeps it off the plane's edge.
+// dFdx runs in highp on every GPU that can run the scene: three ≥ r163 is WebGL2-only, GLES 3.0 requires highp in fragment
+// shaders, and ShaderMaterial gets three's `precision highp float` prefix (renderer.capabilities.precision).
 const HALO_FS = `uniform vec3 uCol; uniform float uAmt, uDpr; varying vec2 vP;
   float sdr(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
   void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}), wpx = length(vec2(dFdx(d), dFdy(d))) * uDpr + 1e-5,
@@ -657,15 +662,18 @@ function celebrate(run, i, t) {
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
   return t === 5 ? 1700 : 1300;
 }
+// Portrait and phones look almost straight down: at the landscape pitch a 3–4 row grid keystones, the outer cards lean out and the
+// back rows shrink, so the rows read as slanted and each price tag lands on the card below it. The rows also leave a tag's height.
 function gridOf(n) {
-  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), gx = CW + .7, gz = CH + 1.6;
+  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), tall = camera.aspect < 1.15 || small(); // a phone whose summary squeezed the scene wide still gets the phone shot
+  const gx = CW + .7, gz = CH + (tall ? 2.6 : 1.6), p = tall ? SPREAD_PITCH_TALL : SPREAD_PITCH;
   const pos = [];
   for (let k = 0; k < n; k++) {
     const r = Math.floor(k / cols), inRow = Math.min(cols, n - r * cols), c = k - r * cols;
     pos.push(new V3((c - (inRow - 1) / 2) * gx, .06, (r - (rows - 1) / 2) * gz - .6));
   }
   const w = cols * gx, h = rows * gz;
-  return { pos, cam: { t: new V3(0, 0, .8), p: SPREAD_PITCH, d: fit(w * 1.02, h * Math.sin(SPREAD_PITCH) * 1.08 + 4) } };
+  return { pos, cam: { t: new V3(0, 0, .8), p, d: fit(w * 1.02, h * Math.sin(p) * 1.08 + 4) } };
 }
 async function toSpread(run) {
   if (run.stage === 'spread') return;
@@ -910,14 +918,16 @@ async function batchSpread(run) {
 // the label has the count), one pack when it's out, in the lamp's shadow when it can't be opened. Labels are mat.ts's buttons
 // (.s3-shelf, index-aligned with the items), placed under each stack every frame. Pointing at a stack lifts its top pack;
 // tapping it calls onPick(k). The pack that gets opened rises from its stack into the hand (enter / enterBatch).
-const SHELF_MAX = 12, SHELF_PITCH = .74, SGX = PW + 2.8, LIFT = 1.1;
+const SHELF_MAX = 12, SHELF_PITCH = .74, SHELF_BACK = 13, SGX = PW + 2.8, LIFT = 1.1;
 // The column count that shows the packs biggest at this aspect; item 0 front left. The packs fill the lower part of the shot;
 // the top shows the back of the counter (showcase, binder), so the table reads as a place and not a black box.
 function shelfGrid(n) {
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 7.5 : 4.4); // portrait: the labels need more room between rows
-    const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2)); // the front row's near edge stays on the mat
+    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 9.5 : 4.4); // portrait: the labels need more room between rows
+    // The front row's near edge stays on the mat, and the back row stays within ~16 cm of the props, so one or two rows
+    // don't leave a strip of bare mat between the packs and the back of the counter.
+    const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2), (rows - 1) / 2 * SGZ - SHELF_BACK);
     for (let k = 0; k < n; k++) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
       pos.push(at);

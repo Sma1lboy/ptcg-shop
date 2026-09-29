@@ -2,7 +2,7 @@
 // luck verdict stands. The mat never returns to idle after the first pack, so this is how the player switches sets without leaving the page.
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
-import { G, $, money, logoUrl } from './common.ts';
+import { G, $, money, logoUrl, batchBtn } from './common.ts';
 import { hold } from './mat.ts';
 
 // While a pack is in hand (mat.ts hold) the buttons are off: opening another would drop the one being revealed. The stock already
@@ -13,7 +13,7 @@ export function renderRail() {
     <ul class="rail-sets">${SETS.filter(x => G.unlocked(x.id)).map(x => {
       const n = s.stock[x.id] || 0, w = G.wholesale(x.id);
       return html`<li><img src="${logoUrl(x.id)}" alt="" loading="lazy"><span class="rs-name">${x.name}<small>${n ? `仓库 ${n} 包` : '仓库空了'}</small></span>
-        <span class="rs-btns">${n ? html`<button type="button" data-act="open1" data-id="${x.id}" ?disabled=${hold}>开 1 包</button>${n > 1 ? html`<button type="button" data-act="open10" data-id="${x.id}" ?disabled=${hold}>开 ${Math.min(10, n)} 包</button>` : ''}`
+        <span class="rs-btns">${n ? html`<button type="button" data-act="open1" data-id="${x.id}" ?disabled=${hold}>开 1 包</button>${n > 1 ? html`<button type="button" data-act="${batchBtn(x.id).act}" data-id="${x.id}" ?disabled=${hold}>${batchBtn(x.id).text}</button>` : ''}`
           : html`<button type="button" data-act="buyopen" data-id="${x.id}" ?disabled=${hold || s.cash < w}>进 1 包就开 ${money(w)}</button>`}</span></li>`;
     })}</ul>
     ${hold ? html`<p class="rail-more muted">手里这包翻完，再开下一包。</p>` : html`<p class="rail-more"><a href="#shelf">去货柜进货、上架、定价 →</a></p>`}

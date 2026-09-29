@@ -5,6 +5,8 @@ import { G } from './common.ts';
 import { startPack, openBatch, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
+import { branchClick } from './upgrades.ts';
+import { loanClick } from './ledger.ts';
 import { resetStory } from './story.ts';
 
 export function bindEvents() {
@@ -18,6 +20,7 @@ export function bindEvents() {
       case 'buyopen': if (G.buy(id, 1)) startPack(id); break;
       case 'open1': startPack(id); break;
       case 'open10': openBatch(id); break;
+      case 'fill10': if (G.buy(id, 10 - (G.state.stock[id] || 0))) openBatch(id); break;
       case 'tear': tear(b); break;
       case 'advance': advance(); break;
       case 'peek': peek(+b.dataset.i!); break;
@@ -39,6 +42,12 @@ export function bindEvents() {
       case 'learn': G.learn(b.dataset.k!); break;
       case 'collect': G.collect(id, b.dataset.n === 'all'); break;
       case 'ack': G.ackOffline(); break;
+      case 'perk': G.learnPerk(b.dataset.k!); break;
+      case 'branch': branchClick(); break;
+      case 'loan': loanClick(+b.dataset.n!); break;
+      case 'repay': G.repay(+b.dataset.n!); break;
+      case 'paybill': G.payBill(); break;
+      case 'ackwreck': G.ackWreck(); break;
       case 'reset':
         if (Date.now() - resetArmed < 3000) { resetGuide(); resetMat(); resetStory(); b.textContent = '清空存档'; resetArmed = 0; }
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }
