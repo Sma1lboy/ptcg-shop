@@ -41,10 +41,11 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
     </li>`;
 }
 
-// The next 加一个货架, drawn where it would stand: the outline of an unbuilt bay at the end of the wall, its price on the button.
-function ghost(boards: number, cost: number) {
+// The next 加一个货架, drawn where it would stand: the outline of an unbuilt bay (one board, so when it wraps to a row of its own it
+// is a small frame, not a wall-high hole) at the end of the wall, its price on the button.
+function ghost(cost: number) {
   return html`<li class="rack ghost"><p class="r-sign"><span>还能加一个</span></p>
-      <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, () => html`<div class="board">${Array.from({ length: FACES }, () => html`<i></i>`)}</div>`)}</div>
+      <div class="r-bay" aria-hidden="true"><div class="board">${Array.from({ length: FACES }, () => html`<i></i>`)}</div></div>
       <div class="r-ctl"><button type="button" data-act="up" data-k="racks" ?disabled=${G.state.cash < cost}>加一个货架 ${money(cost)}</button></div>
     </li>`;
 }
@@ -69,7 +70,7 @@ function wall() {
       <p class="wall-h"><b>货架 ${shelves.length}/${G.RACK_BASE + G.UPGRADES.racks.costs.length}</b><span class="muted">每个 ${boards} 层、放 ${deep} 包，摆一个系列</span>
         <span class="wall-up">${nd != null ? html`<button type="button" data-act="up" data-k="depth" ?disabled=${cash < nd}>每个加一层 ${money(nd)}</button>` : nothing}</span></p>
       ${clerkNote()}
-      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}${nr != null ? ghost(boards, nr) : nothing}</ol>
+      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}${nr != null ? ghost(nr) : nothing}</ol>
       <p class="wall-note">想买的系列不在架上，拆包玩家一半改买别的，一半直接走。</p>
     </div>`;
 }

@@ -281,7 +281,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* a board seen a little from above: its top face (a lighter band the packs stand on), then the aluminium lip */
 .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; gap: 3px; margin-inline: -8px; padding: 12px 9px 5px;
   background: linear-gradient(to top, color-mix(in oklab, var(--trim) 45%, var(--panel)) 0 6px, transparent 6px); border-bottom: 7px solid var(--trim);
-  border-image: linear-gradient(to bottom, rgba(174, 184, 200, .75) 0 1px, #2E4575 1px 3px, var(--trim) 3px 5px, #16244A 5px) 0 0 100% / 0 0 7px; box-shadow: 0 5px 6px -2px rgba(4, 8, 14, .35); }
+  border-image: linear-gradient(to bottom, rgba(174, 184, 200, .75) 0 1px, color-mix(in oklab, var(--trim) 78%, white) 1px 3px, var(--trim) 3px 5px, #16244A 5px) 0 0 100% / 0 0 7px; box-shadow: 0 5px 6px -2px rgba(4, 8, 14, .35); }
 .board i { aspect-ratio: 5 / 8.4; }
 .board i.pk { position: relative; border-radius: 2px; box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--foil-3) 70%, transparent), 2px -2px 0 -.5px var(--foil-3), 0 2px 2px rgba(4, 8, 14, .35);
   background: var(--logo) 50% 40% / 98% auto no-repeat,
@@ -291,15 +291,15 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .r-out { position: absolute; left: 50%; bottom: 30px; translate: -50% 0; rotate: -4deg; padding: 2px 8px; border: 1.5px solid var(--muted); border-radius: 2px;
   font: 700 var(--fs-cap)/1.3 var(--font-body); color: var(--muted); background: var(--panel); white-space: nowrap; }
 .r-rail { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; margin: 0; padding: 3px 10px 4px;
-  background: linear-gradient(#2E4575, var(--trim) 40%, #16244A); box-shadow: inset 0 1px 0 rgba(174, 184, 200, .45), 0 4px 8px -3px rgba(4, 8, 14, .45);
+  background: linear-gradient(color-mix(in oklab, var(--trim) 78%, white), var(--trim) 40%, #16244A); box-shadow: inset 0 1px 0 rgba(174, 184, 200, .45), 0 4px 8px -3px rgba(4, 8, 14, .45);
   font-size: var(--fs-cap); color: var(--hud-muted); }
 .r-rail b { color: var(--hud-ink); font-weight: 600; }
 .r-rail .sticker { margin-block: -6px -2px; }
 .rack.empty .r-bay { background: radial-gradient(circle, var(--line-strong) 1px, transparent 1.6px) 3px 3px / 12px 12px, color-mix(in oklab, var(--ink) 5%, var(--panel)); }
 .rack.ghost .r-sign, .rack.ghost .r-bay { border: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; color: var(--muted); }
-.rack.ghost .r-sign { border-bottom: 0; font-weight: 700; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height, so the outline matches a built bay */
+.rack.ghost .r-sign { border-bottom: 0; font-weight: 700; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height */
 .rack.ghost .board { border-bottom: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; }
-.rack.ghost .r-ctl button { flex: 1; }
+.rack.ghost .r-ctl { margin-top: 0; } .rack.ghost .r-ctl button { flex: 1; }
 .r-miss { margin: 6px 6px 0; font-size: var(--fs-cap); color: var(--muted); } .r-miss b { color: var(--ink); font-weight: 600; }
 .r-miss + .r-miss { margin-top: 2px; }
 .r-ctl { display: flex; gap: 6px; margin-top: auto; padding: 8px 6px 0; }
