@@ -6,6 +6,7 @@ import { html, render, nothing } from 'lit-html';
 import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
 import { go } from './layout.ts';
+import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
 type Rec = { price?: 1; luck?: 1; off?: 1; share?: 1 };
@@ -65,7 +66,7 @@ let last = -2;
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null;
-  if (!step || hold) { if (pop.matches(':popover-open')) pop.hidePopover(); last = i; return; }
+  if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); last = i; return; }
   // the step's own button when it is on this page, else that page's tab
   const here = page() === step.page ? step.at() : step.alt?.() ?? null;
   anchor = here ?? pick(`.nav a[href="#${step.page}"]`);
@@ -90,7 +91,7 @@ export function bindGuide() {
   sawLuck(); // a reload straight onto #luck counts too
   addEventListener('hashchange', () => { sawLuck(); renderGuide(); });
   addEventListener('resize', place); addEventListener('scroll', place, { passive: true });
-  document.addEventListener('ptcg:release', renderGuide);
+  document.addEventListener('ptcg:release', renderGuide); document.addEventListener('ptcg:story', renderGuide);
   document.addEventListener('click', e => {
     const t = e.target as Element, b = t.closest<HTMLElement>('[data-coach], [data-act]'); if (!b) return;
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }

@@ -18,6 +18,7 @@ import { bindEvents } from './ui/events.ts';
 import { bindLayout, renderTabs } from './ui/layout.ts';
 import { renderRail } from './ui/rail.ts';
 import { bindGuide } from './ui/guide.ts';
+import { initStory } from './ui/story.ts';
 import { initGoals } from './ui/goals.ts';
 import { initAch } from './ui/ach.ts';
 
@@ -31,6 +32,7 @@ setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
 renderBasis(); bindLayout();
+initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();
 
 initGoals();
