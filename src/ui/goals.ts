@@ -1,7 +1,7 @@
 // 顾客 + 图鉴 + 店员 panel (#goals). Frozen while a pack is being revealed (dex progress would spoil the pull).
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
-import { G, $ } from './common.ts';
+import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
 
 const RES: Record<string, string> = { sold: '成交', pricey: '嫌贵', none: '没找到' };
@@ -24,8 +24,19 @@ function dex() {
     const need = next ? Math.ceil(next[0] * tot - 1e-9) - c : 0;
     return html`<li><div class="dx-h"><span>${s.name}</span><b>${c}/${tot}</b></div>
         <div class="dx-bar" role="img" aria-label="${s.name} 图鉴 ${Math.round(share * 100)}%"><i style="width:${share * 100}%"></i>${G.DEX_TIERS.map(([at]) => html`<u style="left:${at * 100}%"></u>`)}</div>
-        <small class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(s.id) * 100)}%</small></li>`;
+        <small class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(s.id) * 100)}%</small>${collect(s.id)}</li>`;
   });
+}
+
+// 图鉴补卡: buy the missing hits at market into the binder (never resellable); C/U/R only come from packs. 100% = 大师套.
+function collect(id: string) {
+  if (G.master(id)) return html`<small class="gain">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
+  const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
+  const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
+  if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
+  return html`<div class="btns"><button type="button" data-act="collect" data-id="${id}" ?disabled=${cash < miss[0].price} title="按市价从同行买，只收进图鉴册，不能再卖">补 ${miss[0].name} ${money(miss[0].price)}</button>
+      ${miss.length > 1 ? html`<button type="button" data-act="collect" data-id="${id}" data-n="all" ?disabled=${cash < all}>闪卡全补 ${money(all)}</button>` : ''}</div>
+    <small class="muted">闪卡还缺 ${miss.length} 张，最贵的是 ${top.name} ${money(top.price)}${baseNote ? ` · ${baseNote}` : ''}</small>`;
 }
 
 function clerk() {
