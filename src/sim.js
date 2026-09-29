@@ -80,6 +80,14 @@
     for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(setId, r));
     return (samples[setId] = a);
   }
+  // Where one pack's value ranks among simulated packs of the same set: share of packs worth less (ties count half).
+  const sorted = {};
+  function packPercentile(setId, value) {
+    const a = sorted[setId] ||= Float64Array.from(valueSamples(setId)).sort();
+    let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < value - 1e-9) lo = m + 1; else hi = m; }
+    let up = lo; while (up < a.length && a[up] <= value + 1e-9) up++;
+    return (lo + (up - lo) / 2) / a.length;
+  }
   // Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
   function luckPercentile(counts, value, trials) { // counts: {setId: packs}
     const total = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -104,5 +112,5 @@
     return k >= mean ? 1 - lt : le;
   }
 
-  g.PTCG_SIM = { rng, openPack, packEV, packValue, luckPercentile, hitTail, RANK, HITS, slotTables, poolsFor };
+  g.PTCG_SIM = { rng, openPack, packEV, packValue, luckPercentile, packPercentile, hitTail, RANK, HITS, slotTables, poolsFor };
 })(typeof window !== 'undefined' ? window : globalThis);

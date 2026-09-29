@@ -78,14 +78,30 @@
     </figure>`;
   }
 
+  // Where one pack ranks among simulated packs of the same set, in words a player can quote.
+  function rankText(setId, v) {
+    const p = S.packPercentile(setId, v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
+    return { p, text: `比 ${pc}% 的${G.setById(setId).name}包值钱${p >= .9 ? `，约 ${Math.min(1000, Math.round(1 / (1 - p)))} 包才出一包这样的` : ''}` };
+  }
+  const shareBtn = () => '<button type="button" data-act="sharemat">分享这次开包</button>';
+  function shareSpec() {
+    const set = G.setById(mat.set), packs = mat.mode === 'batch' ? mat.packs : [mat.cards];
+    const vals = packs.map(S.packValue), bi = vals.indexOf(Math.max(...vals)), cards = packs.flat();
+    const best = cards.reduce((a, b) => (b.price > a.price ? b : a)), rk = rankText(set.id, vals[bi]);
+    return { set: set.name, en: set.en, n: packs.length, value: vals.reduce((a, b) => a + b, 0), cost: G.wholesale(set.id) * packs.length,
+      bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high') };
+  }
+
   function packSummary(cards, set) {
     const v = S.packValue(cards), cost = G.wholesale(set.id), d = v - cost;
     const best = cards.reduce((a, b) => (b.price > a.price ? b : a));
     const stock = G.state.stock[set.id] || 0;
     return `<div class="summary">
       <p>这包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。最值钱：${esc(best.name)}。</p>
+      <p class="rank">${rankText(set.id, v).text}。</p>
       <div class="btns">
         ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>` : ''}
+        ${shareBtn()}
         ${G.state.cash >= cost ? `<button type="button" data-act="buyopen" data-id="${set.id}">进 1 包马上开</button>` : ''}
       </div></div>`;
   }
@@ -119,7 +135,7 @@
       <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
       ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
-      <div class="summary"><div class="btns">${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
+      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
   }
 
   // ---------- reveal ----------
@@ -153,9 +169,14 @@
     const th = document.querySelector(`.tray .card[data-i="${i}"]`); if (th) armThumb(th, c, true);
     const pg = $('mat-prog'); if (pg) pg.textContent = prog();
     if (last) PTCG_FX.swell(ms);
+    if (t >= 4 && !reduced()) spotlight(ms + 1800);
     setTimeout(() => { PTCG_FX.flip(t); PTCG_FX.burst($('stage'), t); }, ms / 2); // the face turns toward the player halfway through
     setTimeout(() => { tok.busy = false; if (mat === tok && tok.up.size === tok.cards.length) finish(); }, ms + 80);
   }
+
+  // UR-and-up pulls: dim the rest of the mat so the card stands alone.
+  let spotTimer = 0;
+  function spotlight(ms) { const m = $('mat'); m.classList.add('spot'); clearTimeout(spotTimer); spotTimer = setTimeout(() => m.classList.remove('spot'), ms); }
 
   function finish() {
     if (mat.finished) return; mat.finished = true; release();
@@ -172,7 +193,7 @@
       const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
       setTimeout(() => {
         if (mat !== tok) return;
-        const t = rar(hits[i]).t; armThumb(btns[i], hits[i]); PTCG_FX.flip(t); PTCG_FX.burst(btns[i].closest('.slot'), t);
+        const t = rar(hits[i]).t; if (t >= 4 && k === n - 1 && !reduced()) spotlight(2200); armThumb(btns[i], hits[i]); PTCG_FX.flip(t); PTCG_FX.burst(btns[i].closest('.slot'), t);
       }, delay);
     }
     setTimeout(() => { if (mat === tok) release(); }, (reduced() ? 0 : 350 + n * step + 1200));
@@ -287,6 +308,7 @@
       case 'peek': if (!mat.busy) { mat.cur = +b.dataset.i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } break;
       case 'flipall': mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); break;
       case 'mute': PTCG_FX.setMuted(!PTCG_FX.muted()); document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${PTCG_FX.muted() ? '关' : '开'}`; }); break;
+      case 'sharemat': PTCG_SHARE.pack(shareSpec()); break;
       case 'sell': G.sell(b.dataset.key); break;
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key); break;

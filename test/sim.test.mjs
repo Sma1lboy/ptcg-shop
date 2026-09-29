@@ -36,6 +36,17 @@ const p = S.luckPercentile({ sv08: 36 }, 0);
 assert.equal(p, 0, 'zero value must be the unluckiest');
 console.log('ok luck percentile');
 
+// Single-pack ranking: monotone, 0 for an empty pack, ~1 for a huge pull, and a fresh pack lands where the sorted samples say (median ≈ 0.5).
+{
+  const id = PTCG_SETS[0].id, r = S.rng(99), vals = [];
+  for (let i = 0; i < 4000; i++) vals.push(S.packValue(S.openPack(id, r)));
+  assert.equal(S.packPercentile(id, 0), 0); assert.equal(S.packPercentile(id, 1e9), 1);
+  const ps = vals.map(v => S.packPercentile(id, v)), mean = ps.reduce((a, b) => a + b, 0) / ps.length;
+  assert.ok(Math.abs(mean - 0.5) < 0.03, `pack percentile mean ${mean.toFixed(3)} should be ~0.5`);
+  assert.ok(S.packPercentile(id, 5) <= S.packPercentile(id, 50), 'pack percentile is monotone');
+  console.log('ok pack percentile');
+}
+
 // Luck statistics: percentile must agree with a fresh, independent simulation, and hitTail with the binomial.
 {
   const counts = { sv08: 30 }, r = S.rng(99), vals = [];
