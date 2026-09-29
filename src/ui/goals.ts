@@ -7,7 +7,7 @@ import { repeat } from 'lit-html/directives/repeat.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
-import { G, $, money, toShelf, shelveLabel, lately } from './common.ts';
+import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
 import { hold, huntable } from './mat.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
@@ -63,14 +63,18 @@ function packs(rec: Visit[]) {
       const racked = racks.some(r => r.id === id), shelf = G.shelfQty(id), stock = s.stock[id] || 0, mkt = G.sealedPrice(id), name = G.setById(id).name;
       // the price notes read the rail: who would balk at the tag as it is now (it may have moved since they came), and who would still buy
       const pct = G.pctOf(id), faint = mine.filter(v => v.max! < pct - 1e-9).map(v => v.max! * mkt), low = Math.min(...mine.map(v => v.max!));
-      // what would put the set back on sale: the same moves the shelf above offers
-      const refill = stock ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${racked ? 999 : toShelf(id)}">${racked ? '补满' : shelveLabel(id, false)}</button>`
-        : html`<button type="button" data-act="buy" data-id="${id}" data-n="10" ?disabled=${s.cash < G.wholesale(id) * 10}>进 10 包</button>`;
-      const clerk = racked && !stock && G.lvl('clerk') && s.auto[id], act = !shelf && (racked || free) && !clerk ? refill : '';
-      const fix = shelf ? '' : clerk ? '，店员下一轮进货' : racked || free ? `，仓库${stock ? `还有 ${stock} 包` : '也没有'}` : '：在上面给一个货架换系列，或者加一个货架';
+      // what would put the set back on sale: the same moves the shelf above offers. With the clerk on this set, packs bought into the
+      // back room go onto the shelf within a second (all but CLERK_KEEP), so 进满 is the fix even while the shelf still has some.
+      const clerk = G.lvl('clerk') > 0 && !!s.auto[id], carry = clerk && racked, buf = carry ? G.CLERK_KEEP : 0, fill = restock(id);
+      const buy = html`<button type="button" data-act="buy" data-id="${id}" data-n="${fill.n}" title="${fill.title}" ?disabled=${!fill.n}>${fill.n ? fill.text : '进货'}</button>`;
+      const refill = stock > buf && !carry ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${racked ? 999 : toShelf(id)}">${racked ? '补满' : shelveLabel(id, false)}</button>` : buy;
+      const act = racked || free ? refill : '', mins = Math.max(1, Math.ceil((s.clerkT - Date.now()) / 60000));
+      const fix = !racked && !free ? '：在上面给一个货架换系列，或者加一个货架'
+        : carry ? (stock > buf ? '' : `，仓库${stock ? `只剩 ${stock} 包` : '也空了'}：进到仓库的货店员随时搬上架，不然等他下一轮进货（约 ${mins} 分钟）`)
+        : shelf ? '' : `，仓库${stock ? `还有 ${stock} 包` : '也没有'}`;
       // [how many customers it is about, text, button]
       const notes = ([
-        [missed, html`<b>${missed} 位没买到</b>：${shelf ? `货架空着的时候来的，卖得比补得快${G.lvl('clerk') && s.auto[id] ? `（店员每 ${G.CLERK_ROUND / 60} 分钟补一次）` : ''}` : racked ? '货架卖空了' : '没摆上货架'}${fix}`, missed ? act : ''],
+        [missed, html`<b>${missed} 位没买到</b>：${shelf ? '货架空着的时候来的，卖得比补得快' : racked ? '货架卖空了' : '没摆上货架'}${fix}`, missed && (!shelf || fix) ? act : ''],
         [racked ? faint.length : 0, html`按 ${money(G.ask(id))} <b>${faint.length} 位会嫌贵</b>，他们最多肯出 ${spread(faint)}`, ''],
         [broke, `${broke} 位身上的钱不够一包`, ''],
         // a flipper pays the tag like anyone else, he only empties the shelf faster: said, but after anyone who walked out
@@ -165,7 +169,7 @@ function clerk() {
   if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，自动进货补上，你不在线也照样补。</p>`;
   return html`<ul class="auto">${SETS.filter(s => G.unlocked(s.id)).map(s =>
     html`<li><label><input type="checkbox" data-act="auto" data-id="${s.id}" .checked=${!!G.state.auto[s.id]}> ${s.name}</label></li>`)}</ul>
-      <p class="muted">勾选的系列，店员给它的货架补货；钱不够就少买。</p>`;
+      <p class="muted">勾选的系列：店员每 ${G.CLERK_ROUND / 60} 分钟进一次货补货架（钱不够就少买）；仓库里的货随时搬上架，留 ${G.CLERK_KEEP} 包给你拆。人多了货架一两分钟就卖空，把仓库进满，货架就不用空着等下一轮。</p>`;
 }
 
 function renderGoals() {
