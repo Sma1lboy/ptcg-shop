@@ -844,7 +844,8 @@ async function tearAll(run) {
     if (R !== run) return;
     const t0 = p.userData.tear || 0; if (t0 < .9) FX().crinkle();
     await tween(300 * (1 - t0) + 40, e => tearPack(p, t0 + (1 - t0) * e), E.in); if (R !== run) return;
-    const s = p.userData.strip, to = s.getWorldPosition(tmpV()).add(new V3((Math.random() - .5) * 8, 9, -34));
+    const s = p.userData.strip, at = s.getWorldPosition(tmpV()), side = at.x < 0 ? -1 : 1; // off the side it tore on: back at z −34 was through the showcase glass
+    const to = at.clone().add(new V3(side * (46 + Math.random() * 10), 7, 4 + Math.random() * 6));
     flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, 3, Math.PI * 3).then(() => { s.visible = false; });
   })));
   if (R === run) extractBatch(run);
@@ -1273,6 +1274,18 @@ function drawSleeves(c) {
   x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(W * .08, H * .34, W * .08, H * .55); // the light on the sleeves' plastic
   x.strokeStyle = css('--stock-edge'); x.lineWidth = 3; x.strokeRect(1.5, 1.5, W - 3, H - 3);
 }
+// The showcase's deck: card-back felt, lit by the LED strip under the front of the lid, so the pool is brightest at the front edge
+// and behind the slabs, fading to the back corners.
+function drawDeck(c) {
+  const x = c.getContext('2d'), W = c.width, H = c.height;
+  x.fillStyle = css('--back-2'); x.fillRect(0, 0, W, H);
+  const img = x.getImageData(0, 0, W, H), d = img.data; // felt
+  for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 7; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
+  x.putImageData(img, 0, 0);
+  const g = x.createRadialGradient(W / 2, H * .72, 0, W / 2, H * .72, W * .55);
+  g.addColorStop(0, rgba(css('--lamp'), .16)); g.addColorStop(1, rgba(css('--lamp'), 0));
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+}
 // A graded slab's insert: the grading label over the card, as one texture.
 function slabCanvas(img, grade) {
   const W = 256, H = 404, c = canvasOf(W, H), x = c.getContext('2d');
@@ -1290,8 +1303,10 @@ function world() {
   const binC = canvasOf(512, 600), binMap = canvasTex(binC);
   grain.repeat.set(1 / 5, 1 / 5);
   const metal = new T.MeshStandardMaterial({ color: css('--trim'), metalness: 1, roughness: .36, envMapIntensity: 1.3 }); // anodized: satin, not mirror
-  const glass = new T.MeshPhysicalMaterial({ color: 0xFFFFFF, transparent: true, opacity: .1, roughness: .03, metalness: 0, envMapIntensity: 1.6, depthWrite: false });
-  const acrylic = glass.clone(); acrylic.opacity = .22;
+  // Glass only adds light: a black body blended additively leaves what's behind it as it is and puts back the reflections, and
+  // those rise at grazing angles on their own. A white body at 10% was a milky fog over the slabs, a white box at the phones' pitch.
+  const glass = new T.MeshPhysicalMaterial({ color: 0x000000, transparent: true, blending: T.AdditiveBlending, roughness: .04, metalness: 0, envMapIntensity: 1.3, depthWrite: false });
+  const acrylic = new T.MeshPhysicalMaterial({ color: 0xFFFFFF, transparent: true, opacity: .22, roughness: .03, metalness: 0, envMapIntensity: 1.6, depthWrite: false }); // the toploaders: a stack has to read as a body
   const place = (m, x, y, z, yaw = 0) => { m.position.set(x, y, z); m.rotation.y = yaw; scene.add(m); return m; };
   const TOP = -.4; // the counter's top face (the mat lies on it)
 
@@ -1318,9 +1333,13 @@ function world() {
   for (const y of [2.2, 2.2 + SH]) for (const z of [-1, 1]) { const g = new T.BoxGeometry(SW, .5, .5); g.translate(0, y, z * SD / 2); bars.push(g); }
   for (const y of [2.2 + SH]) for (const x of [-1, 1]) { const g = new T.BoxGeometry(.5, .5, SD); g.translate(x * SW / 2, y, 0); bars.push(g); }
   show.add(new T.Mesh(merge(bars), metal));
-  const pane = new T.BoxGeometry(SW, SH, SD); pane.translate(0, 2.2 + SH / 2, 0);
+  const pane = new T.BoxGeometry(SW, SH, SD); pane.translate(0, 2.2 + SH / 2, 0); pane.clearGroups(); pane.addGroup(0, 18, 0); pane.addGroup(24, 12, 0); // no floor face: the deck is the floor
+  // the deck the slabs stand on: card-back felt with the LED's light pool printed in (theme() draws it; a real light would cost every material a recompile)
+  const deckC = canvasOf(512, Math.round(512 * SD / SW)), deckMap = canvasTex(deckC);
+  const deck = new T.Mesh(new T.PlaneGeometry(SW - .5, SD - .5), new T.MeshStandardMaterial({ map: deckMap, roughness: .95, envMapIntensity: .15, normalMap: grain, normalScale: new T.Vector2(.25, .25) }));
+  deck.rotation.x = -Math.PI / 2; deck.position.y = 2.2 + .26; show.add(deck);
   const led = new T.Mesh(new T.BoxGeometry(SW - 2, .25, .25), new T.MeshBasicMaterial({ color: new T.Color(css('--lamp')).multiplyScalar(2.2) })); led.position.set(0, 2.2 + SH - .5, SD / 2 - .8);
-  const slabs = new T.InstancedMesh(new T.BoxGeometry(7.6, 12, .7), acrylic, 3), m4 = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-.22, 0, 0));
+  const slabs = new T.InstancedMesh(new T.BoxGeometry(7.6, 12, .7), glass, 3), m4 = new T.Matrix4(), q = new T.Quaternion().setFromEuler(new T.Euler(-.22, 0, 0));
   const chase = [['sv08', '238', '10'], ['sv10', '231', '10'], ['sv08.5', '161', '9.5']];
   chase.forEach(([set, n, grade], i) => {
     const at = new V3((i - 1) * 8.6, 2.2 + 6.2, -1.2), c = slabCanvas(null, grade), t = canvasTex(c);
@@ -1345,13 +1364,14 @@ function world() {
   const tops = new T.InstancedMesh(new T.BoxGeometry(7.7, .14, 10.2), acrylic, 7);
   for (let i = 0; i < 7; i++) tops.setMatrixAt(i, m4.compose(new V3((Math.random() - .5) * .5, .1 + i * .16, (Math.random() - .5) * .5), new T.Quaternion().setFromEuler(new T.Euler(0, (Math.random() - .5) * .12, 0)), new V3(1, 1, 1)));
   const tl = place(tops, 24, TOP, -39, -.3);
-  const kept = canvasTex(canvasOf(8, 8)), inTop = new T.Mesh(new T.PlaneGeometry(CW, CH), new T.MeshStandardMaterial({ map: kept, roughness: .5, envMapIntensity: .4 }));
+  const kept = new T.Texture(),  inTop = new T.Mesh(new T.PlaneGeometry(CW, CH), new T.MeshStandardMaterial({ map: kept, roughness: .5, envMapIntensity: .4 }));
   inTop.rotation.x = -Math.PI / 2; inTop.position.set(0, .1 + 6 * .16 + .02, 0); tl.add(inTop);
+  kept.colorSpace = T.SRGBColorSpace; // no image until the scan loads (an 8×8 stand-in fixed the GPU texture at 8×8: the card came out a grey square)
   loadImg(ASSETS.card('sv08', '219', 'low')).then(img => { if (img) { kept.image = img; kept.needsUpdate = true; wake(100); } });
   const slvC = canvasOf(256, 340), slvMap = canvasTex(slvC), slvSide = new T.MeshStandardMaterial({ color: css('--stock'), transparent: true, opacity: .5, roughness: .3 });
   place(new T.Mesh(new T.BoxGeometry(7.2, 1.1, 9.6), [slvSide, slvSide, new T.MeshStandardMaterial({ map: slvMap, roughness: .45, envMapIntensity: .4 }), slvSide, slvSide, slvSide]), 33, TOP + .55, -45, .45);
 
-  world0 = { lamC, matC, binC, slvC, lam, matMap, binMap, slvMap, led };
+  world0 = { lamC, matC, binC, slvC, deckC, lam, matMap, binMap, slvMap, deckMap, led };
 }
 function theme() {
   // The room past the counter is the shop in the lamp's shadow (the HUD's navy, both themes), not the page: a white fog in the
@@ -1360,8 +1380,8 @@ function theme() {
   renderer.setClearColor(room); scene.fog.color.copy(room);
   counter.material.color.setScalar(bg.getHSL(hsl).l > .6 ? .72 : 1);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
-  const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC); drawSleeves(w.slvC);
-  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = w.slvMap.needsUpdate = true; w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
+  const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC); drawSleeves(w.slvC); drawDeck(w.deckC);
+  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = w.slvMap.needsUpdate = w.deckMap.needsUpdate = true; w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
   wake(100);
 }
 
