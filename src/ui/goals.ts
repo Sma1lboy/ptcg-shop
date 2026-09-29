@@ -52,6 +52,9 @@ function priceRail(id: string, vs: Visit[], flip: number) {
 
 // One set: a line of counts, the rail (only while it is on a shelf: that is where the tag matters), then one verdict — the
 // problem that lost the most customers first, with the move that fixes it — and at most one more.
+// Phones list only the FEW sets that lost the most (style.css), the rest behind a button: ten rails ran two screens under the shelf.
+const FEW = 3;
+let allSets = false;
 function packs(rec: Visit[]) {
   const openers = rec.filter(v => v.t === 'opener'), flippers = rec.filter(v => v.t === 'flipper'), s = G.state;
   const flip = Math.max(0, ...flippers.map(v => v.max!)), racks = G.shelves(), free = racks.some(r => !r.id);
@@ -64,7 +67,7 @@ function packs(rec: Visit[]) {
   }).sort((a, b) => b.lost - a.lost);
   if (!rows.length) return '';
   return html`<p class="c-h">点是顾客最多肯出的价：实的按现在的标价会买，淡的不会。点轨上哪一档，标价就改到哪一档</p>
-    <ul class="c-sets">${repeat(rows, r => r.id, ({ id, mine, missed, sold, dear, broke, swept, sweptN }) => {
+    <ul class="c-sets ${allSets ? 'all' : ''}">${repeat(rows, r => r.id, ({ id, mine, missed, sold, dear, broke, swept, sweptN }) => {
       const racked = racks.some(r => r.id === id), shelf = G.shelfQty(id), stock = s.stock[id] || 0, mkt = G.sealedPrice(id), name = G.setById(id).name;
       // the price notes read the rail: who would balk at the tag as it is now (it may have moved since they came), and who would still buy
       const pct = G.pctOf(id), faint = mine.filter(v => v.max! < pct - 1e-9).map(v => v.max! * mkt), low = Math.min(...mine.map(v => v.max!));
@@ -94,7 +97,7 @@ function packs(rec: Visit[]) {
           ${mine.length && racked ? priceRail(id, mine, flip) : ''}
           ${notes.length ? html`<p class="c-note">${notes.map(([, t], i) => html`${i ? '；' : ''}${t}`)}。${notes[0][2]}</p>` : ''}
         </li>`;
-    })}</ul>`;
+    })}</ul>${rows.length > FEW ? html`<button type="button" class="c-more" aria-expanded="${allSets}" @click=${() => { allSets = !allSets; customers(); }}>${allSets ? `只看前 ${FEW} 个` : `再看 ${rows.length - FEW} 个系列`}</button>` : ''}`;
 }
 
 // The case browsers: one rail for the whole case (seekers' and collectors' ceilings against the case tag: every card is priced as a
