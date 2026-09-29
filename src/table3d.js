@@ -28,7 +28,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 
 // Real sizes in cm: a card is 63×88 mm with 3 mm corners; an SV booster is about 74×128 mm with ~9.5 mm crimps.
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
-const MW = 76, MH = 56, MZ = -8; // playmat size and where its centre sits
+const MW = 76, MH = 64, MZ = -4; // playmat size and where its centre sits (deep enough that the ten-pack shots never see past its front edge)
 const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
@@ -51,7 +51,7 @@ const wait = ms => tween(ms, () => {});
 // Starts the loop if it is parked (and restarts the clock, so a tween made while idle starts now), and keeps it running ms more.
 function wake(ms = 0) {
   const t = performance.now();
-  if (!raf) { if (!host || !seen) return; now = last = t; raf = requestAnimationFrame(frame); }
+  if (!raf) { if (!host) return; now = last = t; raf = requestAnimationFrame(frame); }
   awake = Math.max(awake, t + ms);
 }
 function stepTweens() {
@@ -213,8 +213,9 @@ function sheet(yA, yB, jA, jB, side, rows, COLS) {
   geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx); geo.computeVertexNormals(); return geo;
 }
-// cols/rows: mesh density. A pack held up to the camera gets 60×64; the ten packs of a batch, small on screen, far less.
-function buildPack(setId, cols = 60, rows = 64) {
+// cols/rows: mesh density. A pack held up to the camera gets 60×64 and its foil lining; the ten packs of a batch, small
+// on screen, far fewer vertices and no lining (40 draw calls saved, never visible from above).
+function buildPack(setId, cols = 60, rows = 64, lining = true) {
   const mats = packArt(setId), pack = new T.Group(), strip = new T.Group(), ph = Math.random() * 9, f = 60 / cols;
   const teeth = c => (c % 2 ? .09 : 0), tearJ = c => .06 * Math.sin(c * f * .9 + ph) + .04 * Math.sin(c * f * 2.3 + ph * 2), zero = () => 0;
   const SC = (TEAR + PH / 2) / 2, stripGeos = [];
@@ -223,7 +224,7 @@ function buildPack(setId, cols = 60, rows = 64) {
     top.translate(0, -SC, 0); stripGeos.push({ geo: top, orig: top.attributes.position.array.slice() });
     for (const [geo, parent] of [[body, pack], [top, strip]]) {
       const outer = new T.Mesh(geo, side > 0 ? mats.front : mats.back); outer.castShadow = true;
-      parent.add(outer, new T.Mesh(geo, shared.inner));
+      parent.add(outer); if (lining) parent.add(new T.Mesh(geo, shared.inner));
     }
   }
   strip.position.y = SC; pack.add(strip);
@@ -685,7 +686,7 @@ const BATCH_PITCH = 1.05, FAN_R = 34, FAN_Z = 1;
 const qY = a => new T.Quaternion().setFromAxisAngle(new V3(0, 1, 0), a);
 const faceDown = q => q.clone().multiply(qY(Math.PI));
 function packGrid(n) {
-  const cols = Math.min(5, n), rows = Math.ceil(n / cols);
+  const cols = Math.min(camera.aspect < .8 ? 4 : 5, n), rows = Math.ceil(n / cols); // portrait: 4-4-2, bigger packs
   const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, gz = PH + 1.5, over = gx < PW + .3, zc = -18;
   const pos = [], col = [];
   for (let k = 0; k < n; k++) { // dealt by hand: not quite on the grid
@@ -693,8 +694,8 @@ function packGrid(n) {
     pos.push(new V3((c - (inRow - 1) / 2) * gx + j(), PUFF + .05 + (over ? c * .45 + r * .1 : 0), zc + (r - (rows - 1) / 2) * gz + j())); col.push(c);
   }
   const w = (cols - 1) * gx + PW, h = (rows - 1) * gz + PH;
-  const box = [w * 1.12, h * Math.sin(BATCH_PITCH) * 1.12 + 3];
-  return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p: BATCH_PITCH, d: fit(...box), box } };
+  const p = BATCH_PITCH + .1, box = [w * 1.12, h * Math.sin(p) * 1.12 + 3]; // a little more top-down than the fan: the mat's far edge stays out of shot
+  return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p, d: fit(...box), box } };
 }
 // The fan: an arc whose pivot is toward the player, cheapest on the left, the best on top at the right. Few picks lie
 // side by side; many overlap, the fan never gets wider than the view.
@@ -705,14 +706,14 @@ function fanOf(n) {
     const a = n > 1 ? (i / (n - 1) - .5) * sp : 0;
     poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, FAN_Z + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
   }
-  const sag = FAN_R * (1 - Math.cos(sp / 2)), p = 1.08, box = [avail + 4, (CH + sag) * Math.sin(p) + 12];
+  const sag = FAN_R * (1 - Math.cos(sp / 2)), p = 1.08, box = [Math.max(avail, 3 * CW) + 4, (CH + sag) * Math.sin(p) + 12]; // one or two picks: framed as if three, so the packs don't loom
   return { poses, cam: { t: new V3(0, 0, FAN_Z + sag / 2 - 1.2), p, d: fit(...box), box } }; // fan a little below centre: the packs show above it
 }
 function buildBatch(set, packs, picks) {
   const grid = packGrid(packs.length), data = picks.map(([p, i]) => packs[p][i]);
   const run = { batch: true, data, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, fan: fanOf(data.length) };
   run.shot = run.grid.cam;
-  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24); p.visible = false; p.userData.col = grid.col[k]; p.userData.yaw = (Math.random() - .5) * .2; scene.add(p); return p; });
+  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; p.userData.col = grid.col[k]; p.userData.yaw = (Math.random() - .5) * .2; scene.add(p); return p; });
   const inPack = {};
   run.cards = picks.map(([p, i]) => {
     const m = cardMesh(packs[p][i]), k = inPack[p] = (inPack[p] || 0) + 1;
@@ -900,8 +901,13 @@ function tap(e) {
 }
 
 // ---------- frame ----------
+// raf is -1 while a frame runs, so a wake() from inside it (particles spawned by a show) doesn't queue a second one; a frame
+// that throws still hands the loop back (the error surfaces in the console, the next wake() starts it again).
 function frame(t) {
-  raf = -1; // truthy while the frame runs: a wake() from inside it (particles spawned by a show) must not queue a second one
+  raf = -1; let again = false;
+  try { again = tick(t); } finally { raf = again ? requestAnimationFrame(frame) : 0; }
+}
+function tick(t) {
   renderer.info.reset();
   const dt = Math.min(.05, Math.max(0, (t - last) / 1000)); last = t; now = t;
   stepTweens();
@@ -930,10 +936,9 @@ function frame(t) {
   shared.u.time.value = s; rays.material.uniforms.uTime.value = s;
   placeCam(camera, cam);
   if (sh > 0) { camera.position.x += (Math.random() - .5) * sh; camera.position.y += (Math.random() - .5) * sh; }
-  composer.render(dt);
+  if (seen) { composer.render(dt); frames++; } // off screen (phones scroll the mat in after the click) the motion still runs, undrawn
   if (run && run.stage === 'spread' && run.tagEls) placeTags(run);
-  frames++;
-  raf = busy || now < awake || breath > .002 ? requestAnimationFrame(frame) : 0;
+  return busy || now < awake || breath > .002;
 }
 let frames = 0; // drawn frames, for the dev probe below
 function park() { if (raf > 0) cancelAnimationFrame(raf); raf = 0; }
@@ -970,7 +975,7 @@ function drawMat(c) {
 function theme() {
   const bg = new T.Color(css('--bg'));
   renderer.setClearColor(bg); scene.fog.color.copy(bg); counter.material.color.copy(bg);
-  L.hemi.groundColor.set(css('--mat'));
+  L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
   shared.back.value.image = backCanvas(); shared.back.value.needsUpdate = true;
   drawMat(playmat.material.map.image); playmat.material.map.needsUpdate = true;
   wake(100);
@@ -1001,7 +1006,7 @@ function init() {
   scene.add(hemi, key, key.target, rim, glow);
   L = { hemi, key, rim, glow };
 
-  const mapC = canvasOf(1520, 1120), matMap = canvasTex(mapC), grain = grainTex();
+  const mapC = canvasOf(1520, 1280), matMap = canvasTex(mapC), grain = grainTex();
   matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5); grain.repeat.set(1 / 5, 1 / 5);
   const mg = new T.ExtrudeGeometry(roundRect(MW, MH, 2.5), { depth: .3, bevelEnabled: true, bevelThickness: .08, bevelSize: .08, bevelSegments: 2, curveSegments: 8 });
   mg.rotateX(-Math.PI / 2); mg.translate(0, -.38, MZ);
@@ -1052,7 +1057,7 @@ function init() {
   });
   ro = new ResizeObserver(resize);
   if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; } }; // dev probe: frame count and renderer.info
-  io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; if (seen && R) wake(IDLE); else if (!seen) park(); });
+  io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; if (seen && R) wake(IDLE); });
 }
 
 // ---------- teardown ----------

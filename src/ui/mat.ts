@@ -156,7 +156,10 @@ export let hold = false;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const batchHits = () => mat.packs.flat().filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price);
 const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
-const prog = () => { const cs = batch() ? picked() : mat.cards; return `${batch() ? '好卡' : '已翻'} ${mat.up.size}/${cs.length} · ${money(cs.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`; };
+const prog = () => {
+  const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : S.HITS.includes(cs[0].kind) ? '好卡' : '没出好卡，最值钱的';
+  return `${label} ${mat.up.size}/${cs.length} · ${money(cs.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
+};
 const ready = (img: HTMLImageElement | null) => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
 const armThumb = (btn: HTMLElement, c: Pull, peek?: boolean) => { btn.classList.add('up'); btn.setAttribute('aria-label', c.name); if (peek) { btn.dataset.act = 'peek'; btn.removeAttribute('tabindex'); } };
 
