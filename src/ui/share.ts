@@ -131,7 +131,8 @@ async function drawCard() {
 
 // One pack or one batch, straight from the mat: the best card in a slab, graded by where the pack ranks among packs of its set.
 async function drawPack(d: ShareSpec) {
-  const top = d.pct >= .995 ? '前 0.5%' : `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%`;
+  // bottom half reads from the bottom: a 5th-percentile pack is 后 5%, not a boastful 前 95%
+  const top = d.pct >= .995 ? '前 0.5%' : d.pct >= .5 ? `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%` : `后 ${Math.max(1, Math.round(d.pct * 100))}%`;
   await fonts(top + d.set + d.best.name);
   const art = await loadArt(d.best), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
