@@ -36,7 +36,7 @@
   const unlocked = id => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // capped below +50%
   const rate = () => CUSTOMERS_PER_SEC * (1 + SIGN_STEP * lvl('signage')) * (1 + trophyBonus());
-  const fresh = () => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [],
+  const fresh = () => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, dex: {}, dexPacks: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [],
     up: {}, shown: [], casePrice: 1, trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: Date.now(), offline: null });
 
   let state = load(), luckCache = null, lastTick = state.savedAt; // first tick after load credits the time the tab was closed
@@ -74,13 +74,14 @@
       for (const c of pack) {
         const key = `${c.set}|${c.n}|${c.kind}`;
         (state.singles[key] ||= { ...c, count: 0 }).count++;
+        const d = (state.dex[key] ||= { c: 0, p: c.price }); d.c++; d.p = c.price;
         state.tally[c.kind] = (state.tally[c.kind] || 0) + 1;
         if (S.HITS.includes(c.kind)) state.hits.push({ ...c, t: Date.now() });
       }
     }
     state.hits.sort((a, b) => b.price - a.price); state.hits.length = Math.min(state.hits.length, 24);
     state.costOpened += wholesale(id) * n;
-    state.opened[id] = (state.opened[id] || 0) + n;
+    state.opened[id] = (state.opened[id] || 0) + n; state.dexPacks += n;
     luckCache = null;
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
     log(`开了 ${n} 包${setById(id).name}，最贵：${best.name} $${best.price.toFixed(2)}`, S.HITS.includes(best.kind) ? 'hit' : '');
@@ -195,9 +196,14 @@
     if (luckCache) return luckCache;
     const packs = Object.values(state.opened).reduce((a, b) => a + b, 0);
     const expected = Object.entries(state.opened).reduce((s, [id, n]) => s + n * S.packEV(id), 0);
-    const pct = packs ? S.luckPercentile(state.opened, state.pulled) : null;
+    // Price basis: the simulated players are priced with today's data, so re-price every card ever pulled the same way
+    // (state.pulled is the price at the moment of opening; prices move when data/ is refreshed). Saves from before
+    // state.dex existed only have that snapshot.
+    const live = state.dexPacks === packs;
+    const value = live ? Object.entries(state.dex).reduce((s, [k, d]) => { const [set, n, kind] = k.split('|'); return s + d.c * (S.cardPrice(set, n, kind) ?? d.p); }, 0) : state.pulled;
+    const pct = packs ? S.luckPercentile(state.opened, value) : null;
     const title = pct == null ? '还没开包' : TITLES.find(([p]) => pct >= p)[1];
-    return (luckCache = { packs, pct, title, value: state.pulled, expected, cost: state.costOpened });
+    return (luckCache = { packs, pct, title, value, live, expected, cost: state.costOpened, listEV: Object.entries(state.opened).reduce((s, [id, n]) => s + n * setById(id).packPrice, 0) });
   }
   // Expected count of each hit rarity for the packs opened so far.
   function expectedTally() {

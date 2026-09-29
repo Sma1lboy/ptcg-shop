@@ -80,6 +80,20 @@
       $('mat').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
+  // ---------- footer: what each number means and what is not modelled ----------
+  function renderBasis() {
+    const S = PTCG_SETS, ev = id => PTCG_SIM.packEV(id);
+    const rows = S.map(s => `<tr><td>${s.name}</td><td>${money(s.packPrice)}</td><td>${money(ev(s.id))}</td><td>${Math.round(ev(s.id) / s.packPrice * 100)}%</td></tr>`).join('');
+    $('basis').innerHTML = `<summary>价格口径与没建模的东西</summary>
+      <p>单卡是 TCGplayer 市价（成交均价），整包是 PriceCharting 的散包价，两个来源不同。下表「期望市值」= 每个槽位的概率 × 该稀有度卡池的平均单卡市价，不含任何游戏设定。</p>
+      <table class="tally"><thead><tr><th>系列</th><th>整包标价</th><th>期望市值</th><th>占比</th></tr></thead><tbody>${rows}</tbody></table>
+      <p>期望只有标价的四成多。这个差距是两个口径直接算出来的，不是游戏调的：整包标价里含密封品本身的溢价（收藏、囤货、抽奖的人愿意多付），拆开后只剩单卡的价值。另外单卡市价是成交价，不扣平台费和运费，你在游戏里卖给同行只拿 ${Math.round(G.BUYLIST * 100)}%。</p>
+      <p>欧气检测把你开出的每张卡按<b>当前</b>单卡市价重算再和模拟玩家比，所以刷新价格数据不会让旧存档的百分位错位。只有本功能上线前开的包，无法重算，仍按开包当时的价格。</p>
+      <p>没建模：棱镜进化的 Demigod（3 张 SIR）/ God Pack 和 151 的 God Pack。TCGplayer 的文章明说样本里没开出 God Pack，给不出可靠概率，所以不编数字；文章里的 SIR 概率已经包含了这类包的贡献，因此单包期望大体不受影响，只是没有这种「一包全是大货」的极端开局。</p>
+      <p>游戏设定（不是市场数据）：展示柜共 ${G.CASE_BASE} 个柜位（展示柜每级 +2），逛柜台的顾客约 ${Math.round(G.BROWSE * 100)}%，柜价三档「九折/市价/加价」对应成交率 80%/50%/20%；镇店之宝按其市价给客流加成，上限 +50%；货架每系列 ${G.SHELF_BASE} 包起（每级 +20）；每 ${G.HEAT_EVERY / 60} 分钟行情重排一次，一个系列热销（柜台售价 +15%）、一个滞销（−10%）；棱镜进化累计营业额 ${money(G.unlockAt('sv08.5'))}、151 累计 ${money(G.unlockAt('sv03.5'))} 后才能进货；离线收益最多按 ${G.OFFLINE_CAP / 3600} 小时结算。</p>`;
+  }
+  renderBasis();
+
   G.on(() => { renderGuide(); renderShare(); });
   renderGuide(); renderShare();
 })();

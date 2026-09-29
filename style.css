@@ -256,3 +256,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 #card-out img { display: block; width: 100%; height: auto; margin: 12px 0 8px; border-radius: 6px; border: 1px solid var(--line); }
 #card-out .btns { display: flex; gap: 6px; }
 @media (max-width: 779px) { .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-block: 6px; margin-bottom: 8px; } .stats dd { font-size: 15px; } .brand { font-size: 26px; } }
+
+/* price-basis footer + luck notes */
+.basis { margin-top: 8px; }
+.basis summary { cursor: pointer; color: var(--ink); }
+.basis table { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+.basis th, .basis td { text-align: left; padding: 2px 16px 2px 0; }
+.basis-note { font-size: 12px; margin: 8px 0; }
+.dd-note { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
