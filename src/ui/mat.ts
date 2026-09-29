@@ -178,7 +178,7 @@ function shelfItems() {
   const narrow = matchMedia('(max-width: 779px)').matches; // phones: four stacks a row, a label gets two lines (name + one short line) or it covers the pack behind it
   return SETS.filter(x => G.unlocked(x.id)).map(x => {
     const n = s.stock[x.id] || 0, w = G.wholesale(x.id), poor = !n && s.cash < w;
-    return { set: x.id, n, off: poor, name: x.name, note: n ? `仓库 ${n} 包` : poor ? (narrow ? '钱不够' : '现金不够进货') : narrow ? '' : '进 1 包就开', price: n || poor ? '' : money(w) };
+    return { set: x.id, n, off: poor, name: x.name, note: n ? `仓库 ${n} 包` : poor ? (narrow ? '钱不够' : '现金不够进货') : narrow ? '' : '进 1 包就开', price: n || (poor && narrow) ? '' : money(w) };
   });
 }
 // Imperative like the rest of #scene3d (CLAUDE.md): the buttons are made once, then only their text / action / disabled change.
