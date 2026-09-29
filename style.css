@@ -15,6 +15,7 @@
   --loss: #BF2F3A;
   --mat: #1E2A38;         /* playmat stays dark in both themes, it is a physical object */
   --mat-ink: #E6EBF1;
+  --mat-gain: #45C483; --mat-loss: #FF6C75; --mat-gold: #E1B54B; /* semantic colours for use ON the dark mat; the page's own gain/loss are tuned for the light panel */
   --mat-muted: #93A1B3;
   --mat-gain: #45C483;    /* semantic colours for text on the dark mat; --gain/--loss are tuned for the page background */
   --mat-loss: #FF6C75;
@@ -134,7 +135,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 
 .summary { border-top: 1px solid rgba(255, 255, 255, .12); padding-top: 12px; }
 .summary p { margin: 0 0 10px; }
-.summary .gain { color: var(--gain); font-weight: 600; } .summary .loss { color: var(--loss); font-weight: 600; }
+.summary .gain, .mat-head .gain { color: var(--mat-gain); font-weight: 600; } .summary .loss, .mat-head .loss { color: var(--mat-loss); font-weight: 600; }
 .mat .btns button { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); color: var(--mat-ink); }
 .mat .btns button.primary { background: var(--sticker); border-color: var(--sticker); color: var(--sticker-ink); }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
@@ -258,6 +259,32 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 #card-out .btns { display: flex; gap: 6px; }
 @media (max-width: 779px) { .top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding-block: 6px; margin-bottom: 8px; } .stats dd { font-size: 15px; } .brand { font-size: 26px; } }
 
+/* reveal moment (ui.js spotlight, extras.js PTCG_SHARE) */
+.mat { position: relative; }
+.mat::after { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: inherit; opacity: 0; transition: opacity .5s;
+  background: radial-gradient(ellipse 34% 46% at 50% 38%, transparent 0, rgba(4, 8, 14, .78) 100%); }
+.mat.spot::after { opacity: 1; }
+.mat.spot .stage, .mat.spot .spread .card.up { z-index: 3; }
+@media (prefers-reduced-motion: reduce) { .mat::after { display: none; } }
+.summary .rank { color: var(--mat-gold); font-weight: 600; }
+#share-pop { border: 0; padding: 16px; border-radius: 12px; background: var(--panel); color: var(--ink); max-width: min(520px, 94vw); max-height: 94vh; overflow: auto; }
+#share-pop::backdrop { background: rgba(4, 8, 14, .72); }
+#share-pop img { display: block; width: 100%; height: auto; border-radius: 8px; }
+#share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+#share-pop .btns :is(button, a) { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 6px 12px; font-size: 13px; text-decoration: none; cursor: pointer; }
+
+/* pack-opening feel: fast bulk cards, card slides off, drag-to-rip pack, swipe (ui.js) */
+.stage { touch-action: pan-y; }
+.stage .card:not(.up) { touch-action: pan-y; }
+.stage .slot.quick { animation-duration: .12s; }
+.stage .slot.away { position: absolute; inset: 0; z-index: 2; pointer-events: none; animation: away .26s cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes away { to { transform: translate(-75%, 6%) rotate(-12deg); opacity: 0; } }
+.pack { touch-action: pan-y; cursor: grab; user-select: none; }
+.pack.dragging { transition: none; cursor: grabbing; }
+.pack.dragging .pack-crimp:not(.bottom) { transition: none; }
+.pack:not(.torn) .pack-crimp:not(.bottom) { transform: translate(calc(var(--tear, 0) * 90px), calc(var(--tear, 0) * -22px)) rotate(calc(var(--tear, 0) * 14deg)); transform-origin: 0 100%; }
+.pack-hint::after { content: "，或向右拖动撕开"; }
+@media (prefers-reduced-motion: reduce) { .stage .slot.away { display: none; } }
 /* polish pass: mat semantic colours, narrow-panel fixes, phone tap targets */
 .mat .gain, .mat .summary .gain, .mat-head b.gain { color: var(--mat-gain); }
 .mat .loss, .mat .summary .loss, .mat-head b.loss { color: var(--mat-loss); }

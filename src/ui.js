@@ -78,14 +78,30 @@
     </figure>`;
   }
 
+  // Where one pack ranks among simulated packs of the same set, in words a player can quote.
+  function rankText(setId, v) {
+    const p = S.packPercentile(setId, v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
+    return { p, text: `比 ${pc}% 的${G.setById(setId).name}包值钱${p >= .9 ? `，约 ${Math.min(1000, Math.round(1 / (1 - p)))} 包才出一包这样的` : ''}` };
+  }
+  const shareBtn = () => '<button type="button" data-act="sharemat">分享这次开包</button>';
+  function shareSpec() {
+    const set = G.setById(mat.set), packs = mat.mode === 'batch' ? mat.packs : [mat.cards];
+    const vals = packs.map(S.packValue), bi = vals.indexOf(Math.max(...vals)), cards = packs.flat();
+    const best = cards.reduce((a, b) => (b.price > a.price ? b : a)), rk = rankText(set.id, vals[bi]);
+    return { set: set.name, en: set.en, n: packs.length, value: vals.reduce((a, b) => a + b, 0), cost: G.wholesale(set.id) * packs.length,
+      bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high') };
+  }
+
   function packSummary(cards, set) {
     const v = S.packValue(cards), cost = G.wholesale(set.id), d = v - cost;
     const best = cards.reduce((a, b) => (b.price > a.price ? b : a));
     const stock = G.state.stock[set.id] || 0;
     return `<div class="summary">
       <p>这包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。最值钱：${esc(best.name)}。</p>
+      <p class="rank">${rankText(set.id, v).text}。</p>
       <div class="btns">
         ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>` : ''}
+        ${shareBtn()}
         ${G.state.cash >= cost ? `<button type="button" data-act="buyopen" data-id="${set.id}">进 1 包马上开</button>` : ''}
       </div></div>`;
   }
@@ -119,7 +135,7 @@
       <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
       ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
-      <div class="summary"><div class="btns">${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
+      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
   }
 
   // ---------- reveal ----------
@@ -134,28 +150,46 @@
 
   function release() { if (hold) { hold = false; renderAll(); } }
 
+  // Flip time by rarity tier: bulk cards fly past, chase cards slow down. The last (rare) slot is always at least 1.2 s so a miss and a hit look the same until the flip lands.
+  const FLIP_MS = [140, 380, 600, 900, 1300, 1300];
+  // The card just seen slides off to the left as the next one comes up, like moving the top card to the back of the stack.
+  function slideAway(stage) {
+    const old = stage.firstElementChild; if (!old || reduced()) return;
+    const g = old.cloneNode(true); g.classList.add('away'); g.querySelectorAll('[data-act]').forEach(n => n.removeAttribute('data-act'));
+    g.addEventListener('animationend', () => g.remove()); stage.append(g);
+  }
+
   // One tap = next card slides out of the pack and flips. The last card (the rare slot) flips slowly for every pack, hit or not.
   function advance() {
     if (mat.mode !== 'cards' || mat.busy || mat.up.size >= mat.cards.length) return false;
-    const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i;
+    const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i, bulk = rar(mat.cards[i]).t === 0;
     mat.busy = true;
-    if (fresh) { mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild.classList.add('deal'); }
+    if (fresh) {
+      slideAway(stage);
+      mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild.classList.add('deal');
+      if (bulk) stage.firstElementChild.classList.add('quick');
+    }
     const btn = stage.querySelector('.card');
-    ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? 240 : 0));
+    ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? (bulk ? 60 : 240) : 0));
     return true;
   }
 
   function reveal(tok, i, btn) {
-    const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : last ? 1200 : 460;
+    const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : Math.max(FLIP_MS[t], last ? 1200 : 0);
     btn.style.setProperty('--flip', ms + 'ms');
     btn.style.setProperty('--ease', last ? 'cubic-bezier(.55, 0, .25, 1)' : 'cubic-bezier(.2, .7, .2, 1)');
     tok.up.add(i); btn.classList.add('up'); btn.setAttribute('aria-label', c.name);
     const th = document.querySelector(`.tray .card[data-i="${i}"]`); if (th) armThumb(th, c, true);
     const pg = $('mat-prog'); if (pg) pg.textContent = prog();
     if (last) PTCG_FX.swell(ms);
+    if (t >= 4 && !reduced()) spotlight(ms + 1800);
     setTimeout(() => { PTCG_FX.flip(t); PTCG_FX.burst($('stage'), t); }, ms / 2); // the face turns toward the player halfway through
     setTimeout(() => { tok.busy = false; if (mat === tok && tok.up.size === tok.cards.length) finish(); }, ms + 80);
   }
+
+  // UR-and-up pulls: dim the rest of the mat so the card stands alone.
+  let spotTimer = 0;
+  function spotlight(ms) { const m = $('mat'); m.classList.add('spot'); clearTimeout(spotTimer); spotTimer = setTimeout(() => m.classList.remove('spot'), ms); }
 
   function finish() {
     if (mat.finished) return; mat.finished = true; release();
@@ -172,7 +206,7 @@
       const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
       setTimeout(() => {
         if (mat !== tok) return;
-        const t = rar(hits[i]).t; armThumb(btns[i], hits[i]); PTCG_FX.flip(t); PTCG_FX.burst(btns[i].closest('.slot'), t);
+        const t = rar(hits[i]).t; if (t >= 4 && k === n - 1 && !reduced()) spotlight(2200); armThumb(btns[i], hits[i]); PTCG_FX.flip(t); PTCG_FX.burst(btns[i].closest('.slot'), t);
       }, delay);
     }
     setTimeout(() => { if (mat === tok) release(); }, (reduced() ? 0 : 350 + n * step + 1200));
@@ -288,6 +322,7 @@
       case 'peek': if (!mat.busy) { mat.cur = +b.dataset.i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } break;
       case 'flipall': mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); break;
       case 'mute': PTCG_FX.setMuted(!PTCG_FX.muted()); document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${PTCG_FX.muted() ? '关' : '开'}`; }); break;
+      case 'sharemat': PTCG_SHARE.pack(shareSpec()); break;
       case 'sell': G.sell(b.dataset.key); break;
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key); break;
@@ -303,6 +338,35 @@
         break;
     }
   });
+  // Swipe the card on the stage sideways to send it to the back (same as a tap). Taps right after a swipe are ignored.
+  let swipe = null, swiped = 0;
+  document.addEventListener('pointerdown', e => { swipe = e.target.closest('.stage .card') ? { x: e.clientX, y: e.clientY } : null; });
+  document.addEventListener('pointerup', e => {
+    if (!swipe) return; const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y; swipe = null;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > 2 * Math.abs(dy)) { swiped = Date.now(); PTCG_FX.unlock(); advance(); }
+  });
+  document.addEventListener('click', e => { if (Date.now() - swiped < 120) e.stopPropagation(); }, true);
+
+  // Drag the top of the sealed pack to the right to rip it; a plain tap or Space still works.
+  const TEAR_PX = 150; let rip = null, ripMoved = false;
+  document.addEventListener('pointerdown', e => {
+    const p = e.target.closest('.pack'); if (!p || p.classList.contains('torn')) return;
+    rip = { p, x: e.clientX }; ripMoved = false; p.setPointerCapture?.(e.pointerId); p.classList.add('dragging');
+  });
+  document.addEventListener('pointermove', e => {
+    if (!rip) return; const d = Math.max(0, e.clientX - rip.x);
+    if (d > 6) ripMoved = true;
+    rip.p.style.setProperty('--tear', Math.min(1, d / TEAR_PX).toFixed(2));
+  });
+  document.addEventListener('pointerup', e => {
+    if (!rip) return; const { p } = rip, done = e.clientX - rip.x >= TEAR_PX * .7; rip = null;
+    p.classList.remove('dragging'); if (!done) { p.style.removeProperty('--tear'); return; }
+    p.style.removeProperty('--tear'); ripMoved = true; ripGo = true; p.click();
+  });
+  // A drag ends in a native click on the pack; swallow it (ripGo lets our own click through once).
+  let ripGo = false;
+  document.addEventListener('click', e => { if (!ripMoved || !e.target.closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
+
   document.addEventListener('keydown', e => {
     if (e.code !== 'Space' || e.target.closest('input, textarea')) return;
     PTCG_FX.unlock();
