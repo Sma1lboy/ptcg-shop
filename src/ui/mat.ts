@@ -8,7 +8,7 @@ import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
 import { showPack } from './share.ts';
-import { mountTable, ENERGY } from '../table3d.js';
+import { mountTable, ENERGY, ready as threeReady } from '../table3d.js';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -70,7 +70,10 @@ function packSummary(cards: Pull[], set: { id: string }) {
 
 export function renderMat() {
   const el = $('mat');
-  if (mat.m3d && (mat.mode === 'pack' || mat.mode === 'batch')) { if (mat3D(el)) return; mat.m3d = false; }
+  if (mat.mode === 'idle' ? !reduced() : mat.m3d && (mat.mode === 'pack' || mat.mode === 'batch')) {
+    if (mat3D(el)) return;
+    if (mat.mode === 'idle') waitFor3D(); else mat.m3d = false;
+  }
   if (table) { table.dispose(); table = null; }
   el.classList.remove('m3d');
   if (mat.mode === 'idle') { el.innerHTML = '<div class="mat-idle" id="mat-idle"></div>'; renderIdle(); return; }
@@ -112,19 +115,20 @@ function renderIdle() {
       <span class="ip-note">${n ? `仓库 ${n} 包 · 点开一包` : `进 1 包就开 · ${money(w)}`}</span></li>`;
   })}</ul>`, box);
 }
-export const refreshIdle = () => { if (mat.mode === 'idle') renderIdle(); };
+export const refreshIdle = () => { if (mat.mode === 'idle') { if (table) shelf3D(); else renderIdle(); } };
 
 // ---------- 3D table (src/table3d.js) ----------
 // The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
 let table: ReturnType<typeof mountTable> = null;
 const touch = () => matchMedia('(pointer: coarse)').matches;
-const HINT = { pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
+const HINT = { shelf: () => '', pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
   cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看',
   batch: () => touch() ? '点一下全部撕开，或按住从左往右划过这排包' : '点一下或按空格全部撕开，也可以按住从左往右划过这排包',
   batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张' };
 const batch = () => mat.mode === 'batch';
 const picked = () => mat.picks.map(([p, i]) => mat.packs[p][i]);
 const head3D = () => {
+  if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span>点桌上的包，开一包</span>${sndBtn()}`; return; }
   const live = batch() ? mat.torn : mat.mode === 'cards';
   $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${live ? prog() : ''}</span>${sndBtn()}
       ${live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
@@ -142,6 +146,7 @@ const on3D = {
     const cap = document.getElementById('s3-cap'); if (cap) { cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${none ? `${mat.packs.length} 包一张好卡都没有 · ` : ''}${esc(c.name)}</b>${capHTML(c)}`; }
     if (!mat.quiet) FX.flip(rar(c).t);
   },
+  onPick(k: number) { document.querySelectorAll<HTMLButtonElement>('#s3-shelf button')[k]?.click(); }, // through events.ts, like the label itself
   onHold() { const cap = document.getElementById('s3-cap'); if (cap) cap.innerHTML = ''; },
   onDone() { on3D.onHold(); hint3D('done'); finish(); },
   onLost() {
@@ -158,11 +163,42 @@ function mat3D(el: HTMLElement) {
     if (!table) return false;
     el.classList.add('m3d');
   }
+  if (mat.mode === 'idle') { shelf3D(); return true; }
+  document.getElementById('s3-shelf')?.remove();
   el.querySelector('.summary')?.remove(); $('s3-cap').innerHTML = '';
   head3D(); hint3D(batch() ? 'batch' : 'pack');
   if (batch()) table.showBatch(mat.set, mat.packs, mat.picks); else table.showPack(mat.set, mat.cards);
   return true;
 }
+
+// The idle 3D table (今天拆哪包？): every set's stack of warehouse packs, labelled underneath by a button that opens one (or buys
+// one and opens it). The stock / price / unlock reads for it all live in shelfItems().
+function shelfItems() {
+  const s = G.state;
+  return SETS.map(x => {
+    const n = s.stock[x.id] || 0, w = G.wholesale(x.id), locked = !G.unlocked(x.id), poor = !n && s.cash < w;
+    return { set: x.id, n, off: locked || poor, name: x.name, note: locked ? `营收 ${money(G.unlockAt(x.id))} 解锁` : n ? `仓库 ${n} 包` : poor ? `现金不够进货 · ${money(w)}` : `进 1 包就开 · ${money(w)}` };
+  });
+}
+// Imperative like the rest of #scene3d (CLAUDE.md): the buttons are made once, then only their text / action / disabled change.
+function shelf3D() {
+  let box = document.getElementById('s3-shelf');
+  if (!box) { box = document.createElement('div'); box.className = 's3-shelf'; box.id = 's3-shelf'; $('scene3d').append(box); head3D(); hint3D('shelf'); }
+  const items = shelfItems();
+  items.forEach((it, k) => {
+    let b = box.children[k] as HTMLButtonElement | undefined;
+    if (!b) {
+      b = box.appendChild(document.createElement('button')); b.type = 'button'; b.append(document.createElement('b'), document.createElement('small'));
+      const hov = (on: boolean) => () => table?.hover(on ? k : -1);
+      b.addEventListener('pointerenter', hov(true)); b.addEventListener('pointerleave', hov(false)); b.addEventListener('focus', hov(true)); b.addEventListener('blur', hov(false));
+    }
+    b.dataset.act = it.n ? 'open1' : 'buyopen'; b.dataset.id = it.set; b.disabled = it.off;
+    b.children[0].textContent = it.name; b.children[1].textContent = it.note;
+  });
+  table!.showShelf(items.map(({ set, n, off }) => ({ set, n, off })));
+}
+let waited = false; // three.js still loading at boot: the 2D idle mat now, the 3D table as soon as it's in
+function waitFor3D() { if (!waited) { waited = true; threeReady.then(ok => { if (ok && mat.mode === 'idle' && !table) renderMat(); }); } }
 
 // ---------- reveal ----------
 // While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
@@ -317,5 +353,6 @@ export function bindMatInput() {
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
     else if (batch() && mat.m3d && !mat.finished) { e.preventDefault(); table!.flip(mat.up.size); }
+    else if (table && !(e.target as Element).closest('button, a')) e.preventDefault(); // a finished or idle 3D table: Space doesn't scroll the page away
   });
 }
