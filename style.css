@@ -83,6 +83,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* fetch the pressed-key bases up front, so the first press doesn't show the flat fallback while they load */
+html::after { content: url(gen/btn-secondary-dn.webp) url(gen/btn-primary-dn.webp) url(gen/btn-danger-dn.webp); position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; }
 /* the room behind the counter: the page colour under a faint grain and the lamp's pool of light from above (inline SVG noise,
    no download; overlay keeps it working on both the white and the navy page) */
 body { background: radial-gradient(ellipse 80% 50% at 50% 0, color-mix(in oklab, var(--lamp) 14%, transparent), transparent 70%) fixed,
@@ -121,8 +123,8 @@ small { font-size: var(--fs-cap); }
 .sub dd { margin: 0; font: 700 var(--fs-h)/1.2 var(--font-tag); color: var(--ink); }
 .sub div { align-items: center; }
 .sub div::before { content: ""; width: 18px; height: 18px; flex: none; background: var(--i) center / contain no-repeat; }
-.sub div:nth-child(1) { --i: url(gen/i-shelf.webp); } .sub div:nth-child(2) { --i: url(gen/i-pack.webp); } .sub div:nth-child(3) { --i: url(gen/i-customer.webp); }
-.sub div:nth-child(4) { --i: url(gen/i-receipt.webp); } .sub div:nth-child(5) { --i: url(gen/i-card.webp); }
+[data-k="shelf"] { --i: url(gen/i-shelf.webp); } [data-k="stock"] { --i: url(gen/i-pack.webp); } [data-k="rate"] { --i: url(gen/i-customer.webp); }
+[data-k="sales"] { --i: url(gen/i-receipt.webp); } [data-k="held"] { --i: url(gen/i-card.webp); }
 
 /* nav = the main menu: each page a tab plate (gen/tab.webp); the current one is raised under the lamp (gen/tab-on.webp) with a
    warm-white light line — lamp light, not yellow: yellow stays for things to press. Docked to the bottom on phones */
@@ -130,6 +132,12 @@ small { font-size: var(--fs-cap); }
 .nav a { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 76px; height: 40px; padding: 0 14px;
   border: 2px solid var(--trim); border-image: url(gen/tab.webp) 26 30 fill / 9px 11px / 0 stretch; background: #111C36 padding-box;
   font: 900 var(--fs-h)/1 var(--font-display); letter-spacing: .08em; color: var(--muted); text-decoration: none; transition: color .15s, filter .15s; }
+/* each tab carries its HUD badge (same icon sheet as the readouts): pack / shelf / card / rank chevrons / trophy. Dimmed on
+   idle tabs, full under the lamp on the current one */
+.nav a::before { content: ""; width: 20px; height: 20px; margin-right: 6px; flex: none; background: var(--i) center / contain no-repeat; opacity: .6; transition: opacity .15s; }
+.nav a[href="#open"] { --i: url(gen/i-pack.webp); } .nav a[href="#shelf"] { --i: url(gen/i-shelf.webp); } .nav a[href="#luck"] { --i: url(gen/i-card.webp); }
+.nav a[href="#grow"] { --i: url(gen/i-rank.webp); } .nav a[href="#ach"] { --i: url(gen/i-trophy.webp); }
+.nav a:is(:hover, [aria-current="page"])::before { opacity: 1; }
 .nav a:hover { color: var(--ink); filter: brightness(1.15); }
 .nav a[aria-current="page"] { color: #fff; border-image-source: url(gen/tab-on.webp); background: #243966 padding-box;
   box-shadow: 0 3px 0 -1px var(--lamp); text-shadow: 0 0 10px var(--lamp-glow); filter: drop-shadow(0 0 8px rgba(255, 236, 206, .22)); }
@@ -167,6 +175,20 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
 .page-luck > #dex { grid-column: 1 / -1; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
+/* the five tabs and five readouts share one bar: below 1760 the readouts drop their names (icon + tooltip name them, as on phones) */
+@media (max-width: 1759px) { .sub dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .sub div { gap: 6px; } }
+/* narrower, the readouts leave in reverse order of how much they tell you what to do next (all of them are on 货柜 too);
+   货架 and 仓库 stay down to phones */
+@media (max-width: 1499px) { .sub [data-k="held"] { display: none; } }
+@media (max-width: 1399px) { .sub [data-k="sales"] { display: none; } }
+@media (max-width: 1299px) { .sub [data-k="rate"] { display: none; } }
+@media (min-width: 780px) and (max-width: 1199px) {
+  .top { gap: 12px; }
+  .brand { width: 48px; overflow: hidden; white-space: nowrap; text-indent: 60px; padding: 0; } /* the crest's fanned cards stay as the mark */
+  .nav a { min-width: 0; padding: 0 10px; }
+}
+@media (min-width: 780px) and (max-width: 939px) { .nav a::before { display: none; } .cash b { font-size: 24px; } .top { padding-inline: 12px; } }
+@media (min-width: 780px) and (max-width: 859px) { .sub [data-k="stock"] { display: none; } } /* the rail on 开包 lists the back room */
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
 }
@@ -184,8 +206,14 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 }
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) button:not(.pack, :disabled):active {
-  transform: translateY(1px); filter: brightness(.86); }
+/* pressed: its own base (gen/btn-*-dn.webp) — the key pushed flush into the rim, lower lip gone, the rim's shadow on the face.
+   The 1px sink stays underneath, and without the images the darker face alone says "down" */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+  --face: url(gen/btn-secondary-dn.webp); border-image-slice: 34 44 34 44 fill; border-image-width: 9px 12px;
+  background-color: color-mix(in oklab, var(--btn-face) 82%, black); transform: translateY(1px); filter: none; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
+  --face: url(gen/btn-primary-dn.webp); background-color: color-mix(in oklab, var(--sticker) 90%, black); }
+#reset:active { --face: url(gen/btn-danger-dn.webp); background-color: color-mix(in oklab, var(--danger-face) 85%, black); }
 /* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary {
   --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
@@ -411,15 +439,20 @@ button:disabled { cursor: not-allowed; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
-/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
+/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box.
+   It feeds out of the till's printer slot — a strip of the case trim (gen/plate.webp) that drops in first; the paper is never framed */
 .notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05);
-  position: relative; max-width: 300px; margin: 0 0 28px; padding: 14px 16px 26px; background: var(--paper); color: var(--ink);
+  position: fixed; z-index: 15; top: calc(var(--top-h) + 4px); right: 24px; width: 290px; padding-top: 12px; color: var(--ink); }
+.notice[hidden] { display: none; }
+.notice::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 18px; border: 4px solid var(--trim);
+  border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
+  animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
+.notice .paper { position: relative; margin: 0 0 28px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
-  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%; }
-.notice[hidden] { display: none; }
-/* the receipt prints out under the register (top right), whatever page the player lands on */
-.notice { position: fixed; z-index: 15; top: calc(var(--top-h) + 10px); right: 24px; width: 290px; animation: print .6s cubic-bezier(.23, 1, .32, 1); }
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
+  animation: print .9s .22s steps(18, jump-end) backwards; } /* stepped: a thermal printer feeds in jerks, not a glide */
+@keyframes slot { from { opacity: 0; transform: translateY(-14px) scaleX(.85); } }
 @keyframes print { from { clip-path: inset(0 0 100% 0); translate: 0 -16px; } to { clip-path: inset(0 0 -20px 0); } }
 .notice h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
 .notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
@@ -513,6 +546,11 @@ button:disabled { cursor: not-allowed; }
 .summary .rank { color: var(--mat-ink); font-weight: 600; }
 #share-pop { padding: 14px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 18px / 0 stretch; background-clip: padding-box; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); background: var(--panel) padding-box; color: var(--ink); max-width: min(520px, 94vw); max-height: 94vh; overflow: auto; }
 #share-pop::backdrop { background: rgba(4, 8, 14, .72); }
+/* the share window swings up like a case door: the trim lands first with a slight overshoot, the room dims behind it */
+#share-pop[open] { animation: case-in .42s cubic-bezier(.2, 1.1, .3, 1); }
+#share-pop[open]::backdrop { animation: dim .3s ease-out; }
+@keyframes case-in { from { opacity: 0; transform: perspective(900px) translateY(28px) rotateX(14deg) scale(.94); } 55% { opacity: 1; } }
+@keyframes dim { from { opacity: 0; } }
 #share-pop:focus-visible { outline: none; } /* focus lands on the dialog while the image renders; its buttons keep their ring */
 #share-pop img { display: block; width: 100%; height: auto; border-radius: var(--r); }
 #share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
@@ -686,6 +724,9 @@ button:disabled { cursor: not-allowed; }
 .grow-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 20px 56px; align-items: end; }
 .gh-lv p, .gh-goal p { margin: 0; }
 .gh-lv p { display: flex; align-items: baseline; gap: 10px; }
+/* the level and the achievement count wear their badges: rank chevrons, trophy */
+.gh-lv p::before { content: ""; align-self: center; width: 52px; height: 52px; flex: none; background: url(gen/i-rank.webp) center / contain no-repeat; }
+.page-ach .gh-lv p::before { background-image: url(gen/i-trophy.webp); }
 .gh-lv span { font-size: var(--fs-body); color: var(--muted); }
 .gh-lv b { font: 900 56px/1 var(--font-display); }
 .gh-lv small { font-size: var(--fs-h); color: var(--muted); }
@@ -781,14 +822,21 @@ button:disabled { cursor: not-allowed; }
   .cash { padding: 2px 10px 2px 6px; min-height: 36px; }
   .cash .k { width: 18px; height: 18px; }
   .cash b { font-size: 24px; }
-  .sub div { padding: 3px 8px; }
-  .sub { gap: 14px; justify-content: flex-start; }
-  .stats { justify-content: space-between; }
+  /* a 390 bar holds the crest, two readouts and the till: the crest drops its name (the fanned cards stay as the shop's mark),
+     and only the two readouts that tell you what to do next stay — shelf empty → stock it, back room empty → buy.
+     Walk-ins, sales and singles value are on the 货柜 page */
+  .brand { width: 42px; overflow: hidden; white-space: nowrap; text-indent: 60px; padding: 0; }
+  .sub div { padding: 3px 8px; gap: 5px; }
+  .sub div:not([data-k="shelf"], [data-k="stock"]) { display: none; }
+  .sub { gap: 6px; overflow: visible; }
+  .stats { gap: 8px; }
   .nav { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
     align-items: center; gap: 4px; padding-inline: 6px; background: linear-gradient(#1A2A4E, var(--hud) 45%); border-top: 3px solid var(--trim);
     box-shadow: inset 0 1px 0 rgba(174, 184, 200, .45), 0 -6px 18px rgba(4, 8, 14, .35); }
-  .nav a { flex: 1; min-width: 0; height: 44px; padding: 0 2px; font-size: 15px; letter-spacing: 0; white-space: nowrap; }
-  .nav .tab-n { margin-left: 2px; }
+  /* docked: icon over the name, like a game's bottom menu; the badges ride the plate's top-right corner */
+  .nav a { flex: 1; min-width: 0; height: 48px; padding: 0 2px; flex-direction: column; gap: 1px; font-size: 13px; letter-spacing: .04em; white-space: nowrap; }
+  .nav a::before { width: 22px; height: 22px; margin: 0; }
+  .nav .tab-n { position: absolute; top: 2px; right: 4px; margin: 0; }
   main { padding-top: 12px; }
   .page, .page-open, .page-shelf, .page-luck { grid-template-columns: minmax(0, 1fr); }
   .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1);
@@ -833,13 +881,19 @@ button:disabled { cursor: not-allowed; }
 .gh-goal .gt-save { max-width: 260px; }
 .ach-note { margin: 0; font-size: var(--fs-cap); }
 
-/* the unlock pop: a label printed out at the bottom right of the counter (the receipt prints top right), then pressed flat */
-.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; }
+/* the unlock pop: the grading label rises out of a slot in the counter's aluminium edge at the bottom right (the receipt prints
+   top right), then is pressed flat. The slot (gen/plate.webp) slides in once when the pop opens; queued labels rise out of it in turn */
+.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; padding-bottom: 10px; }
+.ach-pop::after { content: ""; position: absolute; left: -12px; right: -12px; bottom: 0; height: 18px; border: 4px solid var(--trim);
+  border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 8px 18px rgba(4, 8, 14, .4);
+  animation: slot-up .3s cubic-bezier(.23, 1, .32, 1) backwards; }
+@keyframes slot-up { from { opacity: 0; transform: translateY(14px) scaleX(.85); } }
+@keyframes rise { from { clip-path: inset(100% 0 0 0); translate: 0 24px; } to { clip-path: inset(-20px 0 0 0); } }
 .ach-pop[hidden] { display: none; }
 .ach-pop a { display: block; color: inherit; text-decoration: none; }
 .ach-pop ul { list-style: none; margin: 0; padding: 0; }
 .grade.pop { box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2);
-  animation: print .5s cubic-bezier(.23, 1, .32, 1), press .9s .45s cubic-bezier(.23, 1, .32, 1) backwards; }
+  animation: rise .5s .12s cubic-bezier(.23, 1, .32, 1) backwards, press .9s .57s cubic-bezier(.23, 1, .32, 1) backwards; }
 .grade.pop .g-grade b { animation: ink .7s .5s cubic-bezier(.2, .9, .3, 1.2) backwards; }
 @keyframes press { 0% { transform: translateY(-3px) rotate(-.8deg); } 30% { transform: translateY(1px) rotate(0); } 100% { transform: none; } }
 @keyframes ink { from { opacity: 0; transform: scale(1.5); } }

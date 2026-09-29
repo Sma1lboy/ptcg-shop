@@ -12,6 +12,6 @@ export function renderStats() {
   lastCash = s.cash;
   render(html`<p class="cash"><span class="k">现金</span><b>${money(s.cash)}</b>${stamp ? keyed(stamp, html`<span class="delta ${delta >= 0 ? 'gain' : 'loss'}" aria-hidden="true">${delta >= 0 ? '+' : '−'}${money(Math.abs(delta))}</span>`) : ''}</p>
     <dl class="sub">${([
-      ['货架', `${shelf} 包`], ['仓库', `${stock} 包`], ['到店', `${(G.rate() * 60).toFixed(1)}/分`], ['成交', s.customers], ['单卡市值', money(held)],
-    ] as const).map(([k, v]) => html`<div><dt>${k}</dt><dd>${v}</dd></div>`)}</dl>`, $('stats'));
+      ['shelf', '货架', `${shelf} 包`], ['stock', '仓库', `${stock} 包`], ['rate', '到店', `${(G.rate() * 60).toFixed(1)}/分`], ['sales', '成交', s.customers], ['held', '单卡市值', money(held)],
+    ] as const).map(([k, n, v]) => html`<div data-k=${k} title=${n}><dt>${n}</dt><dd>${v}</dd></div>`)}</dl>`, $('stats'));
 }

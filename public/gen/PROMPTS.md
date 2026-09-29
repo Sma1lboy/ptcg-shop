@@ -38,3 +38,15 @@ UI 皮肤素材（DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--qualit
 
 > a single horizontal shop sign crest plate about 3:1, centered with transparent space around it: a navy anodized aluminium plaque with chamfered corners and a raised bevelled aluminium border, two small fanned blank trading cards (navy card backs with a plain aluminium border, no symbols) tucked behind its left end, and a thin lemon-yellow (#FFD500) enamel pinstripe running just inside the border like the yellow frame of a card. The plaque face is flat, dark and empty, reserved for a shop name to be added later. Lit by the warm shop lamp from above.
 
+
+### f-buttons-dn（1024x1536，编辑模式）→ btn-primary-dn / btn-secondary-dn / btn-danger-dn（vertical split, ×0.5）
+
+按下态。为了和平时的底逐像素对齐，走编辑模式：把三张 `btn-*.webp` 放大 2 倍、竖排在 1024x1536 透明画布上（各自中心在 y = 256 / 768 / 1280）当 `-i` 参照，`--quality high --background transparent`。草稿 low 出过一版：参照图上的黄被压成了芥末黄（读成金卡），定稿提示词里给每个键面写死了颜色。九宫格 slice 量出来上下都是 34（没有下唇），写在 style.css 的 `:active` 里。
+
+> （模板）+ Redraw exactly these three buttons in their PRESSED state, same size, same position, same rim, same screws, same outline as the reference: the enamel key is pushed down into the aluminium rim. The coloured lower lip strip under each button is gone (the key sits flush, no visible thickness). Each enamel face keeps its hue and is only slightly darker and flatter: button 1 stays clean lemon yellow (#EBC400, never mustard or gold), button 2 deep navy lacquer (#172647), button 3 dark oxide red (#5E1915). A thin dark inner shadow runs along the top and left inner edges of each face where the rim now overhangs it; no bright highlight on the face. The aluminium rim is unchanged. Empty flat face for a label. Fully transparent background, no checkerboard.
+
+### i-rank / i-trophy（来自落选皮肤 #1，分支 ui-skin-card-shop-hud）
+
+那一轮的 3×3 图标 sheet（1024²，切成 72²），材质同是铝 + 深蓝珐琅浮雕，和上面 f-icons 放在一起看不出两套，所以直接拿来用，没有重出。提示词：
+
+> a 3 by 3 grid of nine separate small game HUD icons, evenly spaced with generous empty space between them, each icon the same size, same material (brushed steel emboss with navy enamel inlay and a thin dark outline): 1 a stack of coins, 2 a sealed foil trading-card booster pack, 3 a person silhouette bust, 4 a small store shelf rack, 5 a storage crate box, 6 a handshake, 7 a single trading card in a sleeve (blank face), 8 an upward chevron rank badge, 9 a trophy cup. No text.
