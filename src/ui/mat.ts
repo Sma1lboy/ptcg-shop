@@ -254,9 +254,10 @@ let spotTimer = 0;
 function spotlight(ms: number) { const m = $('mat'); m.classList.add('spot'); clearTimeout(spotTimer); spotTimer = setTimeout(() => m.classList.remove('spot'), ms); }
 
 function finish() {
-  if (mat.finished) return; mat.finished = true; release();
+  if (mat.finished) return; mat.finished = true;
   const el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
   if (!el.querySelector('.summary')) el.insertAdjacentHTML('beforeend', batch() ? batchSummary() : packSummary(mat.cards, G.setById(mat.set)));
+  release(); // after the summary is in: the guide anchors its share step on the summary's button
 }
 function batchSummary() {
   const set = G.setById(mat.set), v = S.packValue(mat.packs.flat()), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost, sp = shareSpec(), stock = G.state.stock[set.id] || 0;

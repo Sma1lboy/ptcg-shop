@@ -124,6 +124,11 @@ console.log('ok luck percentile');
   for (const [k, u] of Object.entries(G.UPGRADES)) assert.ok(u.costs.every((c, i, a) => !i || c > a[i - 1]), `${k} costs must increase`);
   assert.ok(G.DEX_TIERS.every(([a, b], i, t) => !i || (a > t[i - 1][0] && b >= t[i - 1][1])) && G.DEX_TIERS.at(-1)[0] === 1, 'dex tiers ascend and end at 100%');
 
+  // Dragging the price rail: a draft price (commit = false) is what G.ask reads, but nothing is saved or broadcast until it commits.
+  { G.setPrice('sv08', 1); const k = Object.keys(store)[0], before = store[k]; let heard = 0; G.on(() => heard++);
+    G.setPrice('sv08', 0.8, false); assert.equal(G.pctOf('sv08'), 0.8); assert.deepEqual([store[k], heard], [before, 0], 'a draft price neither saves nor re-renders');
+    G.setPrice('sv08', 0.8); assert.notEqual(store[k], before); assert.equal(heard, 1, 'letting go commits once'); G.setPrice('sv08', 1); }
+
   // 2. Stock -> shelf: buying fills the back room only, nothing sells until it is on the shelf.
   assert.equal(G.buy('sv08.5', 1), false, 'locked set cannot be stocked');
   st().cash = 1; assert.equal(G.buy('sv08', 999), false, 'cannot afford it');

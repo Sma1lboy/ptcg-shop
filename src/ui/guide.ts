@@ -8,7 +8,7 @@ import { hold } from './mat.ts';
 import { go } from './layout.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; luck?: 1; off?: 1 };
+type Rec = { price?: 1; luck?: 1; off?: 1; share?: 1 };
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -21,7 +21,8 @@ const shown = (el: Element | null) => (el && el.getClientRects().length ? el : n
 const pick = (...sels: string[]) => { for (const q of sels) for (const el of document.querySelectorAll(q)) if (shown(el)) return el; return null; };
 const firstShelved = () => G.shelves().find(r => r.id)?.id;
 
-type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null };
+// alt: a button off the step's page that answers it just as well (the share button under a finished pack, for 测欧气)
+type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null; alt?: () => Element | null };
 const STEPS: Step[] = [
   { page: 'shelf', h: '进货', done: () => sum(G.state.stock) + sum(G.state.opened) > 0 || G.shelves().some(r => r.id), // a labelled shelf stays labelled once it sells out
     at: () => pick('#shelf .set .primary[data-act="buy"]', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
@@ -29,15 +30,17 @@ const STEPS: Step[] = [
       return html`点「进 10」从批发商进一箱。${id ? `${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，` : '进货价比市价低，'}差价就是卖一包的毛利。`; } },
   { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id),
     at: () => pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'),
-    p: () => (sum(G.state.stock) ? '点「摆上空货架」。仓库里的包顾客看不到，只有货架上的才卖得出去。' : '仓库空了：先进货，再点「摆上空货架」。只有货架上的包才卖得出去。') },
+    p: () => (sum(G.state.stock) ? '点「摆上空货架」。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。' : '仓库空了：先进货，再点「摆上空货架」。只有货架上的包才卖得出去。') },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
-    p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认等于市价${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
+    p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认等于市价${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，还可能碰上倒爷按这个价整架收走。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
-    p: () => '看看这包的运气在几千个模拟玩家里排第几，还能生成分享图。' },
+    alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
+    p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'
+      : '看看这包的运气在几千个模拟玩家里排第几，还能生成分享图。') },
 ];
 
 const TAB: Record<string, string> = { open: '开包', shelf: '货柜', luck: '欧气', grow: '成长' };
@@ -48,10 +51,12 @@ let anchor: Element | null = null;
 function place() {
   const pop = $('coach');
   if (!pop.matches(':popover-open') || !anchor) return;
-  const a = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, gap = 12, vw = innerWidth, vh = innerHeight;
-  const below = a.bottom + gap + h <= vh - 8 || a.top - gap - h < 8; // phones: the tabs sit at the bottom, so tab steps open upward
+  // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
+  const a = anchor.getBoundingClientRect(), top = (anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
+  const w = pop.offsetWidth, h = pop.offsetHeight, gap = 12, vw = innerWidth, vh = innerHeight;
+  const below = a.bottom + gap + h <= vh - 8 || top - gap - h < 8; // phones: the tabs sit at the bottom, so tab steps open upward
   const x = Math.min(vw - w - 8, Math.max(8, a.left + a.width / 2 - w / 2));
-  pop.style.left = `${x}px`; pop.style.top = `${below ? a.bottom + gap : a.top - gap - h}px`;
+  pop.style.left = `${x}px`; pop.style.top = `${below ? a.bottom + gap : top - gap - h}px`;
   pop.dataset.side = below ? 'below' : 'above';
   pop.style.setProperty('--ax', `${Math.min(w - 16, Math.max(16, a.left + a.width / 2 - x))}px`);
 }
@@ -62,7 +67,7 @@ export function renderGuide() {
   anchor?.classList.remove('coach-on'); anchor = null;
   if (!step || hold) { if (pop.matches(':popover-open')) pop.hidePopover(); last = i; return; }
   // the step's own button when it is on this page, else that page's tab
-  const here = page() === step.page ? step.at() : null;
+  const here = page() === step.page ? step.at() : step.alt?.() ?? null;
   anchor = here ?? pick(`.nav a[href="#${step.page}"]`);
   if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
@@ -89,6 +94,7 @@ export function bindGuide() {
   document.addEventListener('click', e => {
     const t = e.target as Element, b = t.closest<HTMLElement>('[data-coach], [data-act]'); if (!b) return;
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }
+    else if (b.dataset.act === 'sharemat') { if (!rec.share) { rec.share = 1; save(); } }
     else if (b.dataset.coach === 'price') { rec.price = 1; save(); }
     else if (b.dataset.coach === 'off') { if (replay < 0) { rec.off = 1; save(); } replay = -1; }
     else if (b.dataset.coach === 'next') { replay = replay + 1 < STEPS.length ? replay + 1 : -1; if (replay >= 0) go(STEPS[replay].page); }
