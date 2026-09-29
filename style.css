@@ -172,7 +172,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-shelf { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .page-shelf > .shelf { grid-column: 1 / -1; }
 /* 欧气: the detector | share and trophies, then the dex as a collection grid across the page (one cell per set, however many) */
-.page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
+.page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 .page-luck > #dex { grid-column: 1 / -1; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
 /* the five tabs and five readouts share one bar: below 1760 the readouts drop their names (icon + tooltip name them, as on phones) */
@@ -224,7 +224,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
   filter: grayscale(1) brightness(.78) contrast(.9); opacity: .85; color: var(--btn-ink); font-weight: 500; text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
 
-/* shelf (src/ui/shelf.ts): no boxes. Cards two-up by default; from 1280px one table-like row per set under a single header,
+/* shelf (src/ui/shelf.ts): no boxes. Cards two-up by default; from 1300px of shelf width one table-like row per set under a single header,
    so a long lineup of sets reads as a list, not a wall of blocks (the rows share the header's columns through subgrid) */
 .shelf > h2 { margin-bottom: 4px; }
 #shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); column-gap: 40px; }
@@ -235,7 +235,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .set-name { min-width: 0; flex: 1; }
 .set-name h3 { margin: 0; font-size: var(--fs-h); line-height: 1.3; }
 .set-name span { font-size: var(--fs-cap); color: var(--muted); }
-.heat { font-size: var(--fs-cap); font-weight: 600; align-self: start; padding-top: 2px; white-space: nowrap; } .heat.hot { color: var(--ink); } .heat.cold { color: var(--muted); }
+.heat { margin-left: 8px; font-size: var(--fs-cap); font-weight: 600; white-space: nowrap; vertical-align: 1px; } /* after the name, not in its own column: the line under the name keeps the full width */ .heat.hot { color: var(--ink); } .heat.cold { color: var(--muted); }
 .set-mkt { margin: 0 0 4px; font-size: var(--fs-cap); color: var(--muted); }
 .verb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 36px; }
 .v-k { width: 2.4em; flex: none; font-size: var(--fs-cap); color: var(--muted); }
@@ -271,8 +271,9 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
   box-shadow: inset 0 2px 3px rgba(0, 0, 0, .5), 0 1px 0 rgba(174, 184, 200, .3); }
 .r-ctl select:hover { filter: brightness(1.15); }
 .r-ctl option { background: var(--hud); color: var(--hud-ink); }
-@media (min-width: 1280px) {
-  #shelf { grid-template-columns: minmax(280px, 1fr) repeat(4, auto); column-gap: 40px; }
+.page-shelf > .shelf { container-type: inline-size; }
+@container (min-width: 1300px) { /* the table's own width, not the viewport's: the closing receipt narrows the page while it hangs there */
+  #shelf { grid-template-columns: minmax(280px, 1fr) repeat(4, auto); column-gap: 28px; }
   .shelf-head, .set { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
   .shelf-head { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-cap); color: var(--muted); }
   .set { padding: 12px 0; row-gap: 2px; column-gap: normal; } /* normal = the parent grid's gap; a subgrid with its own gap drifts off the header */
@@ -284,6 +285,10 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
   .v-k { display: none; }
   .verb { flex-wrap: nowrap; min-height: 0; }
   .v-btns, .page .pricer { margin-left: 0; flex-wrap: nowrap; }
+  /* the 货架 column is sized for its widest state (「摆上空货架 199 包」, 「12 位没买到」), so buying a box or a walk-in
+     missing out doesn't widen it and squeeze the names into four lines */
+  .set button { white-space: nowrap; } /* squeezed auto columns broke 「开 10 包」 one character per line; the table starts at 1300 wide because below that its five columns don't fit */
+  .v-shelf .v-n { min-width: 6.2em; } .v-shelf [data-act="shelve"] { min-width: 10.6em; }
 }
 button:disabled { cursor: not-allowed; }
 
@@ -444,6 +449,9 @@ button:disabled { cursor: not-allowed; }
 .notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05);
   position: fixed; z-index: 15; top: calc(var(--top-h) + 4px); right: 24px; width: 290px; padding-top: 12px; color: var(--ink); }
 .notice[hidden] { display: none; }
+/* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 340 = its
+   290 width + 24 inset + the slot's 10px overhang + a gap. Phones get it as a sheet over the page instead (below) */
+@media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(340px - max(0px, (100vw - 1680px) / 2))); } }
 .notice::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 18px; border: 4px solid var(--trim);
   border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
   animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
@@ -527,6 +535,17 @@ button:disabled { cursor: not-allowed; }
 .coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 16px); width: 16px; height: 9px; background: var(--trim); }
 .coach[data-side="below"]::before { top: -17px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .coach[data-side="above"]::before { bottom: -17px; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.coach:is([data-side="right"], [data-side="left"]) { width: 400px; } /* beside a mat button: wider and shorter, so it stays within the summary's height, clear of the price tags above */
+.coach:is([data-side="right"], [data-side="left"]) :is(.co-k, h3) { display: inline; margin-right: 8px; } /* 新手 5/5 and the heading on one line */
+.coach:is([data-side="right"], [data-side="left"])::before { left: auto; top: calc(var(--ay, 50%) - 16px); width: 9px; height: 16px; }
+.coach[data-side="right"]::before { left: -17px; clip-path: polygon(0 50%, 100% 0, 100% 100%); }
+.coach[data-side="left"]::before { right: -17px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+/* phones: on the mat a strip under the button, the step's text and its button side by side, no heading; over the bottom tabs
+   (the step is on another page) just the heading and the button (guide.ts place()) */
+.coach[data-strip]:popover-open { display: flex; align-items: center; gap: 10px; width: calc(100vw - 16px); padding: 6px 10px; line-height: 1.5; }
+.coach[data-strip="mat"] :is(.co-k, h3) { display: none; }
+.coach[data-strip="tab"] p { display: none; } .coach[data-strip="tab"] h3 { flex: 1; margin: 0; } /* just 「测欧气：到「欧气」页」 */
+.coach[data-strip] .co-btns { flex: none; margin: 0; }
 .coach .co-k { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
 .coach h3 { margin: 2px 0 4px; font-size: var(--fs-h); }
 .coach h3 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); }
@@ -895,7 +914,7 @@ button:disabled { cursor: not-allowed; }
 /* 成就 (ui/ach.ts, DESIGN.md「成就」): each achievement is a small grading label, the same object as the 欧气鉴定 label —
    earned: navy frame, cert number and the day, the achievement's word as the grade; not yet: the blank label (hairline frame,
    muted) with its progress. Labels sit flat on the page in a grid; the page itself is not boxed */
-.page-ach { --page-ink: var(--ink); --page-muted: var(--muted); --page-line: var(--line-strong); grid-template-columns: minmax(0, 1fr); max-width: 1320px; }
+.page-ach { --page-ink: var(--ink); --page-muted: var(--muted); --page-line: var(--line-strong); grid-template-columns: minmax(0, 1fr); }
 .ach-group { margin-top: 36px; }
 .ach-group > h2 { margin-bottom: 12px; }
 .ach-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px 16px; }

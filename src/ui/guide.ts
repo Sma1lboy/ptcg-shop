@@ -49,23 +49,62 @@ let replay = -1; // index while replaying from the footer, else -1
 const current = () => (replay >= 0 ? replay : rec.off ? -1 : STEPS.findIndex(s => !s.done()));
 
 let anchor: Element | null = null;
+const phone = () => innerWidth < 780;
+// what the popover may not cover from below: the phone's bottom tabs
+const floor = () => (phone() ? Math.min(innerHeight, document.querySelector('.nav')?.getBoundingClientRect().top ?? innerHeight) : innerHeight);
+// On the mat the thing to look at sits above the button (the 3D pack above its label, the cards and the pack's value above the
+// share button), so opening above would cover it. Desktop: beside the anchor, bottom edges level, and in a summary past its
+// text too. Phone: a strip without the heading, below the button, scrolled up to make room for it.
+let seek = 0; // until when a new step may still scroll its button into view
 function place() {
   const pop = $('coach');
   if (!pop.matches(':popover-open') || !anchor) return;
+  const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav');
+  // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
+  // 「测欧气：到「欧气」页」: the full text over the bottom tabs covered what the player was reading (成长's 借款额度)
+  if (phone() && (onMat || tab)) pop.dataset.strip = onMat ? 'mat' : 'tab'; else delete pop.dataset.strip;
+  if (onMat && !phone()) pop.dataset.side = 'right';
+  const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
+  let w = pop.offsetWidth, h = pop.offsetHeight;
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  // a new step's button off screen, or a strip with no room under its button: scroll, once. Kept pending for a moment, because
+  // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
+  // on every scroll step.
+  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in)')) {
+    const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
+    if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
+    else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  }
+  if (onMat && !phone()) {
+    let right = a.right; const sum = anchor.closest('.summary');
+    if (sum) for (const el of sum.querySelectorAll('p, button')) {
+      const r = document.createRange(); r.selectNodeContents(el); // a <p> is full width; its line boxes are where the text ends
+      for (const q of el.tagName === 'P' ? r.getClientRects() : [el.getBoundingClientRect()]) right = Math.max(right, q.right);
+    }
+    const x = right + gap + w <= vw - 8 ? right + gap : a.left - gap - w >= 8 ? a.left - gap - w : null;
+    if (x != null) {
+      const y = clamp(a.bottom - h, 8, vh - h - 8);
+      pop.style.left = `${x}px`; pop.style.top = `${y}px`; pop.dataset.side = x > a.left ? 'right' : 'left';
+      pop.style.setProperty('--ay', `${clamp(a.top + a.height / 2 - y, 16, h - 16)}px`);
+      return;
+    }
+    pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
+  }
   // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
-  const a = anchor.getBoundingClientRect(), top = (anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
-  const w = pop.offsetWidth, h = pop.offsetHeight, gap = 12, vw = innerWidth, vh = innerHeight;
+  const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
   const below = a.bottom + gap + h <= vh - 8 || top - gap - h < 8; // phones: the tabs sit at the bottom, so tab steps open upward
-  const x = Math.min(vw - w - 8, Math.max(8, a.left + a.width / 2 - w / 2));
+  const x = clamp(a.left + a.width / 2 - w / 2, 8, vw - w - 8);
   pop.style.left = `${x}px`; pop.style.top = `${below ? a.bottom + gap : top - gap - h}px`;
   pop.dataset.side = below ? 'below' : 'above';
-  pop.style.setProperty('--ax', `${Math.min(w - 16, Math.max(16, a.left + a.width / 2 - x))}px`);
+  pop.style.setProperty('--ax', `${clamp(a.left + a.width / 2 - x, 16, w - 16)}px`);
 }
 
+// the 3D table moves its labels with an inline transform, after this renders and whenever the camera settles: follow them
+const follow = new MutationObserver(place);
 let last = -2;
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
-  anchor?.classList.remove('coach-on'); anchor = null;
+  anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
   if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button when it is on this page, else that page's tab
   const here = page() === step.page ? step.at() : step.alt?.() ?? null;
@@ -80,10 +119,11 @@ export function renderGuide() {
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
         : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
+  if (i !== last && here) seek = performance.now() + 1500;
+  if (here) last = i; // a step first shown as its page's tab still gets scrolled to on arriving there
   place();
+  follow.disconnect(); if (anchor.closest('#mat')) follow.observe(anchor, { attributes: true, attributeFilter: ['style'] });
   // a new step whose button is below the fold: bring it into view once
-  if (i !== last && here) { const r = anchor.getBoundingClientRect(); if (r.top < 70 || r.bottom > innerHeight - 70) anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-  last = i;
 }
 
 export function bindGuide() {

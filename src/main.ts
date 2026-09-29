@@ -24,8 +24,8 @@ import { initAch } from './ui/ach.ts';
 import { renderDue, renderLedger, renderWreck, initLedger } from './ui/ledger.ts';
 import { initSound } from './ui/sound.ts';
 
-// While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
+// While a pack is being revealed only the shelf and the rail update (both with their open buttons off); the rest would show the pull early. The mat fires ptcg:release when done.
+function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);

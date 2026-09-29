@@ -6,10 +6,10 @@ import { live } from 'lit-html/directives/live.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
-import { G, $, money, toShelf, shelveLabel } from './common.ts';
+import { G, $, money, toShelf, shelveLabel, lately } from './common.ts';
 import { hold } from './mat.ts';
 
-const pc = (x: number) => `${Math.round(x * 100)}%`, MIN = G.MISS_WINDOW / 60;
+const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
 // "$9.80、$10.20" for a few, "$9.80–$11.40" for many
 const spread = (xs: number[]) => { xs = [...xs].sort((a, b) => a - b); return xs.length > 3 ? `${money(xs[0])}–${money(xs.at(-1)!)}` : xs.map(money).join('、'); };
@@ -55,11 +55,11 @@ function packs(rec: Visit[]) {
       const clerk = racked && !stock && G.lvl('clerk') && s.auto[id], act = missed && !shelf && (racked || free) && !clerk ? refill : '';
       const fix = !missed || shelf ? '' : clerk ? '，店员下一轮进货' : racked || free ? `，仓库${stock ? `还有 ${stock} 包` : '也没有'}` : '，货架都摆着别的系列：在上面换一个，或者加一个货架';
       const notes = [
-        missed ? html`<b>${MIN} 分钟里 ${missed} 位没买到</b>${shelf ? '（货架空着的时候）' : racked ? '：货架卖空了' : '：没摆上货架'}${fix}` : '',
+        missed ? html`<b>${lately()} ${missed} 位没买到</b>${shelf ? '（货架空着的时候）' : racked ? '：货架卖空了' : '：没摆上货架'}${fix}` : '',
         faint.length ? html`按现在的标价 ${money(G.ask(id))}，<b>${faint.length} 位会嫌贵</b>（他们最多肯出 ${spread(faint)}）` : '',
         broke ? `${broke} 位身上的钱不够一包` : '',
         sweptN || pct <= flip ? `${sweptN ? `倒爷扫走 ${sweptN} 包` : '倒爷会来扫货'}：标价在市价的 ${pc(flip)} 以下，他们整架地收` : '',
-        !mine.length && !missed && shelf ? `${MIN} 分钟里没有人专门来买${name}${(s.heat[id] || 1) < 1 ? '（滞销）' : ''}` : '',
+        !mine.length && !missed && shelf ? `${lately()}没有人专门来买${name}${(s.heat[id] || 1) < 1 ? '（滞销）' : ''}` : '',
         mine.length >= 3 && !faint.length && low > pct + 0.05 ? `按现在的标价都会买，最低的一位也肯出 ${money(low * mkt)}` : '',
       ].filter(Boolean);
       return html`<li>
@@ -95,10 +95,10 @@ function showcase(rec: Visit[]) {
 
 function customers() {
   const since = Date.now() - G.MISS_WINDOW * 1000, rec = G.state.recent.filter(v => v.at > since), n = rec.length; // the shelf wall's window
-  if (!n) return html`<h2>顾客</h2><p class="muted">${G.state.cust.visits ? `${MIN} 分钟里还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
+  if (!n) return html`<h2>顾客</h2><p class="muted">${G.state.cust.visits ? `${lately()}还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
   const [sold, pricey, none] = ['sold', 'pricey', 'none'].map(r => count(rec, r));
-  return html`<h2>顾客 <small class="c-meta">${MIN} 分钟里来了 ${n} 位 · 每分钟约 ${(G.rate() * 60).toFixed(1)} 位</small></h2>
-      <div class="cust-bar" role="img" aria-label="${MIN} 分钟里 ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
+  return html`<h2>顾客 <small class="c-meta">${lately()}来了 ${n} 位 · 每分钟约 ${(G.rate() * 60).toFixed(1)} 位</small></h2>
+      <div class="cust-bar" role="img" aria-label="${lately()} ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
         <span class="c-sold" style="flex:${sold}"></span><span class="c-pricey" style="flex:${pricey}"></span><span class="c-none" style="flex:${none}"></span></div>
       <p class="cust-sum"><b>买走 ${sold}</b> · 嫌贵 ${pricey} · <span class="muted">没找到 ${none}</span></p>
       ${packs(rec)}${showcase(rec)}`;
