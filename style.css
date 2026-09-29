@@ -622,12 +622,11 @@ button:disabled { cursor: not-allowed; }
   padding: 5px 14px 6px; }
 .s3-cap:empty { display: none; }
 .s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
-.s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 17px var(--font-tag); color: var(--mat-ink); }
-.s3-cap:is(.t4, .t5) b:not(.s3-name) { color: var(--mat-gold); }
+.s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 20px var(--font-tag); color: var(--mat-ink); } /* market price, never gold or yellow (DESIGN.md「价签」) */
 .s3-tags { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
-.s3-tag { position: absolute; left: 0; top: 0; font: 600 14px var(--font-tag); color: var(--mat-ink); background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
-.s3-tag:is(.t2, .t3, .t4, .t5) { transform-origin: 50% 0; } /* market prices, not the player's: no sticker yellow; rarity rings for UR and up */
-.s3-tag.t3 { box-shadow: inset 0 0 0 1px var(--fx-silver); } .s3-tag:is(.t4, .t5) { color: var(--mat-gold); box-shadow: inset 0 0 0 1px var(--mat-gold); }
+/* under each card in the spread: card.ts's tray caption (mark + market price), the same as the 2D mat's */
+.s3-tag { position: absolute; left: 0; top: 0; background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
+.s3-tag .cf-cap { flex-wrap: nowrap; }
 .mat.m3d .summary { padding: 14px 18px 16px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; } }
 
