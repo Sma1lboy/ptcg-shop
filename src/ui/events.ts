@@ -41,4 +41,10 @@ export function bindEvents() {
         break;
     }
   });
+  // The shelf wall's <select>: put a set on a shelf, swap it, or clear it (value ""). A refused move (the back room cannot take
+  // the packs back) changes nothing and emits nothing, so put the select back by hand.
+  document.addEventListener('change', e => {
+    const sel = (e.target as Element).closest<HTMLSelectElement>('select[data-act="place"]'); if (!sel || sel.value === '-') return;
+    if (!G.place(+sel.dataset.i!, sel.value || null)) sel.value = sel.dataset.cur || '-';
+  });
 }
