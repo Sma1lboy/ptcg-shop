@@ -1,24 +1,30 @@
-/* Layout: a card-shop counter — sealed stock on the shelf (left), the rubber playmat you rip on (center),
-   luck meter + binder + singles case (right). Stacks to one column on phones. */
+/* Tokens. Every colour is an object on the card-shop counter; DESIGN.md says which one, what it is for and what it must never mark.
+   Measured constraints (re-run the contrast script in DESIGN.md after changing a value):
+   - the rubber mat is the darkest large surface in BOTH themes: OKLCH L(--bg) − L(--mat) ≥ 0.10
+   - text ≥ 4.5:1 on its own surface; the focus ring (--sticker-edge) ≥ 3:1 on --bg */
 :root {
-  --bg: #E5E8ED;          /* counter laminate, cool grey */
-  --panel: #F6F7F9;
+  --bg: #E3E6EA;          /* counter laminate, cool grey; also the 3D counter, fog and clear colour (table3d.js theme()) */
+  --panel: #F4F5F7;       /* card sleeve: the one raised layer (dialogs). Page groups never get a fill */
   --ink: #141920;
-  --muted: #5A6371;
-  --line: #CCD2DB;
-  --sticker: #E0560F;     /* the orange price-gun sticker: the one accent */
-  --sticker-ink: #FFFFFF;
-  --silver: #6F7B8B;      /* UR: silver rarity stars */
-  --gold: #9C7409;        /* IR and up: gold rarity stars */
+  --muted: #525B68;
+  --line: rgba(20, 25, 32, .13);        /* hairline between groups */
+  --line-strong: rgba(20, 25, 32, .32); /* secondary button outline */
+  --hover: rgba(20, 25, 32, .06);
+  --sticker: #FF6A1F;     /* price-gun label: the only accent. Player-set prices and the one primary action per group */
+  --sticker-ink: #1A0F08; /* price guns print black ink on the orange label, in both themes */
+  --sticker-edge: #B8480E;/* focus ring and primary border where the label alone is too light for 3:1 */
+  --silver: #5B6676;      /* silver rarity stars (UR). Cards only */
+  --gold: #80600A;        /* gold rarity stars (IR and up). Cards only */
   --gold-glow: rgba(214, 170, 52, .55);
-  --gain: #1C7C45;
-  --loss: #BF2F3A;
-  --mat: #1E2A38;         /* playmat stays dark in both themes, it is a physical object */
+  --gain: #17703E;        /* money in. Money only */
+  --loss: #B42A35;        /* money out. Money only */
+  --mat: #18212C;         /* rubber playmat, dark in both themes */
   --mat-ink: #E6EBF1;
-  --mat-gain: #45C483; --mat-loss: #FF6C75; --mat-gold: #E1B54B; /* semantic colours for use ON the dark mat; the page's own gain/loss are tuned for the light panel */
-  --mat-muted: #93A1B3;
-  --mat-gain: #45C483;    /* semantic colours for text on the dark mat; --gain/--loss are tuned for the page background */
-  --mat-loss: #FF6C75;
+  --mat-muted: #98A5B6;
+  --mat-gain: #45C483;    /* gain / loss / gold as text ON the mat */
+  --mat-loss: #FF7A82;
+  --mat-gold: #E6BC55;
+  --mat-line: rgba(230, 235, 241, .16);
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
   --fx-gold: #F3CB4E;
   --back-1: #1D3F86;      /* card back */
@@ -28,65 +34,103 @@
   --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the shop lamp over the playmat, warm white; same in both themes like the mat */
   --lamp-fill: #DCE4EF;   /* sky fill from the room */
   --lamp-rim: #CFDDF5;    /* back light that outlines the pack's edges */
+  /* type: body for everything incl. numbers (tabular-nums); price-gun mono only on price stickers; the shop sign face only for the sign and one-word verdicts */
   --font-display: "ZCOOL QingKe HuangYou", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
-  --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --r: 10px;
+  --font-tag: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --fs-cap: 12px; --fs-body: 14px; --fs-h: 16px; --fs-lg: 20px; --fs-cash: 28px; --fs-display: 44px; /* ~1.25 steps, 12px floor */
+  --r: 4px;               /* die-cut label corner: stickers and buttons */
+  --r-mat: 14px;
+  --top-h: 60px;          /* sticky top bar; the stage is the viewport minus this */
+  --gap: 16px;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0F1319; --panel: #161C24; --ink: #E3E7ED; --muted: #8D97A6; --line: #28303B;
-  --sticker: #FF7331; --silver: #A7B1BF; --gold: #E1B54B; --gold-glow: rgba(225, 181, 75, .5);
-  --gain: #45C483; --loss: #FF6C75; --mat: #1A2431; color-scheme: dark;
+  --bg: #232A34; --panel: #2C3440; --ink: #E6EAF0; --muted: #A0AAB8;
+  --line: rgba(230, 234, 240, .12); --line-strong: rgba(230, 234, 240, .3); --hover: rgba(230, 234, 240, .07);
+  --sticker: #FF7A33; --sticker-edge: #FF8F52; --silver: #B3BDCB; --gold: #E6BC55; --gold-glow: rgba(225, 181, 75, .5);
+  --gain: #4CCB89; --loss: #FF7A82; --mat: #0D1218; color-scheme: dark;
 } }
 :root[data-theme="dark"] {
-  --bg: #0F1319; --panel: #161C24; --ink: #E3E7ED; --muted: #8D97A6; --line: #28303B;
-  --sticker: #FF7331; --silver: #A7B1BF; --gold: #E1B54B; --gold-glow: rgba(225, 181, 75, .5);
-  --gain: #45C483; --loss: #FF6C75; --mat: #1A2431; color-scheme: dark;
+  --bg: #232A34; --panel: #2C3440; --ink: #E6EAF0; --muted: #A0AAB8;
+  --line: rgba(230, 234, 240, .12); --line-strong: rgba(230, 234, 240, .3); --hover: rgba(230, 234, 240, .07);
+  --sticker: #FF7A33; --sticker-edge: #FF8F52; --silver: #B3BDCB; --gold: #E6BC55; --gold-glow: rgba(225, 181, 75, .5);
+  --gain: #4CCB89; --loss: #FF7A82; --mat: #0D1218; color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font-body); padding-inline: 16px; padding-block: 12px 32px; }
+body { background: var(--bg); color: var(--ink); font: var(--fs-body)/1.55 var(--font-body); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; cursor: pointer; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--sticker); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 a { color: inherit; }
 .muted { color: var(--muted); }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
-.eyebrow { font-size: 12px; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin: 0 0 8px; }
+.shop h2, .side h2, .guide h2 { font-size: var(--fs-h); font-weight: 600; line-height: 1.3; margin: 0 0 8px; color: var(--ink); text-wrap: balance; }
 
-/* header */
-.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; max-width: 1440px; margin: 0 auto 14px; }
-.brand { font: 400 34px/1 var(--font-display); margin: 0; letter-spacing: .04em; }
-.stats { display: flex; flex-wrap: wrap; gap: 6px 22px; margin: 0; flex: 1; }
-.stats dt { font-size: 12px; color: var(--muted); }
-.stats dd { margin: 0; font: 600 18px var(--font-num); font-variant-numeric: tabular-nums; }
-.ghost { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; color: var(--muted); font-size: 12px; }
+/* top bar: the shop sign, cash as the one big number, the rest a step down. Sticky; the stage height is computed from --top-h */
+.top { position: sticky; top: 0; z-index: 10; height: var(--top-h); display: flex; align-items: center; gap: 28px; padding: 0 var(--gap); background: var(--bg); border-bottom: 1px solid var(--line); }
+.brand { font: 400 30px/1 var(--font-display); margin: 0; letter-spacing: .04em; flex: none; }
+.stats { display: flex; align-items: baseline; gap: 28px; min-width: 0; flex: 1; }
+.cash { position: relative; display: flex; align-items: baseline; gap: 8px; margin: 0; flex: none; }
+.cash .k, .sub dt { font-size: var(--fs-cap); color: var(--muted); }
+.cash b { font-size: var(--fs-cash); font-weight: 650; line-height: 1; letter-spacing: -.01em; }
+.delta { position: absolute; left: 100%; top: -2px; margin-left: 8px; font-weight: 600; white-space: nowrap; pointer-events: none; animation: delta 1.6s cubic-bezier(.23, 1, .32, 1) forwards; }
+@keyframes delta { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+.sub { display: flex; align-items: baseline; gap: 20px; margin: 0 0 0 64px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.sub div { display: flex; align-items: baseline; gap: 6px; flex: none; }
+.sub dd { margin: 0; font-weight: 500; }
+.mat-close { display: none; }
+.ghost { background: none; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 4px 12px; color: var(--muted); font-size: var(--fs-cap); }
 
-/* page grid */
-.shop { display: grid; gap: 16px; max-width: 1440px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 780px) { .shop { grid-template-columns: minmax(270px, 320px) minmax(0, 1fr); } .side { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; } }
-@media (min-width: 1180px) { .shop { grid-template-columns: minmax(270px, 310px) minmax(0, 1fr) minmax(280px, 330px); } .side { grid-column: auto; display: flex; flex-direction: column; } }
-.shelf, .side > section { min-width: 0; }
-.side > section { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+/* page grid (DESIGN.md「布局」): shelf | stage | tabs. The stage is sticky and viewport-high; it spans every row so it never slides over the side column */
+.shop { display: grid; gap: 24px 32px; padding: 20px var(--gap) 32px; max-width: 1680px; margin: 0 auto; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.shelf, .side { min-width: 0; }
+.mat { position: sticky; top: calc(var(--top-h) + 20px); height: calc(100dvh - var(--top-h) - 40px); min-height: 460px; overflow: auto; }
+@media (min-width: 780px) {
+  .shop { grid-template-columns: minmax(290px, 340px) minmax(0, 1fr); grid-template-areas: "shelf mat" "side mat"; }
+  .shelf { grid-area: shelf; } .mat { grid-area: mat; } .side { grid-area: side; }
+}
+@media (min-width: 1180px) { .shop { grid-template-columns: minmax(290px, 330px) minmax(0, 1fr) minmax(300px, 360px); grid-template-areas: "shelf mat side"; } }
 
-/* shelf: each set is a price-stickered slot */
-#shelf { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
-.set { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; display: grid; gap: 6px; grid-template-columns: 76px minmax(0, 1fr); align-items: center; }
-.set .logo { width: 76px; height: 40px; object-fit: contain; grid-row: span 2; }
-.set-name h3 { margin: 0; font-size: 16px; }
-.set-name span { font-size: 12px; color: var(--muted); }
-.set-price { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; font: 12px var(--font-num); color: var(--muted); }
-.sticker { background: var(--sticker); color: var(--sticker-ink); font-weight: 600; font-size: 13px; padding: 1px 8px; border-radius: 3px; transform: rotate(-2deg); display: inline-block; }
-.set-stock { grid-column: 1 / -1; font-size: 13px; }
-.set-stock b { font-family: var(--font-num); }
-.btns { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
-.btns button, .bulk button, .singles button { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
-.btns button.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-button:disabled { opacity: .4; cursor: not-allowed; }
+/* buttons outside the mat: outlined secondary, one sticker-orange primary per group, disabled = no fill + dashed + muted */
+:where(.shelf, .side, .foot, .notice, #share-pop) :is(button, .dl):not([role="tab"]) {
+  min-height: 32px; padding: 4px 10px; border: 1px solid var(--line-strong); border-radius: var(--r); background: transparent; color: var(--ink);
+  font-size: var(--fs-body); line-height: 1.4; text-decoration: none; transition: background-color .15s, transform .1s;
+}
+:where(.shelf, .side, .foot, .notice, #share-pop) :is(button, .dl):not(:disabled):hover { background: var(--hover); }
+:where(.shelf, .side, .foot, .notice, #share-pop) button:not(:disabled):active { transform: scale(.97); }
+.primary, .mat .btns button.primary { background: var(--sticker); border-color: var(--sticker-edge); color: var(--sticker-ink); font-weight: 600; }
+:where(.shelf, .side, .foot, .notice, #share-pop) .primary:not(:disabled):hover { background: color-mix(in oklab, var(--sticker) 90%, var(--sticker-ink)); }
+:where(.shelf, .side, .foot, .notice, #share-pop) button:disabled { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--muted); font-weight: 400; cursor: not-allowed; }
 
-.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); max-height: 260px; overflow: auto; }
-.log time { font-family: var(--font-num); margin-right: 6px; }
-.log .gain { color: var(--gain); } .log .hit { color: var(--gold); font-weight: 600; }
+/* shelf: no boxes; each set is a row group under a hairline, buttons grouped by verb */
+.shelf > h2 { margin-bottom: 4px; }
+.set { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); }
+.set .logo { width: 64px; height: 36px; object-fit: contain; }
+.set-name h3 { margin: 0; font-size: var(--fs-h); line-height: 1.3; }
+.set-name span { font-size: var(--fs-cap); color: var(--muted); }
+.heat { font-size: var(--fs-cap); font-weight: 600; align-self: start; padding-top: 2px; } .heat.hot { color: var(--ink); } .heat.cold { color: var(--muted); }
+.set-mkt { grid-column: 1 / -1; margin: 0 0 4px; font-size: var(--fs-cap); color: var(--muted); }
+.verb { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 36px; }
+.v-k { width: 2.4em; flex: none; font-size: var(--fs-cap); color: var(--muted); }
+.v-n { min-width: 4.2em; color: var(--muted); font-size: var(--fs-cap); } .v-n b { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
+.v-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+.sticker { display: inline-block; background: var(--sticker); color: var(--sticker-ink); font: 600 var(--fs-body)/1.35 var(--font-tag); padding: 1px 7px; border-radius: 2px; transform: rotate(-2deg); box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
+.set.locked { grid-template-columns: 64px minmax(0, 1fr); } .set.locked :is(.logo, .set-name) { opacity: .6; }
+button:disabled { cursor: not-allowed; }
+
+.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-cap); color: var(--muted); max-height: 320px; overflow: auto; }
+.log time { margin-right: 8px; }
+.log .gain { color: var(--gain); } .log .hit { color: var(--ink); font-weight: 600; }
+
+/* right column: binder index tabs; sections inside a tab are split by a hairline, never boxed */
+.tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--line); margin-bottom: 20px; }
+.tabs [role="tab"] { background: none; border: 0; padding: 6px 0 10px; font-size: var(--fs-h); font-weight: 600; color: var(--muted); box-shadow: inset 0 -2px 0 transparent; transition: color .15s, box-shadow .15s; }
+.tabs [role="tab"]:hover { color: var(--ink); }
+.tabs [aria-selected="true"] { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.pane > section:not([hidden]) ~ section:not([hidden]) { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+.pane p { text-wrap: pretty; }
 
 /* the playmat */
 .mat { background: var(--mat); color: var(--mat-ink); border-radius: 14px; padding: 18px; min-height: 480px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }

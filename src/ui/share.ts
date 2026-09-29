@@ -38,7 +38,7 @@ async function drawCard() {
   const x = c.getContext('2d')!, pct = L.pct! * 100;
   const ink = css('--ink'), muted = css('--muted'), line = css('--line');
   const tone = pct >= 70 ? css('--gold') : pct < 30 ? css('--loss') : ink;
-  const disp = css('--font-display'), num = css('--font-num'), body = css('--font-body');
+  const disp = css('--font-display'), num = css('--font-tag'), body = css('--font-body');
   x.fillStyle = css('--panel'); x.fillRect(0, 0, W, H);
   x.textBaseline = 'alphabetic';
   const T = (s: string, px: number, y: number, o: { w?: number; f?: string; c?: string; a?: CanvasTextAlign } = {}) => { x.font = `${o.w || 400} ${px}px ${o.f || body}`; x.fillStyle = o.c || ink; x.textAlign = o.a || 'left'; x.fillText(s, o.a === 'right' ? W - 80 : 80, y); };
@@ -73,7 +73,7 @@ async function drawPack(d: ShareSpec) {
   await (document.fonts && document.fonts.ready);
   const art = await loadArt(d.best), W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, ink = css('--ink'), gold = css('--mat-gold'), loss = css('--mat-loss'), gain = css('--mat-gain');
-  const num = css('--font-num'), body = css('--font-body');
+  const num = css('--font-tag'), body = css('--font-body');
   const T = (s: string, px: number, y: number, o: { w?: number; f?: string; c?: string; a?: CanvasTextAlign } = {}) => { x.font = `${o.w || 400} ${px}px ${o.f || body}`; x.fillStyle = o.c || ink; x.textAlign = o.a || 'left'; x.fillText(s, o.a === 'right' ? W - 80 : o.a === 'center' ? W / 2 : 80, y); };
   x.fillStyle = css('--mat'); x.fillRect(0, 0, W, H); // same dark playmat as the page, both themes
   const g = x.createRadialGradient(W / 2, 560, 60, W / 2, 560, 720); g.addColorStop(0, 'rgba(255,255,255,.14)'); g.addColorStop(1, 'rgba(255,255,255,0)');

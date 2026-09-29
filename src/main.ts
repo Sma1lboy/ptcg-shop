@@ -12,14 +12,15 @@ import { renderUpgrades } from './ui/upgrades.ts';
 import { renderCase } from './ui/case.ts';
 import { renderNotice } from './ui/notice.ts';
 import { renderSources, renderBasis } from './ui/sources.ts';
-import { renderMat, bindMatInput, bindMatScroll, hold } from './ui/mat.ts';
+import { renderMat, refreshIdle, bindMatInput, hold } from './ui/mat.ts';
 import { bindEvents } from './ui/events.ts';
+import { bindLayout } from './ui/layout.ts';
 import { renderGuide } from './ui/guide.ts';
 import { renderShare } from './ui/share.ts';
 import { initGoals } from './ui/goals.ts';
 
 // While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderCase(); renderNotice(); }
+function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);
@@ -27,7 +28,7 @@ G.on(renderAll);
 setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
-renderBasis(); bindMatScroll();
+renderBasis(); bindLayout();
 G.on(() => { renderGuide(); renderShare(); });
 renderGuide(); renderShare();
 

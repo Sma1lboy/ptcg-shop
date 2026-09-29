@@ -4,6 +4,8 @@
 import type { Pull } from '../sim.ts';
 import * as S from '../sim.ts';
 import * as FX from '../fx.ts';
+import { html, render } from 'lit-html';
+import { SETS } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
 import { showPack } from './share.ts';
 import { mountTable } from '../table3d.js';
@@ -64,10 +66,7 @@ export function renderMat() {
   if (mat.m3d && mat.mode === 'pack') { if (mat3D(el)) return; mat.m3d = false; }
   if (table) { table.dispose(); table = null; }
   el.classList.remove('m3d');
-  if (mat.mode === 'idle') {
-    el.innerHTML = `<div class="mat-empty"><p class="mat-big">开包台</p><p>左边货架先进货，再点「开 1 包」。<br>单包可以一张张翻，按空格翻下一张。</p></div>`;
-    return;
-  }
+  if (mat.mode === 'idle') { el.innerHTML = '<div class="mat-idle" id="mat-idle"></div>'; renderIdle(); return; }
   const set = G.setById(mat.set);
   if (mat.mode === 'pack') {
     el.innerHTML = `<div class="mat-pack"><button type="button" class="pack" data-act="tear" aria-label="撕开这包${set.name}">
@@ -93,6 +92,20 @@ export function renderMat() {
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
       <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
 }
+
+// Idle mat: the sealed packs in the warehouse lie on it, one tap opens one (or buys one and opens it when the warehouse is empty).
+// lit is safe here: #mat-idle is created fresh each time the mat goes idle, and innerHTML drops it (and lit's part) on the next pack.
+function renderIdle() {
+  const box = document.getElementById('mat-idle'); if (!box) return;
+  const s = G.state, sets = SETS.filter(x => G.unlocked(x.id));
+  render(html`<p class="mat-big">开包台</p><ul class="idle-packs">${sets.map(x => {
+    const n = s.stock[x.id] || 0, w = G.wholesale(x.id);
+    return html`<li><button type="button" class="idle-pack" data-act="${n ? 'open1' : 'buyopen'}" data-id="${x.id}" ?disabled=${!n && s.cash < w}>
+        <img src="${logoUrl(x.id)}" alt=""><span class="ip-name">${x.name}</span></button>
+      <span class="ip-note">${n ? `仓库 ${n} 包 · 点开一包` : `进 1 包就开 · ${money(w)}`}</span></li>`;
+  })}</ul>`, box);
+}
+export const refreshIdle = () => { if (mat.mode === 'idle') renderIdle(); };
 
 // ---------- 3D table (src/table3d.js) ----------
 // The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
@@ -260,14 +273,5 @@ export function bindMatInput() {
     FX.unlock();
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
-  });
-}
-
-// Phones stack the shelf above the mat: bring the mat into view when a pack opens. Registered after events.ts's click handler, as before.
-export function bindMatScroll() {
-  document.addEventListener('click', e => {
-    const b = (e.target as Element).closest<HTMLElement>('[data-act]');
-    if (b && /^(open1|open10|buyopen)$/.test(b.dataset.act!) && matchMedia('(max-width: 779px)').matches)
-      $('mat').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 }

@@ -11,33 +11,47 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
+<!-- Layout (DESIGN.md): shelf | the playmat stage (viewport-high, sticky) | binder tabs. Phones: one column, the mat opens as a full-screen layer. -->
 <header class="top">
+  <button class="mat-close" type="button" data-act="closemat">‹ 货架</button>
   <h1 class="brand">欧气卡铺</h1>
-  <dl class="stats" id="stats"></dl>
-  <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+  <div class="stats" id="stats"></div>
 </header>
-<section class="guide" id="guide" hidden></section>
-<div class="notice" id="notice" hidden></div>
 <main class="shop">
   <section class="shelf" aria-labelledby="shelf-h">
-    <h2 class="eyebrow" id="shelf-h">货架 · 进货</h2>
+    <div class="notice" id="notice" hidden></div>
+    <section class="guide" id="guide" hidden></section>
+    <h2 id="shelf-h">货架 · 进货</h2>
     <div id="shelf"></div>
     <section id="upgrades"></section>
-    <h2 class="eyebrow">店内动态</h2>
-    <ol class="log" id="log"></ol>
   </section>
   <section class="mat" id="mat" aria-live="polite"></section>
   <aside class="side">
-    <section id="luck" aria-labelledby="luck-h"></section>
-    <section id="share" hidden></section>
-    <section id="goals"></section>
-    <section id="binder"></section>
-    <section id="casepanel"></section>
-    <section id="singles"></section>
+    <div class="tabs" role="tablist" aria-label="店里的记录">
+      <button type="button" role="tab" id="t-luck" aria-controls="p-luck" aria-selected="true">欧气</button>
+      <button type="button" role="tab" id="t-shop" aria-controls="p-shop" aria-selected="false" tabindex="-1">顾客</button>
+      <button type="button" role="tab" id="t-cards" aria-controls="p-cards" aria-selected="false" tabindex="-1">单卡</button>
+    </div>
+    <div class="pane" role="tabpanel" id="p-luck" aria-labelledby="t-luck">
+      <section id="luck" aria-labelledby="luck-h"></section>
+      <section id="share" hidden></section>
+      <section id="binder"></section>
+    </div>
+    <div class="pane" role="tabpanel" id="p-shop" aria-labelledby="t-shop" hidden>
+      <section id="goals"></section>
+      <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
+    </div>
+    <div class="pane" role="tabpanel" id="p-cards" aria-labelledby="t-cards" hidden>
+      <section id="casepanel"></section>
+      <section id="singles"></section>
+    </div>
   </aside>
 </main>
-<footer class="sources" id="sources"></footer>
-<details class="sources basis" id="basis"></details>
+<footer class="foot">
+  <details><summary>数据来源与游戏设定</summary><div id="sources"></div></details>
+  <details class="basis" id="basis"></details>
+  <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+</footer>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>
