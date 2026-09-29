@@ -63,7 +63,7 @@ function packs(rec: Visit[]) {
     return { id, mine, missed, sold, dear, broke, swept, sweptN, lost: missed + dear.length + broke };
   }).sort((a, b) => b.lost - a.lost);
   if (!rows.length) return '';
-  return html`<h3 class="c-h">来买整包的 <small>点是顾客最多肯出的价：实的按现在的标价会买，淡的不会。点轨上哪一档，标价就改到哪一档</small></h3>
+  return html`<p class="c-h">点是顾客最多肯出的价：实的按现在的标价会买，淡的不会。点轨上哪一档，标价就改到哪一档</p>
     <ul class="c-sets">${repeat(rows, r => r.id, ({ id, mine, missed, sold, dear, broke, swept, sweptN }) => {
       const racked = racks.some(r => r.id === id), shelf = G.shelfQty(id), stock = s.stock[id] || 0, mkt = G.sealedPrice(id), name = G.setById(id).name;
       // the price notes read the rail: who would balk at the tag as it is now (it may have moved since they came), and who would still buy
@@ -114,7 +114,7 @@ function showcase(rec: Visit[]) {
   const verdict = !cards ? html`<b>柜里和单卡库存都没有闪卡</b>：${none} 位空手走了。开包开出来的闪卡（RR 以上）才能上柜`
     : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加单卡库存只有 ${cards} 张：卡比人少，标价往上调也卖得完`
     : html`按 ${pc(pct)} ${would} 位会买，柜里加单卡库存 ${cards} 张`;
-  return html`<h3 class="c-h">来翻展示柜的 <small>点是顾客最多肯出市价的几成：实的按现在的标价会买。点轨上哪一档，全柜标价就改到哪一档</small></h3>
+  return html`<p class="c-h">点是顾客最多肯出市价的几成：实的按现在的标价会买。点轨上哪一档，全柜标价就改到哪一档</p>
     ${cards ? priceRail('', all, 0) : ''}
     <p class="c-note">${verdict}。${free > 0 ? `柜里空 ${free} 格${onHand ? '' : '，单卡库存没有闪卡了'}` : `柜位满了（${G.slots()} 格）`}。${fill}</p>
     <ul class="c-case">${rows.map(({ label, vs, fit }) => {
@@ -130,15 +130,22 @@ function showcase(rec: Visit[]) {
     })}</ul>`;
 }
 
+// Three targets, one window: the head on 货柜's view bar (count, bar, 没找到 split) stays over both views, and each view's sub-tab says
+// how many of its own customers left empty-handed; the pack buyers sit under the shelf on 货架, the case browsers beside the case on 展示柜.
 function customers() {
   const since = Date.now() - G.MISS_WINDOW * 1000, rec = G.state.recent.filter(v => v.at > since), n = rec.length; // the shelf wall's window
-  if (!n) return html`<h2>顾客</h2><p class="muted">${G.state.cust.visits ? `${lately()}还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
-  const [sold, pricey, none] = ['sold', 'pricey', 'none'].map(r => count(rec, r)), atCase = rec.filter(v => v.r === 'none' && (v.t === 'seeker' || v.t === 'collector')).length;
-  return html`<h2>顾客 <small class="c-meta">${lately()}来了 ${n} 位 · 每分钟约 ${(G.rate() * 60).toFixed(1)} 位</small></h2>
-      <div class="cust-bar" role="img" aria-label="${lately()} ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
-        <span class="c-sold" style="flex:${sold}"></span><span class="c-pricey" style="flex:${pricey}"></span><span class="c-none" style="flex:${none}"></span></div>
-      <p class="cust-sum"><b>买走 ${sold}</b> · 嫌贵 ${pricey} · <span class="muted">没找到 ${none}${none && atCase ? `（整包 ${none - atCase} · 展示柜 ${atCase}）` : ''}</span></p>
-      ${none && atCase > none - atCase ? [showcase(rec), packs(rec)] : [packs(rec), showcase(rec)]}`; // the group that lost more customers first
+  const atCase = rec.filter(v => v.r === 'none' && (v.t === 'seeker' || v.t === 'collector')).length, none = count(rec, 'none');
+  const tab = (el: HTMLElement, k: number, what: string) => { el.hidden = !k; render(html`${k}<span class="visually-hidden"> 位${what}</span>`, el); };
+  tab($('n-packs'), none - atCase, '没买到整包'); tab($('n-case'), atCase, '在展示柜没找到');
+  const quiet = html`<p class="muted">${G.state.cust.visits ? `${lately()}还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
+  if (!n) { render(html`<span class="muted">顾客：${G.state.cust.visits ? `${lately()}还没有人进门` : '还没有人来过'}</span>`, $('cust-head')); render(html`<h2>顾客 · 来买整包的</h2>${quiet}`, $('customers')); render(html`<h2>顾客 · 来翻展示柜的</h2>${quiet}`, $('case-cust')); return; }
+  const [sold, pricey] = ['sold', 'pricey'].map(r => count(rec, r));
+  render(html`<span class="c-meta">顾客 · ${lately()}来了 ${n} 位 · 每分钟约 ${(G.rate() * 60).toFixed(1)} 位</span>
+      <span class="cust-bar" role="img" aria-label="${lately()} ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
+        <span class="c-sold" style="flex:${sold}"></span><span class="c-pricey" style="flex:${pricey}"></span><span class="c-none" style="flex:${none}"></span></span>
+      <span class="cust-sum"><b>买走 ${sold}</b> · 嫌贵 ${pricey} · <span class="muted">没找到 ${none}${none ? `（整包 ${none - atCase} · 展示柜 ${atCase}）` : ''}</span></span>`, $('cust-head'));
+  render(html`<h2>顾客 · 来买整包的</h2>${packs(rec) || html`<p class="muted">${lately()}没有人来买整包。</p>`}`, $('customers'));
+  render(html`<h2>顾客 · 来翻展示柜的</h2>${showcase(rec) || html`<p class="muted">${lately()}没有人来翻展示柜。开包开出的闪卡（RR 以上）上柜，找卡的和收藏党才会来。</p>`}`, $('case-cust'));
 }
 
 function dex() {
@@ -188,7 +195,7 @@ function clerk() {
 
 function renderGoals() {
   if (hold) return;
-  render(customers(), $('customers'));
+  customers();
   // 回头客 is the nominal sum; past CROWD_KNEE the word-of-mouth multiplier (图鉴 × 新系列) is damped, so say what it adds up to
   const capped = G.crowdRaw() > G.CROWD_KNEE;
   render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2><ul class="dex">${dex()}</ul>${handSum()}`, $('dex'));
