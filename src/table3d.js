@@ -590,7 +590,7 @@ async function autoTear(run) {
 // Where the torn strip lands, the empty pack rests and the seen cards pile, for this aspect (relayout() moves them on resize).
 function spots() {
   const st = stages().reveal, wide = camera.aspect > 1;
-  return { strip: onTable(small() ? .45 : .46, small() ? .8 : 0, st).setY(.06), // on the mat in front of the showcase
+  return { strip: onTable(small() ? .6 : .46, small() ? .02 : 0, st).setY(.06), // on the mat in front of the showcase
     pile: onTable(wide ? .66 : .84, wide ? -.4 : -.18, st), // portrait: half off the side edges, clear of the caption
     rest: onTable(wide ? -.68 : -.86, wide ? -.3 : -.12, st).setY(PUFF + .05) };
 }
