@@ -36,6 +36,7 @@ function watchDebt(G, clock) {
 // repay = pay loans back with what cash is above the reserve plus a float for stock (twice the next bill, at least $1,000), and buy no upgrade (but a shelf a set waits for) while a loan is out. clerkFirst = hire the clerk before any other upgrade. away = [minutes on, minutes off]: the player closes the page for the
 // off minutes (one catch-up tick on return, credited up to the offline cap), then plays the on minutes, and so on.
 // off = minutes of every hour the player leaves the page open without doing anything (the shop runs on its own; a clerk, if hired, restocks).
+// binder = keep hits under $25 in the counter binder for seekers (GAMEPLAY §14) instead of selling them to peers at 70% every visit.
 // heed = a player who reads the 店员没本钱 notes: buys no upgrade that leaves less than the clerk needs to fill the shelves (成长页
 // says so under the button), and presses 现在补货 whenever the clerk's last round came up short (货柜 page) and there is cash above the bill reserve.
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
@@ -137,12 +138,12 @@ export function noob({ hours = 5, seed = 1, log = 1800 } = {}) {
 
 // The four kinds of player in GAMEPLAY.md「难度」, each over `seeds` seeds for `hours` of real time.
 export const KINDS = {
-  纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
-  普通: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, log: 3600 }), // looks in every 90 s with the page open (ticks under G.AWAY apart are no absence), prices at market
-  爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
-  开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
+  纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
+  普通: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, binder: true, log: 3600 }), // looks in every 90 s with the page open (ticks under G.AWAY apart are no absence), prices at market
+  爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
+  开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, binder: true, log: 3600 }),
   新手乱点: s => noob({ hours: s.hours, seed: s.seed }),
-  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
+  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, binder: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
 };
 export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } = {}) {
   return kinds.map(k => {

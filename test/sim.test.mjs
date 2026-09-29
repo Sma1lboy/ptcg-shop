@@ -911,3 +911,43 @@ console.log('ok luck percentile');
   assert.ok(plan.got >= 5 && G.payBill() && !st().overdue, 'and the bill is paid on the spot');
   console.log(`ok 凑钱: cheapest cards first, just enough; ${plan.pick.length} kinds sold for $${plan.got.toFixed(2)} against a $${o.amount} bill`);
 }
+// 单卡生意 (GAMEPLAY §14): half the pack buyers tear their packs open at the counter and offer every hit at your 收卡价 if it clears
+// their floor; the hits you hold sit in the counter binder, where seekers take up to SEEK_N at the 单卡标价. 收卡 stops while a bill is
+// overdue or the binder is full. Opening stays a loss even if every hit you pull sells at the case tag.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(21), storage: null }), st = () => G.state;
+  for (const k in G.TYPES) if (k !== 'opener') G.TYPES[k].w = 0; // only pack buyers walk in
+  st().cash = 1e6; st().earned.sealed = 1; st().price.sv08 = 0.8;
+  const go = secs => { for (let i = 0; i < secs; i++) { T += 1000; if (!G.shelfQty('sv08')) { G.buy('sv08', 200); G.shelve('sv08', 999); } G.tick(); } };
+  G.buy('sv08', 200); G.shelve('sv08', 999); go(590);
+  const sold = st().recent.filter(v => v.r === 'sold'), torn = sold.filter(v => v.floor != null), offered = torn.filter(v => v.offer > 0);
+  const share = torn.length / sold.length;
+  assert.ok(Math.abs(share - G.COUNTER_OPEN) < 0.1, `about COUNTER_OPEN of pack buyers tear at the counter (${share.toFixed(2)})`);
+  assert.ok(offered.every(v => (v.floor <= G.buyPct() + 1e-9) === !!v.took || v.sell === 'full'), 'a seller takes your 收卡价 exactly when it clears their floor');
+  const took = offered.reduce((a, v) => a + (v.took || 0), 0), paid = offered.reduce((a, v) => a + (v.paid || 0), 0);
+  assert.ok(took > 0 && took === st().bought.n && Math.abs(paid - st().bought.cost) < 0.01 && G.binderN() <= G.BINDER, `bought ${took} hits for $${paid.toFixed(2)}, binder ${G.binderN()}/${G.BINDER}`);
+  const accept = offered.filter(v => v.took).length / offered.length;
+  G.setBuyPct(G.BUY_MIN); const n0 = st().bought.n; go(300);
+  assert.ok(st().bought.n - n0 <= 2, `at ${G.BUY_MIN * 100}% hardly anyone sells (${st().bought.n - n0})`);
+  G.setBuyPct(1); st().overdue = { week: 1, amount: 1e9, inst: 0, until: Infinity }; const n1 = st().bought.n; go(120);
+  assert.ok(st().bought.n === n1 && st().recent.some(v => v.sell === 'owe'), 'nothing is bought while a bill is overdue');
+  st().overdue = null; go(600);
+  assert.ok(G.binderN() === G.BINDER && st().recent.some(v => v.sell === 'full'), 'the binder fills and 收卡 stops there');
+  // seekers: take up to SEEK_N cards from the binder at the 单卡标价, cheapest first
+  for (const k in G.TYPES) G.TYPES[k].w = k === 'seeker' ? 1 : 0;
+  const before = G.binderN(), e0 = st().earned.singles; go(60);
+  const seek = st().recent.filter(v => v.t === 'seeker' && v.r === 'sold' && v.at > T - 60e3);
+  assert.ok(seek.length && seek.every(v => v.n >= 1 && v.n <= G.SEEK_N) && seek.some(v => v.n > 1), `seekers buy 1–${G.SEEK_N} cards (${seek.map(v => v.n).join(',')})`);
+  const took2 = seek.reduce((a, v) => a + v.n, 0), got = seek.reduce((a, v) => a + v.gain, 0);
+  assert.ok(before - G.binderN() === took2 && Math.abs(st().earned.singles - e0 - got) < 0.01, 'out of the binder, into singles revenue');
+  // 开包仍是负期望: at 手气 maxed, even every hit sold at the case tag (bulk to peers) is worth less than the lowest wholesale
+  const m = 1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max), low = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length;
+  const worst = PTCG_SETS.map(set => {
+    const P = S.poolsFor(set.id), rates = S.ratesFor(set, m);
+    const hitEV = S.HITS.filter(k => rates[k] && P[k]?.length).reduce((a, k) => a + rates[k] / 100 * P[k].reduce((b, c) => b + S.cardPrice(set.id, c.n, k), 0) / P[k].length, 0);
+    const real = G.BUYLIST * S.packEV(S.rateKey(set.id, m)) + (G.CASE_PCT - G.BUYLIST) * hitEV;
+    return [set.id, real / set.packPrice];
+  }).sort((a, b) => b[1] - a[1])[0];
+  assert.ok(worst[1] < low, `opening at 手气 max, hits sold at ${G.CASE_PCT * 100}%: ${worst[0]} ${(worst[1] * 100).toFixed(0)}% of market < ${low * 100}% wholesale`);
+  console.log(`ok 单卡生意: ${(share * 100).toFixed(0)}% tear at the counter, ${(accept * 100).toFixed(0)}% take ${G.BUY_PCT * 100}%; binder caps at ${G.BINDER}; seekers take ≤${G.SEEK_N}; best set realizes ${(worst[1] * 100).toFixed(0)}% (${worst[0]}) < ${low * 100}%`);
+}

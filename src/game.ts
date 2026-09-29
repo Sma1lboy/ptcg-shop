@@ -542,8 +542,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function counterBuy(id: string, n: number, v: Visit) {
     const floor = Math.max(0.2, SELLER.tol + SELLER.sd * gauss()), pct = buyPct(), got: Pull[] = [];
     for (let i = 0; i < n; i++) for (const c of S.openPack(id, random)) if (S.HITS.includes(c.kind)) got.push(c);
+    v.offer = got.length; v.floor = floor; // offer 0: tore them open, nothing to sell
     if (!got.length) return;
-    v.offer = got.length; v.floor = floor;
     if (pct < floor - 1e-9) { v.sell = 'low'; return; }
     if (state.overdue) { v.sell = 'owe'; return; } // owing 九姐, the till keeps its cash for her
     let room = BINDER - binderN(), took = 0, paid = 0;
