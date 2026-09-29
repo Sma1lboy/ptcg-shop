@@ -158,12 +158,25 @@ function simTotal(r: Rng, key: string, n: number) {
   }
   return v;
 }
-// The simulated players' totals, sorted: the share image draws them, luckPercentile counts against them (same rng(7) draws, so the
-// picture and the printed percentile agree).
+// The simulated players' totals, sorted: the 欧气 page and the share image draw them, luckPercentile counts against them (same rng(7)
+// draws, so the picture and the printed percentile agree). The last draw is kept: the page re-renders every tick and one verdict
+// asks for it three times (percentile, without the best card, the chart); it only changes when a pack is opened. Don't mutate it.
+let lastSamples = { of: '', v: new Float64Array(0) };
 export function luckSamples(counts: Record<string, number>, trials = LUCK_TRIALS) { // counts: {rateKey: packs}
+  const of = trials + JSON.stringify(counts);
+  if (lastSamples.of === of) return lastSamples.v;
   const r = rng(7), out = new Float64Array(trials);
   for (let t = 0; t < trials; t++) { let v = 0; for (const key in counts) if (counts[key] > 0) v += simTotal(r, key, counts[key]); out[t] = v; }
-  return out.sort();
+  return (lastSamples = { of, v: out.sort() }).v;
+}
+// The distribution the page and the share image both draw: n bins over a log money axis (totals are right-skewed; one big card is
+// a long way right) spanning the middle 99% of players and you. Positions are 0..1 along the axis; a bin wholly left of `you` is
+// one you beat.
+export function luckBins(sims: Float64Array, you: number, exp: number, n = 54) {
+  const T = sims.length, lo = Math.log(Math.max(1e-3, Math.min(sims[Math.floor(T * .005)], you) * .92)), hi = Math.log(Math.max(sims[Math.ceil(T * .995) - 1], you) * 1.08);
+  const at = (v: number) => (Math.log(Math.max(v, 1e-3)) - lo) / (hi - lo), bins = new Array<number>(n).fill(0);
+  for (const v of sims) bins[Math.max(0, Math.min(n - 1, Math.floor(at(v) * n)))]++;
+  return { bins, you: at(you), exp: at(exp), beat: (i: number) => (i + 1) / n <= at(you) };
 }
 export function luckPercentile(counts: Record<string, number>, value: number, trials = LUCK_TRIALS) {
   let below = 0, ties = 0;

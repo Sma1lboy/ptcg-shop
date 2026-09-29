@@ -12,6 +12,7 @@ import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 import { sellPlan } from '../debt.ts';
+import { refundBtn } from './upgrades.ts';
 
 const clock = (s: number) => { s = Math.max(0, Math.ceil(s)); const m = Math.floor(s / 60); return `${m}:${String(s % 60).padStart(2, '0')}`; };
 const pct = (r: number) => `${Math.round(r * 100)}%`;
@@ -33,6 +34,13 @@ export function renderDue() {
   el.title = o ? `第 ${o.week} 周的账逾期，宽限 ${clock(left)}` : `第 ${b!.week} 周的账 ${money(b!.amount)}，${clock(left)} 后九姐来收`;
   render(o ? html`<span class="k">逾期</span><b>${clock(left)}</b><small>差 ${money(Math.max(0, o.amount - s.cash))}</small>`
     : html`<span class="k">第 ${b!.week} 周</span><b>${clock(left)}</b><small>${money(b!.amount)}</small>`, el);
+}
+
+// 退回: this week's upgrades and skills, back at G.REFUND of the price while the till is short of the bill (G.refundable).
+function backs() {
+  const r = G.refundable(); if (!r.length) return nothing;
+  const name = (k: string) => (G.UPGRADES[k] || G.SKILLS[k]).name, lv = (k: string) => k in G.UPGRADES ? G.lvl(k) : G.skill(k);
+  return html`<div class="lg-back"><p>这周买的升级可以退（扣一成，不像借款会滚利息）：</p>${r.map(x => refundBtn(x.k, name(x.k), lv(x.k), x.cost, false))}</div>`;
 }
 
 export function renderLedger() {
@@ -62,9 +70,9 @@ export function renderLedger() {
       <div class="lg-bill">
         ${o ? html`<p class="lg-k lg-late">第 ${o.week} 周的账逾期</p><p class="lg-big">${money(o.amount)}</p>
             <p>宽限还剩 <b>${clock(o.until - s.shopT)}</b>。${short ? html`手上 ${money(s.cash)}，还差 <b>${money(short)}</b>。` : '钱够了，付掉吧。'}</p>
-            <div class="lg-act">${short ? html`<button type="button" class="primary" @click=${openRaise}>去凑钱</button>` : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>`
+            <div class="lg-act">${short ? html`<button type="button" class="primary" @click=${openRaise}>去凑钱</button>` : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>${backs()}`
         : b ? html`<p class="lg-k">第 ${b.week} 周的账 · ${clock(G.dueIn())} 后来收</p><p class="lg-big">${money(b.amount)}</p>
-            <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>
+            <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>${backs()}
             ${upcoming.length ? html`<ol class="lg-next">${upcoming.map(([w, v]) => html`<li><span>第 ${w} 周</span><b>${money(v)}</b></li>`)}</ol>
               <p class="lg-note">每周 ×${G.BILL_G}，付到欠款为零为止。</p>` : ''}` : ''}
       </div>

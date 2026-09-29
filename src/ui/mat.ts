@@ -23,14 +23,14 @@ let mat = { mode: 'idle' } as Mat;
 // The 3D table's caption line (s3-cap): the printed rarity mark, the rarity's name, the market price.
 const capHTML = (c: Pull) => `${toHTML(mark(c, false))}${rarLabel(c.kind)}<b>${money(c.price)}</b>`;
 // One card on the 2D mat, the shared card face (card.ts) back to back with the card back. big = the card in hand on the stage
-// (hi-res, tap to advance); otherwise a tray thumb or, in a ten-pack spread, a larger one (tap to inspect once face-up).
+// (hi-res, tap to advance); otherwise a tray thumb (tap to inspect once face-up). The ten-pack builds its own (haulHTML).
 function cardHTML(c: Pull, i: number, up: boolean, big?: boolean) {
-  const size = big ? 'big' : mat.mode === 'batch' ? 'show' : 'thumb', act = big ? 'advance' : up ? 'peek' : '';
+  const size = big ? 'big' : 'thumb', act = big ? 'advance' : up ? 'peek' : '';
   return `<figure class="slot">
       <button type="button" class="card t${rar(c).t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
         <span class="card-in"><span class="back">${BACK()}</span><span class="face">${toHTML(face(c, size))}</span></span>
       </button>
-      <figcaption>${mat.mode === 'batch' && mat.news.some(k => picked()[k] === c) ? '<i class="hand-new">新</i>' : ''}${toHTML(cap(c, size))}</figcaption>
+      <figcaption>${toHTML(cap(c, size))}</figcaption>
     </figure>`;
 }
 let backMarkup = '';
@@ -38,7 +38,7 @@ const BACK = () => (backMarkup ||= toHTML(backFace()));
 
 // Where one pack ranks among simulated packs of the same set, in words a player can quote.
 function rankText(setId: string, v: number) {
-  const p = S.packPercentile(S.rateKey(setId, G.luckMult()), v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
+  const p = S.packPercentile(S.rateKey(setId, G.luckMult()), v), pc = p >= .995 ? '99.5' : (p * 100).toFixed(0);
   return { p, text: `比 ${pc}% 的${G.setById(setId).name}包值钱${p >= .9 ? `，约 ${Math.min(1000, Math.round(1 / (1 - p)))} 包才出一包这样的` : ''}` };
 }
 const shareBtn = () => '<button type="button" data-act="sharemat">分享这次开包</button>';
@@ -47,7 +47,8 @@ function shareSpec() {
   const vals = packs.map(S.packValue), bi = vals.indexOf(Math.max(...vals)), cards = packs.flat();
   const best = cards.reduce((a, b) => (b.price > a.price ? b : a)), rk = rankText(set.id, vals[bi]);
   return { set: set.name, en: set.en, n: packs.length, value: vals.reduce((a, b) => a + b, 0), cost: G.wholesale(set.id) * packs.length,
-    bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high') };
+    bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high'),
+    count: cards.length, front: cards.filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price).slice(0, 5) }; // the table's front row (RR and up, dearest first): the pack poster lays out the same
 }
 export type ShareSpec = ReturnType<typeof shareSpec>;
 
@@ -91,12 +92,11 @@ export function renderMat() {
     return;
   }
   // batch
-  const cards = mat.packs.flat(), hits = batchHits();
+  const cards = mat.packs.flat();
   const v = S.packValue(cards), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost;
   el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span id="mat-prog">${run ? runProg() : `开出 ${money(v)} · 进货 ${money(cost)} ·
       <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b>`}</span>${sndBtn()}${run && !run.end ? stopBtn() : ''}</div>
-      ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
-        : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
+      ${haulHTML()}
       ${mat.finished ? batchSummary() : ''}`;
 }
 
@@ -131,11 +131,13 @@ const HINT = { shelf: nextUnlock, pack: () => touch() ? '按住封口往右拖�
 const batch = () => mat.mode === 'batch';
 const picked = () => mat.picks.map(([p, i]) => mat.packs[p][i]);
 const head3D = () => {
-  if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span>点桌上的包，开一包</span>${sndBtn()}`; return; }
+  if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span id="m3-line">${idleLine()}</span>${sndBtn()}`; return; }
   const live = batch() ? mat.torn : mat.mode === 'cards';
   $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${run ? runProg() : live ? prog() : ''}</span>${sndBtn()}
       ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
 };
+// An empty warehouse (a new shop): the head says the guide's first step too; the pack on the table is the other way in.
+const idleLine = () => Object.values(G.state.stock).some(n => n > 0) ? '点桌上的包，开一包' : '仓库还空着：先去货柜进货，或点桌上的包现进现开';
 const hint3D = (k: keyof typeof HINT) => { const h = document.getElementById('s3-hint'); if (h) h.textContent = HINT[k](); };
 const on3D = {
   onTear() {
@@ -180,7 +182,7 @@ function mat3D(el: HTMLElement) {
 // one and opens it). The stock / price / unlock reads for it all live in shelfItems().
 function shelfItems() {
   const s = G.state;
-  const narrow = matchMedia('(max-width: 779px)').matches; // phones: four stacks a row, a label gets two lines (name + one short line) or it covers the pack behind it
+  const narrow = matchMedia('(max-width: 779px), (orientation: landscape) and (max-height: 520px)').matches; // phones (and sideways ones): small stacks, a label gets two lines (name + one short line) or it covers the pack behind it
   return SETS.filter(x => G.unlocked(x.id)).map(x => {
     const n = s.stock[x.id] || 0, w = G.wholesale(x.id), poor = !n && s.cash < w;
     return { set: x.id, n, off: poor, name: x.name, note: n ? `仓库 ${n} 包` : poor ? (narrow ? '钱不够' : '现金不够进货') : narrow ? '' : '进 1 包就开', price: n || (poor && narrow) ? '' : money(w) };
@@ -193,6 +195,7 @@ function shelf3D() {
   const items = shelfItems(), ids = items.map(i => i.set).join();
   if (box.dataset.ids !== ids) { box.dataset.ids = ids; box.replaceChildren(); } // a set unlocked: the buttons' hover indexes are per position
   hint3D('shelf');
+  const line = document.getElementById('m3-line'); if (line && line.textContent !== idleLine()) line.textContent = idleLine();
   items.forEach((it, k) => {
     let b = box.children[k] as HTMLButtonElement | undefined;
     if (!b) {
@@ -213,8 +216,26 @@ function waitFor3D() { if (!waited) { waited = true; threeReady.then(ok => { if 
 // While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
 export let hold = false;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-// The 2D spread: the picks that are hits or new to 亲手开出, dearest first.
-const batchHits = () => mat.picks.filter(([p, i], k) => S.HITS.includes(mat.packs[p][i].kind) || mat.news.includes(k)).map(([p, i]) => mat.packs[p][i]).reverse();
+// The 2D ten-pack, laid out as the 3D table's finished haul (table3d.js haulOf, DESIGN.md「十连翻完的那一眼」): the best few picks
+// (RR and up, dearest first; the dearest pick alone when there's no hit) side by side in a front row, the dearest in the middle,
+// a size up and lifted, each over a plate (name, rarity, market price); the other picks (plain new cards, lesser hits) shingled in
+// one row behind under one tag. Phones: three in front, or the names don't fit. Indexes are into picked().
+function haulOf() {
+  const cs = picked(), byPrice = cs.map((_, k) => k).sort((a, b) => cs[b].price - cs[a].price), hits = byPrice.filter(k => rar(cs[k]).t >= 2);
+  const top = hits.length ? hits.slice(0, matchMedia('(max-width: 779px)').matches ? 3 : 5) : byPrice.slice(0, 1);
+  return { top, rest: cs.map((_, k) => k).filter(k => !top.includes(k)) };
+}
+function haulHTML() {
+  const cs = picked(), { top, rest } = haulOf(), nu = (k: number) => (mat.news.includes(k) ? '<i class="hand-new">新</i>' : '');
+  const row: number[] = []; top.forEach((k, r) => (r % 2 ? row.unshift(k) : row.push(k))); // centre out: the dearest in the middle
+  const btn = (k: number, size: 'show' | 'thumb') => `<button type="button" class="card t${rar(cs[k]).t} k-${cs[k].kind}" tabindex="-1" data-i="${k}" aria-label="第 ${k + 1} 张（未翻）">
+      <span class="card-in"><span class="back">${BACK()}</span><span class="face">${toHTML(face(cs[k], size))}</span></span></button>`;
+  const m = rest.filter(k => mat.news.includes(k)).length, v = rest.reduce((a, k) => a + cs[k].price, 0);
+  return `<div class="haul">${rest.length ? `<div class="haul-rest"><div class="haul-strip" style="--n: ${rest.length}">${rest.map(k => btn(k, 'thumb')).join('')}</div>
+      <p class="haul-sum">另 ${rest.length} 张${m ? `，新卡 ${m}` : ''} · 合计 ${money(v)}</p></div>` : ''}
+    <div class="haul-top">${row.map(k => `<figure class="slot${k === top[0] ? ' best' : ''}">${btn(k, 'show')}
+      <figcaption class="s3-top${k === top[0] ? ' best' : ''}"><b class="s3-name">${nu(k)}${esc(cs[k].name)}</b>${toHTML(cap(cs[k], 'big'))}</figcaption></figure>`).join('')}</div></div>`;
+}
 const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
 const prog = () => {
   const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : mat.news.length ? '翻开' : S.HITS.includes(cs[0].kind) ? '好卡' : '没出好卡，最值钱的';
@@ -355,19 +376,22 @@ function caption(c: Pull, pre: string, fresh: boolean) {
   cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${fresh ? '<i class="hand-new">新 · 亲手开出</i>' : ''}${pre}${esc(c.name)}</b>${capHTML(c)}`;
 }
 
-// Ten packs at once: the hits flip one after another, cheapest first, best last.
+// Ten packs at once on the 2D mat: the row behind turns over in one sweep, then the front row one card at a time, cheapest first,
+// the dearest last. A batch without a single hit turns its one card quietly after the miss sound.
 function revealBatch(tok: Mat) {
-  const hits = batchHits(), n = hits.length;
-  if (!n) { FX.miss(); finish(); return; }
-  const btns = [...document.querySelectorAll<HTMLElement>('.mat .spread .card')], step = reduced() ? 0 : Math.min(240, 2400 / n);
-  for (let k = 0; k < n; k++) {
-    const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
-    setTimeout(() => {
-      if (mat !== tok) return;
-      const t = rar(hits[i]).t; if (t >= 4 && k === n - 1 && !reduced()) spotlight(2200); armThumb(btns[i], hits[i]); FX.flip(t); FX.burst(btns[i].closest('.slot'), t);
-    }, delay);
-  }
-  setTimeout(() => { if (mat === tok) finish(); }, (reduced() ? 0 : 350 + n * step + 1200));
+  const cs = picked(), { top } = haulOf(), el = (k: number) => document.querySelector<HTMLElement>(`#mat .haul .card[data-i="${k}"]`)!;
+  const rest = [...document.querySelectorAll<HTMLElement>('#mat .haul-rest .card')], front = [...top].reverse(), none = rar(cs[top[0]]).t < 2;
+  const at = reduced() ? () => 0 : (k: number) => 350 + (rest.length ? 450 : 0) + k * Math.min(420, 2000 / front.length) + (k === front.length - 1 ? 400 : 0);
+  if (none) FX.miss();
+  if (rest.length) setTimeout(() => { if (mat !== tok) return; rest.forEach(b => armThumb(b, cs[+b.dataset.i!], true)); FX.flip(0); }, reduced() ? 0 : 350);
+  front.forEach((k, j) => setTimeout(() => {
+    if (mat !== tok) return;
+    const t = rar(cs[k]).t, b = el(k); armThumb(b, cs[k], true);
+    if (none) return;
+    if (t >= 4 && j === front.length - 1 && !reduced()) spotlight(2200);
+    FX.flip(t); FX.burst(b.closest('.slot'), t);
+  }, at(j)));
+  setTimeout(() => { if (mat === tok) finish(); }, at(front.length - 1) + (reduced() ? 0 : 1200));
 }
 
 // ---------- actions (called from events.ts) ----------
@@ -406,7 +430,18 @@ export function openBatch(id: string, keep = false) {
   if (!mat.m3d) revealBatch(mat);
 }
 export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }
-export function peek(i: number) { if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } }
+export function peek(i: number) {
+  if (batch()) return peekBig(picked()[i]);
+  if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); }
+}
+// A card on the 2D ten-pack mat, picked up to look at (the 3D table lifts it to the eye): a native popover, the card in hand with
+// its caption; a tap anywhere or Esc puts it back.
+function peekBig(c: Pull) {
+  let p = document.getElementById('mat-peek');
+  if (!p) { p = document.body.appendChild(document.createElement('div')); p.id = 'mat-peek'; p.className = 'mat-peek'; p.setAttribute('popover', ''); p.addEventListener('click', () => p!.hidePopover()); }
+  p.innerHTML = `<figure class="slot">${toHTML(face(c, 'big'))}<figcaption class="s3-top best"><b class="s3-name">${esc(c.name)}</b>${toHTML(cap(c, 'big'))}</figcaption></figure>`;
+  p.showPopover();
+}
 export function flipAll() { if (mat.m3d) { table!.flipAll(); return; } mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
 export function toggleMute() { FX.setMuted(!FX.muted()); }
 document.addEventListener('ptcg:sound', () => document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; })); // also muted from the 声音 panel

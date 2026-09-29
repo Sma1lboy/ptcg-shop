@@ -541,7 +541,7 @@ function frameOn(pts, t, p, mx = .9, y0 = -.86, y1 = .86) {
 const FOCUS = () => new V3(0, 22, -10);
 const HOLD = () => FOCUS().add(new V3(0, -Math.cos(PITCH), Math.sin(PITCH)).multiplyScalar(.9));
 const GLOW0 = () => HOLD().add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6));
-const stages = () => ({ pack: { t: FOCUS(), p: PITCH, d: fit(PW / .62, PH / .66) }, reveal: { t: FOCUS(), p: PITCH, d: fit(CW / .56, CH / .58) } });
+const stages = () => ({ pack: { t: FOCUS(), p: PITCH, d: fit(PW / .62, PH / .66) }, reveal: { t: FOCUS(), p: PITCH, d: fit(CW / .56, CH / (short() ? .5 : .58)) } }); // a sideways phone: the caption under the card is a sixth of the height
 function camTo(st, ms, ease = E.io) {
   const a = { t: cam.t.clone(), p: cam.p, d: cam.d };
   return tween(ms, k => { cam.t.lerpVectors(a.t, st.t, k); cam.p = a.p + (st.p - a.p) * k; cam.d = a.d + (st.d - a.d) * k; }, ease);
@@ -684,7 +684,10 @@ function celebrate(run, i, t) {
 // the pack came from instead of cutting to bare rubber. Wide screens look in at SPREAD_PITCH through the front glass. Portrait and
 // phones look down steeper (SPREAD_PITCH_TALL): at the landscape pitch a 3–4 row grid keystones and each price tag lands on the
 // card below it, and their rows leave a tag's height. Portrait is width-bound, so its spare height goes to the slabs.
-const roomy = () => camera.aspect >= 1.15 && !small();
+// A phone turned sideways (short, not narrow) is height-bound like a desktop window, so it takes the wide shot: the steep phone
+// pitch spends its few hundred pixels of height on bare mat between the rows.
+const short = () => matchMedia('(orientation: landscape) and (max-height: 520px)').matches;
+const roomy = () => camera.aspect >= 1.15 && (!small() || short());
 const BACK = MZ - MH / 2 + 1.5; // 1.5 cm inside the mat's far edge
 const SHOWCASE = () => new V3(SX, 2.2 + 7, SZ + SD / 2);
 // Portrait is width-bound, so it has height to spare: the shot reaches up to the slabs' faces, not just the front glass
@@ -957,7 +960,7 @@ async function flipPick(run, i) {
   if (run.skip) revealRest(run);
 }
 // Where a card is held up to the eye in a batch: just in front of the camera, a little above centre (the caption is below).
-const heldAt = () => camera.position.clone().addScaledVector(camBasis().f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6);
+const heldAt = () => camera.position.clone().addScaledVector(camBasis().f, -fit(CW / .55, CH / (short() ? .5 : .6))).addScaledVector(camBasis().u, short() ? 1 : .6); // sideways phone: smaller and higher, the caption needs its ~60px under it
 // Turned face up in the fan, it rises to the eye for its show, then goes back to its place.
 async function liftShow(run, i, t) {
   const m = run.cards[i], P = run.fan.poses[i], q = camera.quaternion.clone();
@@ -1034,11 +1037,11 @@ function haulOf(run) {
   const yr = Math.max(0, ...run.fan.wrap.map(w => w.y)) + .5;
   rest.forEach((k, j) => { poses[k] = { p: new V3((j - (nr - 1) / 2) * dx, yr + j * .03, zr), q }; });
   const pts = [];
-  for (const k of top) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); pts.push(p.clone().add(new V3(0, 0, CH / 2 + (small() ? 6 : 4)))); } // and its two-line tag (on a phone's small cards it's taller than the card is deep)
+  for (const k of top) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); pts.push(p.clone().add(new V3(0, 0, CH / 2 + (small() && !short() ? 6 : 4)))); } // and its two-line tag (on a phone's small cards it's taller than the card is deep)
   for (const k of rest) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); }
-  for (const w of run.fan.wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2)));
-  pts.push(camera.aspect < 1 ? SLABS() : FOOT());
-  return { top, rest, poses, cam: frameOn(pts, new V3(0, 0, (zr + zTop) / 2), room ? SPREAD_PITCH : SPREAD_PITCH_TALL, .94, tall ? -.6 : -.76, .98) };
+  // a phone turned sideways has ~300px of height: the shot is the cards, the emptied packs behind them may run off the top
+  if (!short()) { for (const w of run.fan.wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2))); pts.push(camera.aspect < 1 ? SLABS() : FOOT()); }
+  return { top, rest, poses, cam: frameOn(pts, new V3(0, 0, (zr + zTop) / 2), room ? SPREAD_PITCH : SPREAD_PITCH_TALL, .94, tall ? -.6 : -.76, short() ? .9 : .98) };
 }
 
 // ---------- the shelf: 今天拆哪包？ ----------
@@ -1052,7 +1055,7 @@ const SHELF_MAX = 12, SHELF_PITCH = PITCH, SHELF_BACK = 25.5, SGX = PW + 2.8, LI
 function shelfGrid(n) {
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 9.5 : 4.4); // portrait: the labels need more room between rows
+    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 9.5 : short() ? 6 : 4.4); // portrait / a sideways phone (small packs): the labels need more room between rows
     // The front row's near edge stays on the mat, and the back row's centre sits SHELF_BACK behind the mat's centre line (its
     // rear edge ~3 cm inside the mat's far edge), so one or two rows lie right in front of the showcase, not a band of bare mat away.
     const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2), (rows - 1) / 2 * SGZ - SHELF_BACK);
@@ -1060,7 +1063,7 @@ function shelfGrid(n) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
       pos.push(at);
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * (PW / 2 + .6), 0, dz * PH / 2)));
-      pts.push(at.clone().add(new V3(0, 0, PH / 2 + 3.2))); // the label under it
+      pts.push(at.clone().add(new V3(0, 0, PH / 2 + (short() ? 4.6 : 3.2)))); // the label under it
     }
     // One or two rows: the showcase's top stays in shot behind them (only its height counts; on a phone its sides are cropped)
     const back = rows <= 2; if (back) pts.push(new V3(SX, 2.2 + 12.4, SZ - 1.2)); // the slabs' tops

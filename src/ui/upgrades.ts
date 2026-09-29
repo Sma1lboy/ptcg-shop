@@ -36,10 +36,15 @@ export function billNote(cost: number) {
     ? html`${bill ? '；' : '，'}店员一轮补满货架要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}</p>`;
 }
 
+// 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.
+export const refundBtn = (k: string, name: string, lv: number, cost: number, note = true) =>
+  html`<p class="gt-back"><button type="button" data-act="refund" data-k="${k}">退回 ${name} Lv ${lv} · 拿回 ${moneyOf(cost * G.REFUND)}</button>${note ? html`<small>这周买的，账不够付时可以退，扣一成</small>` : ''}</p>`;
+
 // One upgrade, skill or 名气 perk pocket. fx = what the current / next level does. have / price = what pays for it (cash by default).
 export function tile(o: { name: string; tag?: string; desc: string; lv: number; max: number; cost: number | null | undefined; fx?: [string, string]; act: string; k: string; blocked?: string; have?: number; price?: (v: number) => string }) {
   const cash = o.have ?? G.state.cash, money = o.price ?? moneyOf, done = o.cost == null, can = !done && !o.blocked && cash >= o.cost!;
-  return html`<li class="gtile ${done ? 'max' : can ? 'can' : ''}">
+  const free = o.have != null || o.cost! <= G.spare(), back = o.have == null && G.refundable().find(x => x.k === o.k); // 名气 perks: no bill, no 退回
+  return html`<li class="gtile ${done ? 'max' : can && free ? 'can' : ''}">
       <p class="gt-top"><b>${o.name}</b>${o.tag ? html`<small>${o.tag}</small>` : ''}<span class="gt-lv">Lv ${o.lv}<small>/${o.max}</small></span></p>
       ${pips(o.lv, o.max)}
       ${o.fx ? html`<p class="gt-fx">${done ? o.fx[0] : html`${o.fx[0]} <span aria-hidden="true">→</span> <b>${o.fx[1]}</b>`}</p>` : ''}
@@ -47,6 +52,7 @@ export function tile(o: { name: string; tag?: string; desc: string; lv: number; 
       ${done ? html`<p class="gt-done">满级</p>` : o.blocked ? html`<p class="gt-done">${o.blocked}</p>`
         : html`<div class="gt-buy"><button type="button" data-act="${o.act}" data-k="${o.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${o.lv + 1} · </span>${money(o.cost!)}</button>
           ${can ? (o.have == null ? billNote(o.cost!) : '') : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / o.cost! * 100)}%"><i style="width:${Math.min(100, cash / o.cost! * 100)}%"></i></span><small>还差 ${money(o.cost! - cash)}</small>`}</div>`}
+      ${back ? refundBtn(back.k, o.name, o.lv, back.cost) : ''}
     </li>`;
 }
 
@@ -109,6 +115,12 @@ function milestones() {
   </section>`;
 }
 
+// 闲钱 under 下一步: what is free to spend once the next bill is set aside — the number the 成长 badge counts with.
+function spareLine() {
+  const b = G.state.overdue ?? G.nextBill(); if (!b) return '';
+  return html`<p class="gg-spare">闲钱 <b>${money(G.spare())}</b><span>现金 ${money(G.state.cash)} − ${G.state.overdue ? '逾期的账' : `第 ${b.week} 周的账`} ${money(b.amount)}。升级先用闲钱，账单的钱留着</span></p>`;
+}
+
 export function renderUpgrades() {
   const ups = Object.entries(G.UPGRADES), sks = Object.entries(G.SKILLS), cash = G.state.cash;
   const lv = ups.reduce((a, [k]) => a + G.lvl(k), 0) + sks.reduce((a, [k]) => a + G.skill(k), 0);
@@ -118,11 +130,12 @@ export function renderUpgrades() {
       <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b> 没花` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
         <span class="gh-bar" role="img" aria-label="${lv}/${max}"><i style="--p:${lv / max}"></i></span></div>
       ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
-        <p class="gg-k">${cash >= goal.cost ? '下一步，现在就能升' : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
+        <p class="gg-k">${cash >= goal.cost ? (goal.cost <= G.spare() ? '下一步，现在就能升' : '下一步，钱够但要动账单的钱') : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
         <p class="gg-what"><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span></p>
         ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
           : html`<span class="gt-save" role="img" aria-label="攒了 ${Math.round(cash / goal.cost * 100)}%"><i style="width:${cash / goal.cost * 100}%"></i></span>
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
+        ${spareLine()}
       </div>` : html`<p class="gh-goal gg-k">都升满了。</p>`}
       <dl class="gh-now">
         <div><dt>进店</dt><dd>${(G.rate() * 60).toFixed(1)} 人/分</dd></div>

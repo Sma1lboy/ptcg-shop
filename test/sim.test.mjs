@@ -817,11 +817,21 @@ console.log('ok luck percentile');
   const r = S.rng(4242), vs = Array.from({ length: 800 }, () => { let v = 0; for (let i = 0; i < 1000; i++) v += S.packValue(S.openPack('sv08.5', r)); return v; }).sort((x, y) => x - y);
   for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile({ 'sv08.5': 1000 }, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.05, `1000 packs at true q=${q} came out ${got}`); }
   // Cost doesn't grow with packs: 90k packs, and the slow middle (20 keys of ~1,500 packs: counts land in inversion and card-by-card picks).
-  const t0 = performance.now(); S.luckPercentile(big, M); const ms = performance.now() - t0;
+  // reordered keys: luckSamples keeps the last draw, so `big` itself would come back instantly
+  const cold = Object.fromEntries(Object.entries(big).reverse()), t0 = performance.now(); S.luckPercentile(cold, M); const ms = performance.now() - t0;
   const mid = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 1500], [S.rateKey(s.id, 1.25), 1500]])), t1 = performance.now(); S.luckPercentile(mid, 1e5); const ms2 = performance.now() - t1;
   assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
   { const c = { sv08: 40, 'sv08@1.25': 5 }, xs = S.luckSamples(c, 500); assert.ok(xs.every((v, i) => !i || xs[i - 1] <= v), 'luckSamples sorted');
     const v = xs[300]; assert.equal(S.luckPercentile(c, v, 500), (xs.filter(y => y < v - 1e-9).length + xs.filter(y => Math.abs(y - v) <= 1e-9).length / 2) / 500, 'the share image\'s spread and the printed percentile are the same draws'); }
+  // luckBins (the 欧气 page's chart and the share image's): every player lands in a bin, and the bins drawn as beaten hold no more
+  // players than the printed percentile counts, the rest (you and above) no fewer: the picture can't disagree with the number.
+  for (const c of [{ sv08: 1 }, { sv08: 40, 'sv08@1.25': 5 }, { sv08: 300, 'sv08.5': 200, sv09: 50 }]) {
+    const xs = S.luckSamples(c), v = xs[Math.floor(xs.length * .37)], B = S.luckBins(xs, v, 1), p = S.luckPercentile(c, v) * xs.length;
+    assert.equal(B.bins.reduce((a, b) => a + b, 0), xs.length, 'luckBins drops no player');
+    const beat = B.bins.reduce((a, b, i) => a + (B.beat(i) ? b : 0), 0), upTo = beat + (B.bins[B.bins.findIndex((_, i) => !B.beat(i))] || 0);
+    assert.ok(beat <= p && p <= upTo, `bins beaten ${beat}..${upTo} vs percentile ${p}`);
+  }
+  { const c = { sv08: 7 }; assert.equal(S.luckSamples(c), S.luckSamples({ sv08: 7 }), 'luckSamples keeps the last draw'); }
   console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
 
@@ -980,4 +990,32 @@ console.log('ok luck percentile');
   for (let i = 0; i < 120; i++) { T += 1000; G.tick(); }
   assert.ok(G.binderN() < n0, 'and after it they do');
   console.log(`ok 卡本 mid-reveal: shut for 2 min of ticks, then ${n0 - G.binderN()} cards sold`);
+}
+
+// 闲钱 and 退回 (the first weeks): the 成长 badge counts only what cash beyond the next bill buys (G.spare); a level bought in the week
+// whose bill the till can't cover goes back at REFUND of its price (never full: a buy-after-the-bill, return-before-the-next loop
+// would be a free rental). And the lesson itself, measured: a player who buys growth whenever the till covers it borrows every
+// week; the same player buying only out of 闲钱 borrows nothing.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(5), storage: null }), st = () => G.state, bill = () => G.nextBill().amount;
+  assert.equal(G.spare(), Math.max(0, st().cash - bill()), '闲钱 = cash − the next bill');
+  assert.equal(G.REFUND, 1 - G.LOAN_RATE);
+  st().cash = bill() + 1000; assert.ok(G.upgrade('signage') && G.upgrade('depth') && G.refundable().length === 0, 'cash still covers the bill: nothing to return');
+  st().stock.sv08 = 2 * G.DEPTH_BASE; G.shelve('sv08', 2 * G.DEPTH_BASE); const onShelf = G.shelfQty('sv08');
+  assert.ok(onShelf > G.DEPTH_BASE, 'the new layer is in use');
+  st().cash = 10; assert.deepEqual(G.refundable().map(x => x.k).sort(), ['depth', 'signage'], 'short of the bill: this week\'s buys can go back');
+  const c0 = st().cash, cost = G.UPGRADES.depth.costs[0]; assert.ok(G.refund('depth') && G.lvl('depth') === 0);
+  assert.ok(Math.abs(st().cash - c0 - cost * G.REFUND) < 1e-6, 'back at 90% of the price');
+  assert.ok(G.shelfQty('sv08') === G.depth() && st().stock.sv08 === onShelf - G.depth(), 'the packs over the lost layer go to the back room');
+  assert.ok(!G.refund('depth'), 'one level, once');
+  st().cash = 0; st().shelves.forEach(s => { s.qty = 0; }); for (let i = 0; i < G.WEEK + 20; i += 20) { T += 20e3; G.tick(); }
+  assert.ok(st().overdue && G.spare() === 0, 'overdue: no 闲钱');
+  assert.deepEqual(G.refundable().map(x => x.k), ['signage'], 'the overdue week\'s buy can still go back');
+  G.refund('signage'); assert.ok(G.lvl('signage') === 0);
+  st().cash = st().overdue ? st().overdue.amount + 5 : st().cash; G.payBill(); assert.ok(!st().overdue);
+  st().cash = 0; assert.equal(G.refundable().length, 0, 'last week\'s buys are yours to keep');
+  const { KINDS } = await import('../scripts/autoplay.mjs'), runs = k => [1, 2, 3].map(seed => KINDS[k]({ hours: 3, seed }).debt);
+  const rash = runs('冲动新手'), calm = runs('冲动新手·看闲钱'), loans = r => r.reduce((a, d) => a + d.loans, 0);
+  assert.ok(loans(rash) >= 3 && loans(calm) === 0, `growth bought with the bill's money borrows (${loans(rash)} loans in 3 × 3 h), out of 闲钱 none`);
+  console.log(`ok 闲钱/退回: badge counts cash beyond the bill, this week's buys go back at ${G.REFUND * 100}% while short; 冲动新手 ${loans(rash)} loans, 看闲钱 0`);
 }

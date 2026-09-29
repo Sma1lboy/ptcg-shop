@@ -39,8 +39,9 @@ function watchDebt(G, clock) {
 // binder = keep hits under $25 in the counter binder for seekers (GAMEPLAY §14) instead of selling them to peers at 70% every visit.
 // heed = a player who reads the 店员没本钱 notes: buys no upgrade that leaves less than the clerk needs to fill the shelves (成长页
 // says so under the button), and presses 现在补货 whenever the clerk's last round came up short (货柜 page) and there is cash above the bill reserve.
+// spare = buys growth only out of 闲钱 (G.spare: cash beyond the next bill), as the 成长 badge counts (a shelf a set waits for excepted).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, heed = false, binder = false, log = 600, hook } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, heed = false, spare = false, binder = false, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), rows = [], buys = []; let spent = 0, pot = 0, rev = 0, t = 0, nextRow = 0;
   const debt = watchDebt(G, () => t);
   const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
@@ -71,6 +72,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     if (repay && G.state.loan > 0 && best?.[0] !== 'racks') best = null; // a repaying player clears a 10%-a-week loan before buying growth (else upgrades cheaper than the float always come first and the loan compounds)
     if (heed && G.clerkShort() > 0 && !keep) G.clerkNow(); // not in the last 5 minutes before a bill
     if (heed && best && G.lvl('clerk') && free() - best[1] < G.clerkBudget()) best = null; // the 成长 page's note under the button
+    if (spare && best && best[0] !== 'racks' && best[1] > G.spare()) best = null; // the 成长 badge's rule: only 闲钱 (cash beyond the next bill) buys growth
     if (best && free() >= best[1]) { spent += best[1]; buys.push({ min: +(t / 60).toFixed(1), k: best[0], lv: (best[0].startsWith('skill:') ? G.skill(best[0].slice(6)) : G.lvl(best[0])) + 1, cost: best[1], rate0: +(G.rate() * 60).toFixed(1) }); if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
     const leaving = (off && (t + step) % 3600 >= (60 - off) * 60) || (away && (t + step) % ((away[0] + away[1]) * 60) >= away[0] * 60); // last visit before going away: fill the shelves, save later (unless a set is waiting for a shelf)
     const hold = best && (!leaving || best[0] === 'racks') && free() > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
@@ -143,6 +145,10 @@ export const KINDS = {
   爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
   开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
   新手乱点: s => noob({ hours: s.hours, seed: s.seed }),
+  // 冲动新手: stocks and prices like 普通 but keeps nothing back for bills and never repays: buys growth whenever the till covers it.
+  // 看闲钱 is the same player buying only what the 成长 badge counts (闲钱). The pair measures the badge's lesson (GAMEPLAY.md §8).
+  冲动新手: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, log: 3600 }),
+  '冲动新手·看闲钱': s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, spare: true, log: 3600 }),
   挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
 };
 export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } = {}) {
