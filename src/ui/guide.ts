@@ -106,14 +106,14 @@ export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
   if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
-  // the step's own button when it is on this page, else that page's tab
+  // the step's own button when it is on this page, else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
   const here = page() === step.page ? step.at() : step.alt?.() ?? null;
-  anchor = here ?? pick(`.nav a[href="#${step.page}"]`);
+  anchor = here ?? pick(`.subnav a[href="#${step.page}"]`, `.nav a[href="#${step.page}"]`);
   if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
   const n = replay >= 0, end = i === STEPS.length - 1;
   render(html`<p class="co-k">新手 ${i + 1}/${STEPS.length}</p>
-    <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到「${TAB[step.page]}」页</small>`}</h3>
+    <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到${page() === 'case' && step.page === 'shelf' ? '「货架」' : `「${TAB[step.page]}」页`}</small>`}</h3>
     <p>${step.p(here)}</p>
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`

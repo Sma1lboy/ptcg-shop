@@ -3,7 +3,7 @@
 //    pack faces with the set's logo (sold-out spots stay empty); the player's price label sits on the shelf edge. One <select> per
 //    unit puts a set on it, swaps it or clears it (events.ts), and says how many buyers each set lost lately, so the player knows
 //    who to make room for.
-// 2. A's set table: one row per set (系列·行情 | 仓库 | 货架 | 标价 | 开包), a subgrid table from 1300px of shelf width, cards below. Only the next
+// 2. A's set table: one row per set (系列·行情 | 仓库 | 货架 | 标价 | 开包), a subgrid table from 1340px of shelf width, cards below. Only the next
 //    step for the set's state is the primary button: no stock → buy, stock but on no shelf → shelve, else → open.
 import { html, render, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
