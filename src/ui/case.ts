@@ -4,7 +4,7 @@ import { G, $, money, imgUrl, rar } from './common.ts';
 
 export function renderCase() {
   const s = G.state, t = s.trophy;
-  render(html`<h2 class="eyebrow">展示柜 ${s.shown.length}/${G.slots()} · 镇店之宝</h2>
+  render(html`<h2>展示柜 ${s.shown.length}/${G.slots()} · 镇店之宝</h2>
       <p class="muted">柜里每张卡自己定价（占市价的比例）。找卡的、收藏党会来翻柜；标得越高，肯买的人越少。</p>
       <ul class="singles">${s.shown.length ? s.shown.map((c, i) => html`<li><span class="glyph t${rar(c).t}">${rar(c).g}</span>
         <span class="s-name">${c.name}<small>${G.setById(c.set).name} #${c.n} · 市价 ${money(c.price)}</small></span>

@@ -1,6 +1,7 @@
 // What every panel shares: the one game instance, DOM lookup, money format, card art URLs, rarity labels.
 // Panels only read G.state and call G's methods, never mutate state directly.
 import { createGame } from '../game.ts';
+import { html } from 'lit-html';
 import { card, logo } from '../assets.ts';
 
 export const G = createGame();
@@ -8,6 +9,8 @@ export const $ = (id: string) => document.getElementById(id)!;
 export const money = (v: number) => '$' + (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
 export const imgUrl = (c: { set: string; n: string }, size = 'low') => card(c.set, c.n, size);
 export const logoUrl = (id: string) => logo(id);
+// Level as a row of pips (成长 tab): filled up to lv, one per level.
+export const pips = (lv: number, max: number) => html`<span class="u-lv" role="img" aria-label="Lv${lv}/${max}">${Array.from({ length: max }, (_, i) => html`<i class=${i < lv ? 'on' : ''}></i>`)}</span>`;
 
 // Rarity symbols as printed on SV cards; `jp` is the name Chinese/Japanese players use. t = tier (0 bulk … 5 SIR/HR) for flip time, sound and glow.
 export const RAR: Record<string, { g: string; zh: string; jp?: string; t: number }> = {

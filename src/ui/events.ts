@@ -32,6 +32,8 @@ export function bindEvents() {
       case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d! * G.PCT_STEP); break;
       case 'cprice': G.setCardPrice(+b.dataset.i!, G.cardPct(G.state.shown[+b.dataset.i!]) + +b.dataset.d! * G.PCT_STEP); break;
       case 'up': G.upgrade(b.dataset.k!); break;
+      case 'learn': G.learn(b.dataset.k!); break;
+      case 'collect': G.collect(id, b.dataset.n === 'all'); break;
       case 'ack': G.ackOffline(); break;
       case 'reset':
         if (Date.now() - resetArmed < 3000) { resetMat(); b.textContent = '清空存档'; resetArmed = 0; }

@@ -1,5 +1,6 @@
 // Page layout behaviour (DESIGN.md「布局」): the right column's binder tabs, and on phones the playmat as a full-screen layer.
-import { $ } from './common.ts';
+import { html, render } from 'lit-html';
+import { G, $ } from './common.ts';
 
 // Tabs: click or arrow keys; the selected tab is the only one in the tab order.
 function bindTabs() {
@@ -35,6 +36,14 @@ function closeMat() {
   if (!root.classList.contains('mat-open')) return;
   root.classList.remove('mat-open'); behind().forEach(el => { el.inert = false; });
   from?.focus({ preventScroll: true }); from = null;
+}
+
+// 成长 tab badge: how many upgrades / skills the cash on hand can buy right now (the incremental loop's nudge).
+export function renderTabs() {
+  const cash = G.state.cash, el = $('grow-n');
+  const n = Object.keys(G.UPGRADES).filter(k => { const c = G.upgradeCost(k); return c != null && cash >= c; }).length
+    + Object.keys(G.SKILLS).filter(k => { const c = G.skillCost(k); return c != null && G.canLearn(k) && cash >= c; }).length;
+  el.hidden = !n; render(html`${n}<span class="visually-hidden"> 项买得起</span>`, el);
 }
 
 export function bindLayout() {

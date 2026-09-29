@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Layout (DESIGN.md): shelf | the playmat stage (viewport-high, sticky) | binder tabs. Phones: one column, the mat opens as a full-screen layer. -->
+<!-- Layout (DESIGN.md): shelf | the playmat stage (viewport-high, sticky) | binder tabs (欧气 / 顾客 / 单卡 / 成长: upgrades + skills). Phones: one column, the mat opens as a full-screen layer. -->
 <header class="top">
   <button class="mat-close" type="button" data-act="closemat">‹ 货架</button>
   <h1 class="brand">欧气卡铺</h1>
@@ -23,7 +23,6 @@
     <section class="guide" id="guide" hidden></section>
     <h2 id="shelf-h">货架 · 进货</h2>
     <div id="shelf"></div>
-    <section id="upgrades"></section>
   </section>
   <section class="mat" id="mat" aria-live="polite"></section>
   <aside class="side">
@@ -31,6 +30,7 @@
       <button type="button" role="tab" id="t-luck" aria-controls="p-luck" aria-selected="true">欧气</button>
       <button type="button" role="tab" id="t-shop" aria-controls="p-shop" aria-selected="false" tabindex="-1">顾客</button>
       <button type="button" role="tab" id="t-cards" aria-controls="p-cards" aria-selected="false" tabindex="-1">单卡</button>
+      <button type="button" role="tab" id="t-grow" aria-controls="p-grow" aria-selected="false" tabindex="-1">成长<b class="tab-n" id="grow-n" hidden></b></button>
     </div>
     <div class="pane" role="tabpanel" id="p-luck" aria-labelledby="t-luck">
       <section id="luck" aria-labelledby="luck-h"></section>
@@ -44,6 +44,10 @@
     <div class="pane" role="tabpanel" id="p-cards" aria-labelledby="t-cards" hidden>
       <section id="casepanel"></section>
       <section id="singles"></section>
+    </div>
+    <div class="pane" role="tabpanel" id="p-grow" aria-labelledby="t-grow" hidden>
+      <section id="upgrades"></section>
+      <section id="skills"></section>
     </div>
   </aside>
 </main>

@@ -105,7 +105,7 @@ export async function renderShare() {
   if (!n) { el.hidden = true; return; }
   el.hidden = false;
   if (!el.firstChild) {
-    el.innerHTML = `<h2 class="eyebrow">分享欧气</h2><button type="button" id="make-card">生成分享图</button><div id="card-out"></div>`;
+    el.innerHTML = `<h2>分享欧气</h2><button type="button" id="make-card">生成分享图</button><div id="card-out"></div>`;
     $('make-card').onclick = async () => {
       shownAt = opened(); img = await drawCard();
       const text = `我在欧气卡铺开了 ${G.luck().packs} 包，欧气排在 ${(G.luck().pct! * 100).toFixed(0)}%：${G.luck().title}`;
