@@ -1,11 +1,11 @@
-// 欧气检测: the verdict as a grading label, percentile among simulated players, meter, per-rarity tally with exact tail odds.
+// 欧气检测: the verdict as a grading label, where your total sits among the simulated players (the same chart and sentences as the
+// share image, share.ts), per-rarity tally with exact tail odds.
 import { html, render, svg } from 'lit-html';
 import * as S from '../sim.ts';
 import { G, $, money, rarLabel } from './common.ts';
 import { mark } from './card.ts';
 import { grade, pctText, type Grade } from './share.ts';
 
-const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
 function barcode(b: number[]) {
   let x = 0;
   const rects = b.map((w, i) => { const r = i % 2 ? null : svg`<rect x=${x} width=${w} height="1"></rect>`; x += w; return r; });
@@ -26,6 +26,20 @@ function label(g: Grade) {
   </figure>`;
 }
 
+// The simulated players' totals (S.luckBins, the bins share.ts's spread() draws): bars you beat in ink, the rest faint; 你 on a
+// pin above, 期望 as a tick under the axis. Bars are an SVG stretched to the box; the words are HTML so they don't stretch.
+const side = (x: number) => x < .12 ? 'l' : x > .88 ? 'r' : '';
+function dist(g: Grade) {
+  const L = g.L, B = S.luckBins(S.luckSamples(G.state.packsBy), L.value, L.expected), top = Math.max(...B.bins);
+  return html`<figure class="dist" role="img" aria-label="${g.head}；期望 ${money(L.expected)}">
+    <div class="dist-plot">
+      <svg viewBox="0 0 ${B.bins.length} 1" preserveAspectRatio="none" aria-hidden="true">${B.bins.map((c, i) => c ? svg`<rect class=${B.beat(i) ? 'on' : ''} x=${i + .12} width=".76" y=${1 - Math.max(.04, c / top)} height=${Math.max(.04, c / top)}></rect>` : '')}</svg>
+      <i class="dist-you ${side(B.you)}" style="left:${B.you * 100}%"><b>你 ${money(L.value)}</b></i>
+    </div>
+    <p class="dist-axis"><span class="dist-exp ${side(B.exp)}" style="left:${B.exp * 100}%">期望 ${money(L.expected)}</span></p>
+  </figure>`;
+}
+
 // Exact binomial tail for one rarity: how likely a player is to be at least this lucky (or unlucky).
 // Kept until packsBy changes (a pack is opened): the panel re-renders on every tick, the tail only moves when packs do.
 let tails: Record<string, number> = {}, tailsOf = '';
@@ -39,14 +53,12 @@ export function renderLuck() {
   const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 id="luck-h">欧气检测</h2>
       ${label(g)}
-      ${pct == null ? '' : html`<p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>一块评级卡壳：这张标签 + 你开出过最贵的卡</small></p>`}
-      <p class="verdict-sub">${pct == null ? `拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。`
-        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家（${S.LUCK_TRIALS} 个，各开同样这些包：同系列、同包数、同概率；只比了 ${S.LUCK_TRIALS} 个，所以这个数有 ±${g.err} 个百分点的抽样误差，95% 置信）。${g.best ? html`最贵的一张 ${g.best.name}（${money(g.bestNow)}）占开出总值的 <b>${g.share}%</b>${g.without! < pct - 0.5 ? `，没开出它只超过 ${pctText(g.without!)}%` : ''}${L.packs < 300 ? '：包数少时，总值主要看有没有开出一两张大卡' : ''}。` : ''}${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
-      <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
-        ${BANDS.map(([a, b, n]) => html`<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`)}
-        ${pct == null ? '' : html`<i style="left:${pct}%"></i>`}
-      </div>
-      <div class="meter-labels">${BANDS.map(([a, b, n]) => html`<span style="flex:${Math.max(b - a, 8)}">${n}</span>`)}</div>
+      ${pct == null ? html`<p class="verdict-sub">拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。</p>` : html`
+      <p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>分享图印的就是这张标签和下面这张分布</small></p>
+      <p class="dist-head">${g.head}</p>
+      ${dist(g)}
+      <p class="dist-note">${g.method}</p>
+      <p class="dist-best">${g.bestLine}${g.best && L.packs < 300 ? html`<small>包数少时，总值主要看有没有开出一两张大卡。</small>` : ''}${L.boosted ? html`<small>其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。</small>` : ''}</p>`}
       ${L.packs ? html`<dl class="kv">
         <div><dt>开出市值</dt><dd>${money(L.value)}</dd></div>
         <div><dt>期望市值</dt><dd>${money(L.expected)}<small class="dd-note">整包标价的 ${Math.round(L.expected / L.listEV * 100)}%</small></dd></div>

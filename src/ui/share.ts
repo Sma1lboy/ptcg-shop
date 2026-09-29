@@ -8,7 +8,8 @@ import type { ShareSpec } from './mat.ts';
 
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-export const pctText = (p: number) => p >= 99.5 ? '99.5+' : p.toFixed(0);
+// 超过 99.5% is true for anything at or above it; '99.5+%' read oddly.
+export const pctText = (p: number) => p >= 99.5 ? '99.5' : p.toFixed(0);
 // A cert number for what a label grades: a hash, so the same thing always prints the same number and one more pack a new one.
 // The barcode is drawn from its digits (bar and gap widths alternating, starting and ending on a bar).
 export function cert(of: string) {
@@ -30,11 +31,18 @@ export function grade() {
   const pct = L.pct == null ? null : L.pct * 100, bestNow = best ? (L.live ? S.cardPrice(best.set, best.n, best.kind) ?? best.price : best.price) : 0; // same price basis as L.value
   const of = `${L.packs}|${L.value}|${bestNow}`;
   if (best && pct != null && without.of !== of) without = { of, pct: S.luckPercentile(s.packsBy, L.value - bestNow) * 100 };
+  const share = best && L.value > 0 ? Math.round(bestNow / L.value * 100) : null, wo = best && pct != null ? without.pct : null;
   return { L, pct, best, bestNow, err: pct == null ? '' : margin(pct), ...cert(`${L.packs}|${Math.round(L.value * 100)}|${best ? best.set + best.n : ''}`),
-    share: best && L.value > 0 ? Math.round(bestNow / L.value * 100) : null, without: best && pct != null ? without.pct : null,
+    share, without: wo,
+    // the lines printed under the label on the page and under the slab on the share image, word for word
+    head: pct == null ? '' : `开了 ${L.packs} 包，开出总值超过 ${pctText(pct)}% 的模拟玩家`,
+    method: pct == null ? '' : `${S.LUCK_TRIALS} 个模拟玩家各开同样这些包（同系列、同包数、同概率）的总值 · 误差 ±${margin(pct)} 个百分点`,
+    bestLine: !best ? '还没开出闪卡' : `最贵的一张 ${best.name} ${money(bestNow)}，占总值 ${share}%` + (pct != null && wo! < pct - 0.5 ? `，没开出它只超过 ${pctText(wo!)}%` : ''),
     what: `${L.packs} 包 · ${sets.slice(0, 2).join(' · ')}${sets.length > 2 ? ` 等 ${sets.length} 个系列` : ''}`, short: `${L.packs} 包 · ${sets.length} 个系列` };
 }
 export type Grade = ReturnType<typeof grade>;
+// The big hits pulled, best first: the share image's last line and the page's tally.
+export const hits = () => { const t = G.state.tally; return ([['MHR', '超级金卡'], ['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']] as const).filter(([k]) => t[k]).map(([k, n]) => [n, t[k]] as const); };
 
 // ---------- card art for share images ----------
 // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
@@ -126,26 +134,21 @@ function mat(x: CanvasRenderingContext2D, W: number, H: number) {
 // Where the player's total sits among the simulated players (S.luckSamples, the draws luckPercentile counts): one bar per slice of a
 // log money axis (totals are right-skewed; one big card is a long way right), bars the player beat filled in ink, the rest muted.
 function spread(x: CanvasRenderingContext2D, px: number, py: number, w: number, h: number, sims: Float64Array, you: number, exp: number) {
-  const mi = css('--mat-ink'), mm = css('--mat-muted'), num = css('--font-tag'), n = sims.length, N = 54;
-  const lo = Math.log(Math.max(1e-3, Math.min(sims[Math.floor(n * .005)], you) * .92)), hi = Math.log(Math.max(sims[Math.ceil(n * .995) - 1], you) * 1.08);
-  const at = (v: number) => px + (Math.log(Math.max(v, 1e-3)) - lo) / (hi - lo) * w, bins = new Array(N).fill(0);
-  for (const v of sims) bins[Math.max(0, Math.min(N - 1, Math.floor((at(v) - px) / w * N)))]++;
-  const top = Math.max(...bins), bw = w / N, yx = at(you);
-  bins.forEach((c, i) => {
+  const mi = css('--mat-ink'), mm = css('--mat-muted'), num = css('--font-tag'), B = S.luckBins(sims, you, exp), top = Math.max(...B.bins), bw = w / B.bins.length, yx = px + B.you * w;
+  B.bins.forEach((c, i) => {
     if (!c) return;
     const bh = Math.max(3, c / top * h), bx = px + i * bw;
-    x.fillStyle = bx + bw <= yx ? mi : mm; x.globalAlpha = bx + bw <= yx ? .8 : .32; x.fillRect(bx + 1, py + h - bh, bw - 2, bh);
+    x.fillStyle = B.beat(i) ? mi : mm; x.globalAlpha = B.beat(i) ? .8 : .32; x.fillRect(bx + 1, py + h - bh, bw - 2, bh);
   });
   x.globalAlpha = 1; x.fillStyle = mm; x.fillRect(px, py + h, w, 2);
-  const ex = at(exp); x.fillRect(ex - 1, py + h, 2, 12);
+  const ex = px + B.exp * w; x.fillRect(ex - 1, py + h, 2, 12);
   x.textAlign = 'center'; x.font = `22px ${css('--font-body')}`; x.fillText(`期望 ${money(exp)}`, Math.min(px + w - 70, Math.max(px + 70, ex)), py + h + 36);
   x.fillStyle = mi; x.fillRect(yx - 2, py - 14, 4, h + 14);
   x.font = `600 28px ${num}`; x.textAlign = yx > px + w - 90 ? 'right' : yx < px + 90 ? 'left' : 'center'; x.fillText(`你 ${money(you)}`, yx, py - 22);
 }
 async function drawCard() {
-  const g = grade(), L = g.L, t = G.state.tally, best = g.best, pct = pctText(g.pct!), sims = S.luckSamples(G.state.packsBy);
-  const bestLine = best ? `最贵的一张 ${best.name} ${money(g.bestNow)}，占总值 ${g.share}%` + (g.without! < g.pct! - 0.5 ? `，没开出它只超过 ${pctText(g.without!)}%` : '') : '还没开出闪卡';
-  await fonts(L.title + '欧气卡铺鉴定' + bestLine + `你期望${money(L.value)}${money(L.expected)}`);
+  const g = grade(), L = g.L, best = g.best, pct = pctText(g.pct!), sims = S.luckSamples(G.state.packsBy), bestLine = g.bestLine;
+  await fonts(L.title + '欧气卡铺鉴定' + g.head + g.method + bestLine + hits().flat().join('') + `你期望${money(L.value)}${money(L.expected)}`);
   const art = best ? await loadArt(best) : await loadOne(back()); // no hit yet: the card lies face down
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
@@ -154,12 +157,12 @@ async function drawCard() {
     grade: L.title, gradeF: css('--font-display'), sub: `超过 ${pct}%` });
   // under the slab, what a stranger needs to read the grade: against whom, how sure, and why
   x.textAlign = 'center'; x.fillStyle = mi; x.font = `600 34px ${body}`;
-  x.fillText(`开了 ${L.packs} 包，开出总值超过 ${pct}% 的模拟玩家`, W / 2, y + 54);
+  x.fillText(g.head, W / 2, y + 54);
   spread(x, 130, y + 112, W - 260, 96, sims, L.value, L.expected);
   x.textAlign = 'center'; x.fillStyle = mm; x.font = `22px ${body}`;
-  x.fillText(`${S.LUCK_TRIALS} 个模拟玩家各开同样这些包（同系列、同包数、同概率）的总值 · 误差 ±${g.err} 个百分点`, W / 2, y + 284);
+  x.fillText(g.method, W / 2, y + 284);
   x.fillStyle = mi; x.font = `28px ${body}`; x.fillText(fit(x, bestLine, W - 120), W / 2, y + 330);
-  const hitsLine = [['MHR', '超级金卡'], ['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']].filter(([k]) => t[k]).map(([k, n]) => `${n} ×${t[k]}`).join('  ·  ');
+  const hitsLine = hits().map(([n, c]) => `${n} ×${c}`).join('  ·  ');
   x.fillStyle = mm; x.font = `24px ${body}`; if (hitsLine) x.fillText(hitsLine, W / 2, y + 368);
   x.font = `20px ${body}`; x.fillText('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 22);
   return c.toDataURL('image/png');
