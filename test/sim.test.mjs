@@ -218,6 +218,11 @@ console.log('ok luck percentile');
   G.setAuto('sv10', false); G.place(1, null); G.place(1, 'sv10'); assert.equal(st().auto.sv10, false, 'unless the player turned it off');
   T += 3 * 3600e3; G.tick(); assert.ok(G.shelfQty('sv08') > 0 || st().earned.sealed > 1e6, 'clerk keeps the shelf stocked while the shop is closed');
   assert.ok(st().offline.sales > 20, `a clerk lets a closed shop keep selling past one shelf (${st().offline.sales} sales)`);
+  // 货柜 page: pack buyers who came for a set that was on no shelf are counted per set, for the last MISS_WINDOW seconds.
+  G.reset(); st().cash = 1e6; T += 1; G.buy('sv08', 200); G.shelve('sv08', 999);
+  for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) G.shelve('sv08', 999); }
+  assert.ok(G.missed('sv10') > 0 && G.missed('sv08') === 0, `the set left off the shelves is the one missed (${G.missed('sv10')} / ${G.missed('sv08')})`);
+  assert.ok(st().miss.sv10.length <= G.MISS_KEEP); T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
   // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
   const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
