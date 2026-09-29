@@ -796,12 +796,16 @@ button:disabled { cursor: not-allowed; }
   .gtile.empty { display: none; }
 }
 /* phones: a pocket is one row — name, level, effect and what it does on the left, the price button on the right — so all
-   eleven fit in about three screens instead of seven; the milestone track keeps all seven sets in one row with short thresholds */
+   eleven fit in about three screens instead of seven; the milestone track is one sideways-scrolling row with short thresholds */
 @media (max-width: 779px) {
   .grow-head { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .gh-lv b { font-size: 44px; }
   .gh-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
   .gh-now dd { font-size: var(--fs-h); }
+  /* ten sets no longer fit one 358px row (logos overlapped, 开店就有 broke in two): 56px a set, the row scrolls sideways */
+  .mile-track { grid-template-columns: repeat(var(--n), 56px); overflow-x: auto; scrollbar-width: none; }
+  .mile { min-width: 0; } /* the grid item would otherwise grow to the whole track and widen the page */
+  .mile-track small { white-space: nowrap; }
   .mile-track img { width: 44px; height: 28px; margin-bottom: 26px; }
   .mile-track li::before, .mile-track li::after { top: 41px; }
   .mile-track b { display: none; }
