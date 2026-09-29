@@ -727,7 +727,7 @@ async function toSpread(run) {
 function spreadHalos(run) {
   run.cards.forEach((c, k) => {
     const t = run.tiers[k]; if (t < 3) return;
-    halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); c.userData.halo.position.z = run.haul?.poses[k].prop ? -.03 : .012 - c.position.y; // propped up: the glow stays behind the card
+    halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); const P = run.haul?.poses[k]; c.userData.halo.position.z = P?.prop ? -.03 : .012 - (P ? P.p.y : c.position.y); // propped up: the glow stays behind the card
   });
 }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -964,7 +964,7 @@ async function liftShow(run, i, t) {
   mood('look', 300);
   await flyTo(m, heldAt(), q, 460, 1); if (R !== run) return;
   run.look = { card: m, p: P.p, q: P.q, up: true, base: q };
-  await wait(celebrate(run, i, t) + (t >= 5 ? 1900 : 900)); if (R !== run) return;
+  await wait(celebrate(run, i, t) + (run.skip ? 300 : t >= 5 ? 1900 : 900)); if (R !== run) return; // 全部翻开: the show, no lingering
   run.look = null; mood('base', 400);
   await flyTo(m, P.p, P.q, 520, 2);
 }
@@ -1004,6 +1004,7 @@ async function batchSpread(run) {
   if (run.stage === 'spread') return;
   run.stage = 'spread'; run.busy = true; run.show = null; run.embers = null; drag = null;
   mood('base', 700); opts.onDone();
+  resize(); // mat.ts has just put the summary under the canvas: lay out for the canvas as it is now, not slide again 160 ms later
   run.look = null; run.hero = null;
   const H = run.haul = haulOf(run); run.shot = H.cam; camTo(H.cam, 900);
   // the rest slide back into one row together, then the best few come forward one by one, the dearest last
@@ -1033,7 +1034,7 @@ function haulOf(run) {
   const yr = Math.max(0, ...run.fan.wrap.map(w => w.y)) + .5;
   rest.forEach((k, j) => { poses[k] = { p: new V3((j - (nr - 1) / 2) * dx, yr + j * .03, zr), q }; });
   const pts = [];
-  for (const k of top) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); pts.push(p.clone().add(new V3(0, 0, CH / 2 + (small() ? 4.5 : 4)))); } // and its two-line tag (on a phone's small cards it's taller than the card is deep)
+  for (const k of top) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); pts.push(p.clone().add(new V3(0, 0, CH / 2 + (small() ? 6 : 4)))); } // and its two-line tag (on a phone's small cards it's taller than the card is deep)
   for (const k of rest) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); }
   for (const w of run.fan.wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2)));
   pts.push(camera.aspect < 1 ? SLABS() : FOOT());
@@ -1305,7 +1306,7 @@ function relayout() {
     } else {
       run.fan = fanOf(run.n, run.packs.length); run.shot = run.fan.cam;
       run.packs.forEach((p, k) => go(p, run.fan.wrap[k]));
-      if (run.haul) { run.haul = haulOf(run); run.shot = run.haul.cam; run.cards.forEach((c, k) => home(c, run.haul.poses[k].p, run.haul.poses[k].q)); tags(run); } // the front row may take more or fewer
+      if (run.haul) { run.haul = haulOf(run); run.shot = run.haul.cam; run.cards.forEach((c, k) => home(c, run.haul.poses[k].p, run.haul.poses[k].q)); spreadHalos(run); tags(run); } // the front row may take more or fewer
       else if (run.stage !== 'extract') run.cards.forEach((c, i) => { const P = run.fan.poses[i]; home(c, P.p, i <= run.cur ? P.q : faceDown(P.q)); });
     }
     camTo(run.shot, ms);

@@ -780,7 +780,7 @@ button:disabled { cursor: not-allowed; }
 .s3-top .cf-price { font-size: 20px; }
 .s3-top.best .cf-price { font-size: 26px; }
 .s3-tag.s3-sum { font-size: var(--fs-cap); line-height: 18px; color: var(--mat-muted); }
-@media (max-width: 779px) { .s3-top .cf-rar { display: none; } .s3-top .cf-price { font-size: 17px; } .s3-top.best .cf-price { font-size: 20px; } .s3-top .s3-name { font-size: 12px; }
+@media (max-width: 779px) { .s3-top .cf-rar { display: none; } .s3-top .cf-price { font-size: 17px; } .s3-top.best .cf-price { font-size: 20px; } .s3-top .s3-name { font-size: 12px; line-height: 15px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; } /* two lines rather than 「Black …」 */
   .s3-top .hand-new { position: absolute; left: 3px; top: -19px; } /* on the card's corner: the name gets the plate's whole width */ }
 .mat.m3d .summary { padding: 14px 18px 16px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
