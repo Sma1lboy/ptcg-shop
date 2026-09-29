@@ -8,10 +8,14 @@ export type Bg = 'street' | 'shop' | 'dark';
 // Context the ui fills in before playing, already formatted: bill = the next bill's amount, week = its week, card/price = a pull, set = a set name;
 // for 还清 / 开分店: bills = bills paid in this shop, fame = 名气 branching now would take, debt = what the (next) shop owes, shop = its number (1-based),
 // short / rate = how much the till is short of an overdue bill and the loan's weekly interest (filled when the scene starts);
-// street / streetSay = that shop's street and what is different about it (no streetSay on 老街, where the numbers are the first shop's)
-export interface Ctx { bill?: string; short?: string; rate?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string }
+// street / streetSay = that shop's street and what is different about it (no streetSay on 老街, where the numbers are the first shop's);
+// for 收齐: setId = the set's id (its logo goes on the cover), total = its card count, bought = how many of them were 补的, tol = what
+// 大师套 lets its pack buyers pay on top (already a percent)
+export interface Ctx { bill?: string; short?: string; rate?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string; setId?: string; total?: number; bought?: number; tol?: string }
 export interface Line { who: Who; t: string | ((c: Ctx) => string) }
-export interface Scene { bg: Bg; lines: Line[] }
+// seal: the scene is a set just completed — the binder closes over the shop and its cover is hot-stamped with the set's logo,
+// silver for 大师套 (补的 count), gold for 亲手开齐 (every card from a pack), like the silver and gold stars on the cards
+export interface Scene { bg: Bg; lines: Line[]; seal?: 'silver' | 'gold' }
 
 export const NAMES: Record<Who, string> = { jiu: '九姐', adou: '阿豆', you: '你', '': '' };
 
@@ -124,8 +128,17 @@ export const SCENES: Record<string, Scene[]> = {
     L('jiu', '名气是你的，账也是你的。开张吧，老板。'),
     L('adou', '（小声）她对上一个老板说的是「开张吧」。后面没有「老板」。'),
   ] }],
+  // 大师套 (game.ts emits it once per set, unless the same pull also finished it by hand: then only 'hand' plays)
+  master: [{ bg: 'shop', seal: 'silver', lines: [
+    L('', c => `最后一格插满。卡册合上，封面烫上了${c.set ? `「${c.set}」` : '这个系列'}的银章。`),
+    L('adou', c => (c.total ? `${c.total} 张，一格都不空。……我能拍张照吗？` : '一格都不空。……我能拍张照吗？')),
+    L('jiu', '拍吧。收齐的卡册，同行路过都要多看两眼。'),
+    L('jiu', c => (c.bought ? `补的那 ${c.bought} 张也算数。钱花在哪，章就烫在哪。` : '钱花在哪，章就烫在哪。')),
+    L('', c => `大师套：这个系列的拆包玩家肯多付${c.tol ? ` ${c.tol}` : '一点'}，专程来买的人更多。卡册封面在「欧气」页，点一下翻开。`),
+  ] }],
   // 亲手开齐 (game.ts emits it once per set): every card of a set pulled from packs, none bought
-  hand: [{ bg: 'shop', lines: [
+  hand: [{ bg: 'shop', seal: 'gold', lines: [
+    L('', c => `卡册合上。封面烫的是金章${c.total ? `：${c.total} 张` : ''}，一张没买。`),
     L('adou', c => `${c.set ?? '这一套'}……全是你自己开出来的？一张没买？`),
     L('you', '一张没买。'),
     L('adou', '（翻着卡册，手有点抖）我认识的人里，这么开的都破产了。'),

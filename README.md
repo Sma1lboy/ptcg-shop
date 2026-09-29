@@ -1,6 +1,6 @@
 # 欧气卡铺
 
-宝可梦卡牌开包模拟器 + 卡店放置经营 + 欧气检测器。
+宝可梦卡牌开包模拟器 + 卡店放置经营 + 欧气检测器。在线玩：https://pcards.sma1lboy.me （push 到 main 后由 `.github/workflows/pages.yml` 自动发布到 GitHub Pages）。
 
 ```sh
 npm ci

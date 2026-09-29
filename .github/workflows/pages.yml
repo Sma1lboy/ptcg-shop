@@ -1,0 +1,35 @@
+# Builds the game and publishes it to GitHub Pages (https://pcards.sma1lboy.me) on every push to main.
+# Card art is not in git (assets/tcg is ~180 MB): the first run mirrors it from TCGdex with fetch-images.mjs,
+# later runs restore it from the Actions cache and only fetch what a changed data/cards-*.json adds.
+name: pages
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: assets/tcg
+          key: tcg-${{ hashFiles('data/cards-*.json') }}
+          restore-keys: tcg-
+      - run: node scripts/fetch-images.mjs
+      - run: npm run build
+      # npm run build leaves dist/assets/tcg as a symlink to the mirror; Pages needs the files themselves.
+      - run: rm dist/assets/tcg && cp -r assets/tcg dist/assets/tcg
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: dist }
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: '${{ steps.d.outputs.page_url }}' }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
