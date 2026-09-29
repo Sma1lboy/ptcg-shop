@@ -18,7 +18,7 @@ function rack(r: Shelf, i: number, deep: number) {
       <span class="r-bar" role="img" aria-label="${r.qty}/${deep} 包"><i style="width:${r.qty / deep * 100}%"></i></span>
       <span class="r-qty">${r.qty ? `${r.qty}/${deep} 包` : '卖空了'}</span>
       <div class="btns"><button type="button" data-act="shelve" data-id="${r.id}" data-n="999" ?disabled=${!stock || r.qty >= deep} title="从仓库补满">补满</button>
-        <button type="button" data-act="place" data-i="${i}" data-id="" title="货退回仓库，空出这个货架">撤下</button></div></li>`;
+        <button type="button" data-act="place" data-i="${i}" data-id="" ?disabled=${stock + r.qty > G.WAREHOUSE} title="${stock + r.qty > G.WAREHOUSE ? `仓库放不下这 ${r.qty} 包` : '货退回仓库，空出这个货架'}">撤下</button></div></li>`;
 }
 
 export function renderShelf() {
