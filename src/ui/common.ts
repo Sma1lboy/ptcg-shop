@@ -42,4 +42,10 @@ export function batchBtn(id: string, again = false) {
   const n = G.state.stock[id] || 0, fill = n > 1 && n < 10 && G.state.cash >= G.wholesale(id) * (10 - n) ? 10 - n : 0;
   return { act: fill ? 'fill10' : 'open10', text: fill ? `补 ${fill} 包，开十连` : `${again ? '再开' : '开'} ${Math.min(10, n)} 包` };
 }
+// 进满: as many packs as the back room has room for and the cash covers (late in the game a shelf sells out in a minute or two,
+// and the clerk carries the back room onto the shelves between rounds, so one press stands for twenty 进 10).
+export function restock(id: string) {
+  const room = G.WAREHOUSE - (G.state.stock[id] || 0), n = Math.max(0, Math.min(room, Math.floor(G.state.cash / G.wholesale(id))));
+  return { n, text: `${n === room ? '进满' : '进'} ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id))}${n < room ? `（仓库还能放 ${room}，钱只够这些）` : '，仓库放满'}` };
+}
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };

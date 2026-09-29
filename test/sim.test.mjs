@@ -626,3 +626,16 @@ console.log('ok luck percentile');
   E.state.cash = 1e6; owe(0); week(); week(); assert.deepEqual(played.slice(-2), ['last', 'debt_cleared'], 'shop 2 gets its own 还清');
   console.log('ok story beats, and the end of a run: last → 还清 → 开张, per shop');
 }
+// 店员搬货: between rounds the clerk carries back-room stock of auto sets onto their shelves, leaving CLERK_KEEP to open; a set with
+// auto off, or with no more than CLERK_KEEP in the back room, is left alone; no clerk, no carrying.
+{
+  let T = 1_700_000_000_000; const K = createGame({ now: () => T, random: () => 0.99, storage: { getItem: () => null, setItem() {} } }); // 0.99: nobody walks in
+  const s = K.state, id = 'sv10'; s.cash = 1e6; K.upgrade('depth'); K.buy(id, 40); K.place(0, id); K.buy(id, 60); // an 80-pack shelf, 40 on it, 60 in the back room
+  assert.equal(K.shelfQty(id), 40); T += 1000; K.tick(); assert.equal(K.shelfQty(id), 40, 'no clerk: the back room stays put');
+  K.upgrade('clerk'); s.clerkT = T + 1e9; // no round due: only the carrying
+  T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [80, 20], 'clerk carries up to the shelf\'s depth');
+  K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [10, K.CLERK_KEEP], 'all but CLERK_KEEP');
+  K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'at CLERK_KEEP the rest is the player\'s');
+  K.buy(id, 50); K.setAuto(id, false); T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'auto off: not carried');
+  console.log('ok 店员搬货: back room → shelf between rounds, CLERK_KEEP left to open');
+}
