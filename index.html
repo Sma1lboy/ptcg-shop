@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Five pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #luck #grow #ach) so switching never loses state (DESIGN.md「布局」).
+<!-- Five pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #case #luck #grow #ach; #case is 货柜's second view) so switching never loses state (DESIGN.md「布局」).
      The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
   <h1 class="brand">欧气卡铺</h1>
@@ -34,19 +34,34 @@
       <section id="rail"></section>
     </aside>
   </section>
+  <!-- 货柜 has two views by product line, each with its own half of the customers next to the controls they call for:
+       #shelf 货架 (packs: shelf wall + set table | walk-ins for packs · clerk + shop log) and #case 展示柜 (case + singles | case browsers).
+       All panels stay direct children of the page; data-view says which view shows it (layout.ts sets <html data-page>). -->
   <section class="page page-shelf" id="page-shelf" aria-label="货柜" hidden>
-    <section class="shelf" aria-labelledby="shelf-h">
+    <div class="views">
+      <nav class="subnav" aria-label="货柜">
+        <a href="#shelf">货架<span class="sub-k">&nbsp;· 整包</span><b class="tab-n tab-dot" id="n-packs" hidden></b></a>
+        <a href="#case">展示柜<span class="sub-k">&nbsp;· 单卡</span><b class="tab-n tab-dot" id="n-case" hidden></b></a>
+      </nav>
+      <p class="cust-head" id="cust-head"></p>
+    </div>
+    <section class="shelf" data-view="shelf" aria-labelledby="shelf-h">
       <h2 id="shelf-h">货架 · 进货</h2>
       <div id="shelf"></div>
     </section>
-    <div class="col">
-      <section id="casepanel"></section>
-      <section id="singles"></section>
+    <div class="col" data-view="shelf">
+      <section id="customers"></section>
+    </div>
+    <div class="col" data-view="shelf">
+      <section id="clerk"></section>
       <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
     </div>
-    <div class="col">
-      <section id="customers"></section>
-      <section id="clerk"></section>
+    <div class="col" data-view="case">
+      <section id="casepanel"></section>
+      <section id="singles"></section>
+    </div>
+    <div class="col" data-view="case">
+      <section id="case-cust"></section>
     </div>
   </section>
   <section class="page page-luck" id="page-luck" aria-label="欧气" hidden>
