@@ -213,6 +213,18 @@ function packArt(setId) {
   return (artCache[setId] = { front: mk(tx[0], tx[2]), back: mk(tx[1], tx[3]), dim });
 }
 
+// The same printed front as a flat picture, w px wide, for the 2D mat (its idle packs and the pack it tears): no three.js needed,
+// so it works where the 3D table can't. null when the art can't be read back (a CDN image without CORS taints the canvas).
+const fronts = {};
+export function packFront(setId, w = 240) {
+  return (fronts[setId + '@' + w] ||= (async () => {
+    const look = LOOK[setId] || LOOK.sv08, set = SETS.find(s => s.id === setId), big = canvasOf(768, Math.round(PH * K));
+    const [logo, art] = await Promise.all([loadImg(ASSETS.logo(setId)), loadImg(ASSETS.card(setId, look.chase, 'high')), fonts()]);
+    drawFront(big.getContext('2d'), look, set, logo, art);
+    const c = canvasOf(w, Math.round(w * big.height / big.width)); c.getContext('2d').drawImage(big, 0, 0, c.width, c.height);
+    try { return c.toDataURL('image/webp', .85); } catch { return null; }
+  })());
+}
 // Pillow shape: flat crimps top and bottom, flat side seams, puffed in the middle.
 function puff(x, y) {
   const sx = 1 - smooth(PW / 2 - .8, PW / 2 - .04, Math.abs(x)), sy = smooth(CRIMP, CRIMP + 1.5, PH / 2 - Math.abs(y));
@@ -661,6 +673,16 @@ async function reveal(run, i) {
   if (run.skip && i < run.n - 1) return revealAll(run);
   if (i === run.n - 1) { await wait(t >= 4 ? 2200 : t >= 2 ? 1300 : 800); if (R === run && run.stage === 'cards' && !run.busy) toSpread(run); }
 }
+// RR's tilt, in radians at its widest: about 20° away then 7° back, enough for the sheen band to cross most of the face (the
+// shader's band moves ~1.9 × the sine of the tilt, the face spans ~1.6 of it).
+const TILT = .6;
+function tiltCard(card) {
+  const q0 = card.quaternion.clone(), y0 = card.position.y;
+  return tween(1100, e => { // lying on the mat it rises by the height its edge swings down, so it never cuts into the rubber or its neighbour
+    const r = -TILT * .8 * Math.sin(e * 5.7) * Math.exp(-e * 2) * (1 - e);
+    card.quaternion.copy(q0).multiply(qY(r)); card.position.y = y0 + Math.abs(Math.sin(r)) * CW * .5;
+  }, E.lin);
+}
 // The show, by rarity tier (0 bulk … 5 SIR/HR). It starts only once the card is fully uncovered.
 function celebrate(run, i, t) {
   const card = run.cards[i], at = card.getWorldPosition(tmpV()), silver = css('--fx-silver'), gold = css('--fx-gold');
@@ -669,7 +691,9 @@ function celebrate(run, i, t) {
   if (t === 0) { mood('base', 300); push(1, 400); return 40; }
   run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1) };
   if (t === 1) { mood('base', 300); push(1, 400); return 160; }
-  if (t === 2) { mood('lift', 300); burst(at, 50, silver, 14); push(.96, 500); return 420; }
+  // RR / ACE: full-card foil. The hand tilts it into the lamp and back, so the brushed sheen runs across the whole face (a reverse
+  // only wobbles): the one move a player makes with a new ex. The fan's small cards get the same tilt on their own axis (tiltCard).
+  if (t === 2) { mood('lift', 300); burst(at, 70, silver, 15); push(.94, 500); run.show.tilt = true; if (run.batch && !run.look) tiltCard(card); return 560; }
   if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
   // IR and up: the room lights down to the pull. SIR / gold goes further: the room goes dark behind it and a light sweeps across its foil.
   mood(t === 5 ? 'solo' : 'gold', 450).then(() => wait(t === 5 ? 2600 : 1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
@@ -1238,7 +1262,7 @@ function tick(t) {
   const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
   tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
   const s = t / 1000; let sway = 0;
-  if (run && run.show) { const a = (t - run.show.t0) / 1000; sway = Math.sin(a * 3.4) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
+  if (run && run.show) { const a = (t - run.show.t0) / 1000; sway = run.show.tilt ? -TILT * Math.sin(a * 5.2) * Math.exp(-a * 1.8) : Math.sin(a * 3.4) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
   lean += (leanTo - lean) * k; // a sealed pack is held at a slight angle so its pillow shows
   const sh = shake.amp * Math.max(0, 1 - (t - shake.t0) / shake.ms);
   const shelfMoving = run?.shelf ? tickShelf(run, dt) : false;
