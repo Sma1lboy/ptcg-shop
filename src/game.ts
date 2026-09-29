@@ -12,8 +12,10 @@ export interface Trophy extends Pull { key: string }
 // looked at (openers, flippers) or asked for (seekers; absent = any set); miss = the set an opener came for that was not on the shelf;
 // tier = seeker's SEEK row; card = the case card bought or balked at; price = that pack's or card's market price then; pct = its
 // asking price and max = the most this customer would pay, both as shares of that market price; why = 'budget' (fine price, not
-// enough money on them) | 'cool' (flipper still holding that set).
-export interface Visit { at: number; t: string; r: string; set?: string; miss?: string; tier?: number; card?: string; n?: number; price?: number; pct?: number; max?: number; gain?: number; why?: string }
+// enough money on them) | 'cool' (flipper still holding that set). A pack buyer who tore their packs open at the counter (收卡):
+// offer = hits they pulled, floor = the least they take (share of market), took / paid = what you bought; sell = why you bought
+// none or not all: 'low' (your 收卡价 under their floor) | 'full' (binder full) | 'cash' (the till holds no more than the next bill) | 'owe' (a bill is overdue).
+export interface Visit { at: number; t: string; r: string; set?: string; miss?: string; tier?: number; card?: string; n?: number; price?: number; pct?: number; max?: number; gain?: number; why?: string; offer?: number; took?: number; paid?: number; floor?: number; sell?: string }
 export interface Shelf { id: string | null; qty: number } // one set per shelf; id stays after it sells out (the clerk refills it), null = empty
 export interface State {
   cash: number; stock: Record<string, number>; singles: Record<string, Single>; opened: Record<string, number>; tally: Record<string, number>;
@@ -21,7 +23,7 @@ export interface State {
   log: { t: number; text: string; tone: string; amt?: number }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: Visit[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
-  shown: Shown[]; casePct?: number; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
+  shown: Shown[]; casePct?: number; buyPct?: number; intake?: { n: number; cost: number }; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   offline: Receipt | null; // the 打烊小票 still on screen: what absences of AWAY seconds or more took in, added up until put away
@@ -68,6 +70,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // by far (late game ~30 a minute against ~4 from 10 packs a minute), so a card sells whatever it is listed at: 110% sits under
   // the mean ceiling of seekers (112%) and collectors (122%). Game setting.
   const CASE_PCT = 1.1;
+  // 单卡生意 (game setting, GAMEPLAY §14). Real card shops live on the hits their customers pull at the counter: COUNTER_OPEN of
+  // pack buyers tear what they just bought open on the spot (measured odds, S.openPack) and offer you every hit at once; they take
+  // your 收卡价 (share of market, BUY_PCT before you touch it) if it is at least their own floor (SELLER: a peer shop pays 70% but is
+  // another trip). The hits you hold (bought or pulled) sit in the counter binder, for sale to seekers at the 单卡标价 (the case tag);
+  // the case itself is what collectors look at. A seeker takes up to SEEK_N cards of the tier they came for (a deck needs several).
+  // 收卡 stops while the binder holds BINDER hits, and in the BILL_KEEP seconds before a bill never spends the cash it needs.
+  const COUNTER_OPEN = 0.5, SELLER = { tol: 0.6, sd: 0.08 }, BUY_PCT = 0.6, BINDER = 60, SEEK_N = 3, BILL_KEEP = 300;
   const DEFAULT_PCT = 0.95; // a set's tag before you touch it: under market, because the cheapest-shopping set (sv08, mean ceiling 100%) loses half its buyers at 100% on a cold day
   // Customer types. tol = the most a customer will pay, as a share of market (mean; sd is the spread between individuals).
   const TYPES: Record<string, { name: string; w: number; tol: number; sd: number }> = {
@@ -224,6 +233,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const ask = (id: string) => Math.round(sealedPrice(id) * pctOf(id) * 100) / 100;
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
   const casePct = () => state.casePct ?? CASE_PCT;
+  const buyPct = () => state.buyPct ?? BUY_PCT;
+  const binderN = () => Object.values(state.singles).reduce((a, c) => a + (S.HITS.includes(c.kind) ? c.count : 0), 0);
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
   const dexTotal = (id: string) => DATA[id].cards.length;
   const dexCount = (id: string) => (dexN ||= Object.keys(state.dexSeen).reduce((a, k) => { const s = k.split('|')[0]; a[s] = (a[s] || 0) + 1; return a; }, {} as Record<string, number>))[id] || 0;
@@ -268,6 +279,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
   let pending: GameEvent[] = [];
+  let reveal = false; // tick(busy): packs are being revealed, so their cards (already in singles) are not in the binder yet
   const flush = () => { const evs = pending; pending = []; evs.forEach(emit); return evs.length > 0; };
   // A pre-债务 save's first tick credits the closed time as usual, but its bill clock starts now: the first bill is a full week away.
   if (migrated) state.shopT = -Math.max(0, Math.min((clock() - state.savedAt) / 1000, offlineCap()));
@@ -435,13 +447,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return true;
   }
   function list(key: string) { if (!toCase(key)) return false; emit(); return true; }
-  // 补满柜位 (and 带徒弟, every tick): hits from singles into the free case slots, priciest first, at the case tag. Returns how many.
-  // Which card goes first hardly matters: case browsers outnumber the hits, so every listed card sells (measured, see CASE_PCT).
+  // 补满柜位 (and 带徒弟, every tick): the case shows the priciest hits the shop holds, at the case tag. Free slots take the priciest
+  // hits in the binder; then, while a binder card is worth more than the cheapest card in the case, the two swap (the cheaper one
+  // goes back to the binder, where seekers still find it). With the binder on the counter the case is what collectors look at, so
+  // it should hold the big cards (GAMEPLAY §14). Returns how many cards went in.
+  const binderHits = () => Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
   function stockCase() {
-    let n = 0; if (state.shown.length >= slots()) return 0;
-    const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
-    for (const [k] of hits) { while (toCase(k)) n++; if (state.shown.length >= slots()) break; }
+    let n = 0;
+    for (const [k] of binderHits()) { if (state.shown.length >= slots()) break; while (state.shown.length < slots() && toCase(k)) n++; }
+    for (let top = binderHits()[0]; top && state.shown.length; top = binderHits()[0]) {
+      const low = state.shown.reduce((a, c, i) => (c.price < state.shown[a].price ? i : a), 0);
+      if (top[1].price <= state.shown[low].price) break;
+      const { key, pct, ...card } = state.shown.splice(low, 1)[0]; (state.singles[key] ||= { ...card, count: 0 }).count++;
+      toCase(top[0]); n++;
+    }
     return n;
+  }
+  // How many cards 补满柜位 would put in (free slots, then swaps), without touching state.
+  function caseMoves() {
+    const bind = binderHits().flatMap(([, c]) => Array(c.count).fill(c.price) as number[]), free = Math.min(slots() - state.shown.length, bind.length);
+    const inCase = [...state.shown.map(c => c.price), ...bind.slice(0, free)].sort((a, b) => a - b), rest = bind.slice(free);
+    let swaps = 0; while (swaps < rest.length && swaps < inCase.length && rest[swaps] > inCase[swaps]) swaps++;
+    return free + swaps;
   }
   function fillCase() { const n = stockCase(); if (n) emit(); return n; }
   function unlist(i: number) {
@@ -452,6 +479,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   function setCardPrice(i: number, pct: number) { if (state.shown[i]) { state.shown[i].pct = clampPct(pct); emit(); } }
   // The case tag: every card in the case and every card listed from now on. commit = false while its rail is dragged.
+  // 收卡价: what you pay a counter seller, share of market, BUY_MIN…BUY_MAX (at BUY_MIN hardly anyone sells: that is 不收).
+  const BUY_MIN = 0.3, BUY_MAX = 1;
+  function setBuyPct(pct: number, commit = true) { state.buyPct = Math.round(Math.round(Math.min(BUY_MAX, Math.max(BUY_MIN, pct)) / PCT_STEP) * PCT_STEP * 100) / 100; if (commit) emit(); }
   function setCasePct(pct: number, commit = true) { state.casePct = clampPct(pct); for (const c of state.shown) c.pct = state.casePct; if (commit) emit(); }
   function setTrophy(key: string) {
     const c = state.singles[key]; if (!c) return false;
@@ -545,6 +575,32 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     v.r = 'sold'; v.set = id; v.n = n; v.price = sealedPrice(id); v.pct = pctOf(id); v.gain = ask(id) * n; state.cash += v.gain; state.earned.sealed += v.gain;
     let left = n; for (const s of shelves()) if (s.id === id) { const k = Math.min(left, s.qty); s.qty -= k; left -= k; }
   };
+  // One card to a seeker, from the case (marked in `gone`, taken out after the loop) or the binder; v adds up what they took.
+  const gone = new Set<Pull>();
+  const sellFit = (f: { c: Pull; ask: number; pct: number; key: string }, v: Visit) => {
+    if (f.key) { const c = state.singles[f.key]; if (!--c.count) delete state.singles[f.key]; } else gone.add(f.c);
+    if (v.r !== 'sold') { v.r = 'sold'; v.card = f.c.name; v.price = f.c.price; v.pct = f.pct; v.n = 0; v.gain = 0; }
+    v.n!++; v.gain = cents(v.gain! + f.ask); state.cash += f.ask; state.earned.singles += f.ask;
+  };
+  // 收卡: a pack buyer opens the n packs they just bought at the counter and offers every hit in them at your 收卡价 (if it clears
+  // their floor), priciest first, while the binder has room and the till can pay. Records offer / took / paid on the visit.
+  function counterBuy(id: string, n: number, v: Visit) {
+    const floor = Math.max(0.2, SELLER.tol + SELLER.sd * gauss()), pct = buyPct(), got: Pull[] = [];
+    for (let i = 0; i < n; i++) for (const c of S.openPack(id, random)) if (S.HITS.includes(c.kind)) got.push(c);
+    v.offer = got.length; v.floor = floor; // offer 0: tore them open, nothing to sell
+    if (!got.length) return;
+    if (pct < floor - 1e-9) { v.sell = 'low'; return; }
+    if (state.overdue) { v.sell = 'owe'; return; } // owing 九姐, the till keeps its cash for her
+    let room = BINDER - binderN(), took = 0, paid = 0;
+    const keep = dueIn() < BILL_KEEP ? nextBill()?.amount || 0 : 0; // the last minutes before a bill: the till keeps what it takes, 收卡 never spends 九姐's money
+    for (const c of got.sort((a, b) => b.price - a.price)) {
+      const cost = cents(c.price * pct); if (room <= 0 || state.cash - cost < keep) continue;
+      room--; took++; paid += cost; state.cash -= cost; (state.singles[`${c.set}|${c.n}|${c.kind}`] ||= { ...c, count: 0 }).count++;
+    }
+    if (took < got.length) v.sell = room <= 0 ? 'full' : 'cash';
+    if (!took) return;
+    v.took = took; v.paid = cents(paid); const b = (state.intake ||= { n: 0, cost: 0 }); b.n += took; b.cost = cents(b.cost + paid);
+  }
   const balk = (v: Visit, c: Shown, max: number) => { v.r = 'pricey'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); if (v.pct <= max) v.why = 'budget'; };
 
   // One walk-in customer: picks an errand, looks at what is on the shelf/in the case at what price, buys or leaves, and is
@@ -561,7 +617,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
         const n = Math.min(want, shelfQty(id), Math.floor(lognorm(60 * demand(id).budget, 0.6) / ask(id)));
-        if (n >= 1 && pctOf(id) <= v.max) sellPacks(id, n, v); else { v.r = 'pricey'; v.price = sealedPrice(id); v.pct = pctOf(id); if (v.pct <= v.max) v.why = 'budget'; }
+        if (n >= 1 && pctOf(id) <= v.max) { sellPacks(id, n, v); if (random() < COUNTER_OPEN) counterBuy(id, n, v); } else { v.r = 'pricey'; v.price = sealedPrice(id); v.pct = pctOf(id); if (v.pct <= v.max) v.why = 'budget'; }
       }
     } else if (type === 'flipper') {
       const under = onShelf.filter(id => pctOf(id) <= tol), cheap = under.filter(id => !(state.flipT[id] > vnow)).sort((a, b) => pctOf(a) - pctOf(b))[0];
@@ -576,14 +632,18 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         else if (under.length) { v.r = 'pricey'; v.why = 'cool'; v.set = under[0]; }
         else if (onShelf.length || hits.length) v.r = 'pricey';
       }
-    } else if (type === 'seeker') {
+    } else if (type === 'seeker') { // looks through the case and the counter binder (shut while packs are being revealed: the cards not flipped yet are in singles), cheapest first; takes up to `want` cards within budget
       const tier = pickW([0, 1, 2], i => SEEK_W[i]), any = random() < 0.4, sid = pickW(SETS.filter(s => unlocked(s.id)), () => 1).id;
-      const fits = hits.map((c, i) => [c, i] as const).filter(([c]) => SEEK[tier].includes(c.kind) && (any || c.set === sid)).sort((a, b) => cardAsk(a[0]) - cardAsk(b[0]));
-      const budget = lognorm(60, 0.7);
+      const ok = (c: Pull) => SEEK[tier].includes(c.kind) && (any || c.set === sid);
+      const fits = [...hits.filter(ok).map(c => ({ c, ask: cardAsk(c), pct: cardPct(c), key: '' })),
+        ...(reveal ? [] : Object.entries(state.singles)).filter(([, c]) => ok(c)).flatMap(([key, c]) => Array.from({ length: c.count }, () => ({ c, ask: Math.round(c.price * casePct() * 100) / 100, pct: casePct(), key })))].sort((a, b) => a.ask - b.ask);
+      let budget = lognorm(60, 0.7), want = SEEK_N;
       v.tier = tier; if (!any) v.set = sid;
-      if (!fits.length) { /* nothing of that rarity in the case */ }
-      else if (cardPct(fits[0][0]) <= tol && cardAsk(fits[0][0]) <= budget) sellCard(fits[0][1], v);
-      else balk(v, fits[0][0], tol);
+      if (!fits.length) { /* nothing of that rarity in the case or the binder */ }
+      else if (fits[0].pct <= tol && fits[0].ask <= budget) {
+        for (const f of fits) { if (!want || f.pct > tol || f.ask > budget) break; want--; budget -= f.ask; sellFit(f, v); }
+        state.shown = state.shown.filter(c => !gone.has(c)); gone.clear();
+      } else balk(v, { ...fits[0].c, pct: fits[0].pct } as Shown, tol);
     } else { // collector
       const budget = lognorm(150, 0.8), big = hits.map((c, i) => [c, i] as const).filter(([c]) => c.price >= BIG_CARD).sort((a, b) => b[0].price - a[0].price);
       const ok = big.find(([c]) => cardPct(c) <= tol && cardAsk(c) <= budget);
@@ -602,7 +662,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // so a back room the player keeps full is what keeps the shelves from standing empty until the next round. Game setting.
   function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number; short: number }, t: number) {
     const L = lvl('clerk'); if (!L) return;
-    if (skill('apprentice')) acc.listed += stockCase(); // 带徒弟: 补满柜位 on every tick
+    if (skill('apprentice') && !reveal) acc.listed += stockCase(); // 带徒弟: 补满柜位 on every tick (not mid-reveal: those cards are not flipped yet)
     for (const id of new Set(shelves().filter(sh => sh.id && state.auto[sh.id] && sh.qty < depth() && state.stock[sh.id] > CLERK_KEEP).map(sh => sh.id!))) fill(id, state.stock[id] - CLERK_KEEP);
     if (t >= state.clerkT) {
       state.clerkT = t + CLERK_ROUND * 1000;
@@ -651,7 +711,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // busy = the player is watching packs being revealed (the UI holds the ledger and the story until it is done, up to ~3 minutes
   // of 连开): the shop and the bill clock run as usual, only an overdue bill's grace waits, as it does while they are away.
   function tick(busy = false) {
-    const now = clock(), from = lastTick; lastTick = now;
+    const now = clock(), from = lastTick; lastTick = now; reveal = busy;
     const gap = !state.away && now - from > AWAY * 1000; // nobody said the player left, but the page did not run: that was an absence
     if (gap) state.away = { at: from, secs: 0, sales: 0, revenue: 0, lost: 0 };
     const a = state.away, end = a ? Math.min(now, a.at + offlineCap() * 1000) : now, billEnd = a ? a.at + WEEK * 1000 : Infinity, dt = (end - from) / 1000;
@@ -864,7 +924,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
