@@ -115,7 +115,7 @@ function showcase(rec: Visit[]) {
     : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加单卡库存只有 ${cards} 张：卡比人少，标价往上调也卖得完`
     : html`按 ${pc(pct)} ${would} 位会买，柜里加单卡库存 ${cards} 张`;
   return html`<h3 class="c-h">来翻展示柜的 <small>点是顾客最多肯出市价的几成：实的按现在的标价会买。点轨上哪一档，全柜标价就改到哪一档</small></h3>
-    ${priceRail('', all, 0)}
+    ${cards ? priceRail('', all, 0) : ''}
     <p class="c-note">${verdict}。${free > 0 ? `柜里空 ${free} 格${onHand ? '' : '，单卡库存没有闪卡了'}` : `柜位满了（${G.slots()} 格）`}。${fill}</p>
     <ul class="c-case">${rows.map(({ label, vs, fit }) => {
       const none = count(vs, 'none'), dear = vs.filter(v => v.r === 'pricey' && v.why !== 'budget'), broke = count(vs, 'pricey', 'budget');
