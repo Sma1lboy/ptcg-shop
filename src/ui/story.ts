@@ -1,6 +1,6 @@
 // 剧情 player (DESIGN.md「剧情」): a full-screen native <dialog> in the skin — the scene illustration behind, the two portraits
-// standing at the edges (the one speaking lit by the shop lamp, the other in shade), and the dialogue box at the bottom, a case
-// compartment (frame + panel) with the speaker on a name plate. Click / Space / Enter advances (the first press finishes the
+// standing at the edges (the one speaking at full light, the other in shade), and BW's white text box at the bottom with the
+// speaker on a dark name plate. Click / Space / Enter advances (the first press finishes the
 // typing), Esc or 跳过 ends the scene. Beats are queued and only play when no pack is being revealed, one scene at a time; the
 // new-player guide waits until the story is closed (guide.ts listens for ptcg:story).
 import { html, render, nothing } from 'lit-html';

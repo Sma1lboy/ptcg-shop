@@ -296,9 +296,9 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .v-n small { display: block; font-size: var(--fs-cap); line-height: 1.3; } .v-n small b { font-size: var(--fs-cap); }
 /* shelf wall (shelf.ts wall()): one piece of shop furniture across the panel, a bay per shelf, bolted side by side. Every part is
    a thing on a real wall unit: the header card over each bay (a tab plate with the set's logo), the pegboard back (flat, like a BW
-   interior tile; empty spots show the back, not a dashed box), one board per 加层 level whose lip is the navy aluminium
-   trim, packs standing face-out (foil, logo, the heat-seal crimps), and the price rail on the bottom lip with the player's yellow
-   label clipped to it. The trim is the same in both themes, so text on it is --hud-ink. The next 加一个货架 is an unbuilt bay's
+   interior tile; empty spots show the back, not a dashed box), one board per 加层 level whose lip is the --frame edge, packs
+   standing face-out (foil, logo, the heat-seal crimps), and the dark price rail on the bottom lip with the player's yellow
+   label clipped to it. The rail is the same in both themes, so text on it is --hud-ink. The next 加一个货架 is an unbuilt bay's
    outline at the end. Controls and notes sit under the furniture, on the page */
 .wall { grid-column: 1 / -1; padding: 4px 0 20px; border-bottom: 1px solid var(--line); min-width: 0; }
 .wall-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 14px; }
@@ -1309,7 +1309,7 @@ button:disabled { cursor: not-allowed; }
 .gh-goal .gg-what > i, .gg-fame > i { font-style: normal; color: var(--muted); }
 .gh-goal .gg-fame { font-size: var(--fs-cap); color: var(--muted); } .gg-fame b { color: var(--ink); }
 .gh-goal :is(.gg-what, .gg-fame):hover > b:first-child, .gg-fame:hover { text-decoration: underline; text-underline-offset: 3px; }
-/* the node 下一步 scrolled to: the shop lamp swings onto its badge for a moment */
+/* the node 下一步 scrolled to: the cursor's blue ring flashes on its badge for a moment */
 .tn.seek .tn-badge { animation: tn-seek 1.6s ease-out; }
 @keyframes tn-seek { 0%, 40% { box-shadow: 0 0 0 1px var(--hud), 0 0 0 4px var(--sel), 0 0 36px 12px var(--sel-glow); } }
 .br-prog p, .br-go p { margin: 0; }
@@ -1323,8 +1323,8 @@ button:disabled { cursor: not-allowed; }
 .br-street { margin-bottom: 6px !important; } .br-street b { display: block; font-weight: 600; color: var(--ink); } .br-street small { display: block; font-size: var(--fs-cap); color: var(--muted); }
 .br-h { margin: 24px 0 0; font-size: var(--fs-h); font-weight: 600; color: var(--ink); }
 .br-first { margin: 18px 0 0; color: var(--muted); } .br-first b { font-weight: 600; color: var(--ink); }
-/* 成长树 (DESIGN.md「成长」): four lines side by side. Each node is an enamel badge like the i-* icons — navy (--back-2 family, the
-   same in both themes, like the mat and the trim) with its u-* icon in aluminium — ringed by one segment per level: lit (--hud-ink)
+/* 成长树 (DESIGN.md「成长」): four lines side by side. Each node is a badge from the BW badge case — the command-button face with its
+   u-* pixel icon, the same in both themes — ringed by one segment per level: lit (--hud-ink)
    = bought, yellow = the next level, affordable from 闲钱 (the only yellow on the page), dark = not yet. Under each badge the rail
    down to the next node is the 营业额 track's rail: ink as far down the line as you have levels */
 .tree { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 36px; margin-top: 16px; }
@@ -1571,9 +1571,9 @@ button:disabled { cursor: not-allowed; }
 }
 
 /* 剧情 (src/ui/story.ts, DESIGN.md「剧情」): a cutscene over the whole shop. The scene illustration fills the screen, the two
-   portraits stand at its edges (the one talking is under the shop lamp, the other steps back into shade), and the dialogue box
-   is one more compartment of the display case — the same trim and panel as every group, its speaker on the name plate.
-   Without the images (pen) it is the dark till strip with the same box on it */
+   portraits stand at its edges (the one talking steps forward at full light, the other steps back into shade), and the dialogue
+   box is BW's white text box, its speaker on a dark name plate.
+   Without the images (pen) it is the dark --hud screen with the same box on it */
 .story { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
   background: var(--hud); color: var(--ink); cursor: pointer; }
 .story[open] { animation: dim .35s ease-out; }
