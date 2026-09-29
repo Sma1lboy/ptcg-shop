@@ -215,7 +215,9 @@ function bed() {
 export function setScene(k: Scene | null) { story = !!k; scene = k; bed(); }
 
 // 成就: the grading label printing (a dot-matrix chatter), then pressed onto its slab: a dull thud and the paper's slap.
-export const award = () => {
+// A 金标 / 黑标 (big) also rings: a bright four-note bell run once the label is down.
+export const award = (big = false) => {
   for (let i = 0; i < 8; i++) noise(i * .028, .02, { gain: .025, from: 2600, to: 2200, q: 5 });
   tone(110, .26, .18, { gain: .28, to: 45 }); noise(.26, .06, { gain: .1, from: 1200, to: 300, q: .6 });
+  if (big) { [G5, C6, E6, G6].forEach((f, i) => tone(f, .5 + i * .09, .9, { type: 'triangle', gain: .07 })); noise(.6, .7, { gain: .03, from: 5000, to: 9000 }); }
 };

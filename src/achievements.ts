@@ -14,6 +14,10 @@ export interface Ach {
 }
 
 export const GROUPS: [string, string][] = [['open', '开包'], ['luck', '欧气'], ['dex', '收藏'], ['shop', '经营'], ['hidden', '隐藏']];
+// The label stock a slab gets, as graders print a special label for the rare grades: read off the reward, which is already paced
+// by how hard the achievement is. 黑标 are the honour-only ones (a whole collection done), the rarest there are.
+export const TIERS: [string, string][] = [['black', '黑标'], ['gold', '金标'], ['silver', '银标'], ['white', '白标']];
+export const tier = (a: Ach) => (!a.cash ? 'black' : a.cash >= 300 ? 'gold' : a.cash >= 50 ? 'silver' : 'white');
 const GOLD = ['IR', 'SIR', 'HR', 'MHR'];   // the gold-star rarities (and the Mega series' four-pointed star)
 const LUCK_MIN = 30;                        // packs before 欧气检测 titles count: fewer and one lucky pull decides it
 const cards = (test: (name: string, r: string) => boolean) => new Set(SETS.flatMap(s => DATA[s.id].cards.filter(c => test(c.name, c.r)).map(c => `${s.id}|${c.n}`)));
