@@ -15,7 +15,7 @@ const last: Record<string, number> = {};
 const gate = (k: string, ms: number) => { const t = performance.now(); if (t - (last[k] ?? -1e9) < ms) return false; last[k] = t; return true; };
 const play = (k: keyof typeof GAP, f: () => void) => { if (gate(k, GAP[k])) f(); };
 // minimum gap per sound, ms. The rare dramatic ones are long so the event and the story line about it don't both play it.
-const GAP = { ok: 50, cursor: 120, page: 60, chime: 10000, till: 5000, sweep: 10000, knock: 20000, calc: 20000, hammer: 20000, shutter: 20000, stamp: 3000, heels: 1500, sack: 3000, flicker: 20000, count: 20000 };
+const GAP = { ok: 50, back: 50, cursor: 40, page: 60, chime: 10000, till: 5000, sweep: 10000, knock: 20000, calc: 20000, hammer: 20000, shutter: 20000, stamp: 3000, heels: 1500, sack: 3000, flicker: 20000, count: 20000 };
 
 // ---------- the shop: customers through state.recent (newest first), the debt through debt.ts ----------
 let seenAt = 0;
@@ -75,6 +75,8 @@ export function initSound() {
     play('ok', FX.ok);
   });
   addEventListener('hashchange', () => play('cursor', FX.cursor));
+  // the keyboard menu (menu.ts): the cursor moving, a key press on a control, a layer backed out of
+  document.addEventListener('ptcg:ui', e => { const k = (e as CustomEvent<'cursor' | 'ok' | 'back'>).detail; play(k, FX[k]); });
   seenAt = G.state.recent[0]?.at ?? 0; // after the boot tick: the time the shop was closed plays nothing
   G.on(onEmit);
   document.addEventListener('ptcg:line', onLine);

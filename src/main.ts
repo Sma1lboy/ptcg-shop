@@ -22,6 +22,7 @@ import { initGoals } from './ui/goals.ts';
 import { initAch } from './ui/ach.ts';
 import { renderDue, renderLedger, renderWreck, initLedger } from './ui/ledger.ts';
 import { initSound } from './ui/sound.ts';
+import { initMenu } from './ui/menu.ts';
 
 // While a pack is being revealed only the shelf and the rail update (both with their open buttons off); the rest would show the pull early. The mat fires ptcg:release when done.
 function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
@@ -42,5 +43,5 @@ initSlip();
 initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();
 
-initGoals(); initBinder();
+initGoals(); initBinder(); initMenu();
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

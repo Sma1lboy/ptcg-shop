@@ -112,8 +112,10 @@ export function pause(p: boolean) { if (!ctx || silent) return; if (p) ctx.suspe
 // ---------- shop and interface (bus 'shop'; src/ui/sound.ts calls these and rate-limits them) ----------
 const S = { bus: 'shop' as Bus };
 // the interface speaks BW: short square-wave blips, not objects. Pitches sit on the chime's scale so the shop never clashes.
-// ok: the A button — a quick rising pair; cursor: the ▶ moving to another row or tab; page: a text box line advancing
+// ok: the A button — a quick rising pair; back: the B button — the same pair falling; cursor: the ▶ moving to another row or
+// tab; page: a text box line advancing
 export const ok = () => { tone(1568, 0, .035, { ...S, type: 'square', gain: .018 }); tone(2093, .035, .06, { ...S, type: 'square', gain: .018 }); };
+export const back = () => { tone(1568, 0, .035, { ...S, type: 'square', gain: .016 }); tone(1175, .035, .06, { ...S, type: 'square', gain: .016 }); };
 export const cursor = () => tone(1760, 0, .03, { ...S, type: 'square', gain: .014 });
 export const page = () => tone(1318.5, 0, .045, { ...S, type: 'square', gain: .016 });
 // the door's wind chime: three random rods of a pentatonic set, each with its inharmonic partial (×2.76), long ring

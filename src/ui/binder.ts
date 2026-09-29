@@ -234,6 +234,7 @@ export function initBinder() {
   });
   root.addEventListener('keydown', e => {
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || (e.target as Element).closest('.bk-tabs, input')) return;
+    e.preventDefault(); // ←/→ in the open binder turn its pages, so the menu cursor (menu.ts) leaves them alone
     go(at.page + (e.key === 'ArrowLeft' ? -span() : span()));
   });
   // a swipe across the open pages turns them (phones)

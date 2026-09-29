@@ -104,6 +104,14 @@ body { background: repeating-linear-gradient(135deg, transparent 0 6px, color-mi
   color: var(--ink); font: var(--fs-body)/1.55 var(--font-body); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+/* the BW menu cursor (ui/menu.ts): a ▶ in cursor blue left of whatever the arrow keys are on, bobbing sideways like BW's. Only
+   while the keys are driving; a pointer press hides it. A thin dark edge keeps it readable on the pale page and the dark bars */
+.menu-cursor { position: fixed; z-index: 60; width: 12px; height: 14px; translate: 0 -50%; pointer-events: none;
+  filter: drop-shadow(1px 0 0 #101318) drop-shadow(0 1px 0 #101318); animation: cursor-bob .8s steps(2, jump-none) infinite; }
+.menu-cursor::before { content: ""; position: absolute; inset: 0; background: var(--sel); clip-path: polygon(0 0, 100% 50%, 0 100%); } /* clipped inside, so the filter's edge is not */
+.menu-cursor[hidden] { display: none; }
+@keyframes cursor-bob { 50% { transform: translateX(-3px); } }
+@media (prefers-reduced-motion: reduce) { .menu-cursor { animation: none; } }
 a { color: inherit; }
 .muted { color: var(--muted); }
 small { font-size: var(--fs-cap); }
