@@ -15,7 +15,8 @@ const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '
 
 // m3d: this pack is on the 3D table; quiet: 全部翻开 on the 3D table, no flip sound per card.
 // Batch on the 3D table: picks = [pack, card] of the cards that fly to the front (cheapest first), up = which picks are face up, torn = packs ripped.
-interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; picks: [number, number][]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean; m3d?: boolean; quiet?: boolean; torn?: boolean }
+// news: indexes into picks of the cards this batch pulled by hand for the first time (亲手开出).
+interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; picks: [number, number][]; news: number[]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean; m3d?: boolean; quiet?: boolean; torn?: boolean }
 let mat = { mode: 'idle' } as Mat;
 
 // The 3D table's caption line (s3-cap): the printed rarity mark, the rarity's name, the market price.
@@ -28,7 +29,7 @@ function cardHTML(c: Pull, i: number, up: boolean, big?: boolean) {
       <button type="button" class="card t${rar(c).t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
         <span class="card-in"><span class="back">${BACK()}</span><span class="face">${toHTML(face(c, size))}</span></span>
       </button>
-      <figcaption>${toHTML(cap(c, size))}</figcaption>
+      <figcaption>${mat.mode === 'batch' && mat.news.some(k => picked()[k] === c) ? '<i class="hand-new">新</i>' : ''}${toHTML(cap(c, size))}</figcaption>
     </figure>`;
 }
 let backMarkup = '';
@@ -91,11 +92,11 @@ export function renderMat() {
   // batch
   const cards = mat.packs.flat(), hits = batchHits();
   const v = S.packValue(cards), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost;
-  el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span>开出 ${money(v)} · 进货 ${money(cost)} ·
-      <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
+  el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span id="mat-prog">${run ? runProg() : `开出 ${money(v)} · 进货 ${money(cost)} ·
+      <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b>`}</span>${sndBtn()}${run && !run.end ? stopBtn() : ''}</div>
       ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
-      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}</div></div>`;
+      ${mat.finished ? batchSummary() : ''}`;
 }
 
 // Idle mat: the sealed packs in the warehouse lie on it, one tap opens one (or buys one and opens it when the warehouse is empty).
@@ -124,26 +125,28 @@ const nextUnlock = () => {
 const HINT = { shelf: nextUnlock, pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
   cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看',
   batch: () => touch() ? '点一下全部撕开，或按住从左往右划过这排包' : '点一下或按空格全部撕开，也可以按住从左往右划过这排包',
-  batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张' };
+  batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张',
+  run: () => `${runProg()} · 出新卡就停` }; // the header line is cut short on phones: the run's progress is repeated here
 const batch = () => mat.mode === 'batch';
 const picked = () => mat.picks.map(([p, i]) => mat.packs[p][i]);
 const head3D = () => {
   if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span>点桌上的包，开一包</span>${sndBtn()}`; return; }
   const live = batch() ? mat.torn : mat.mode === 'cards';
-  $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${live ? prog() : ''}</span>${sndBtn()}
-      ${live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
+  $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${run ? runProg() : live ? prog() : ''}</span>${sndBtn()}
+      ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
 };
 const hint3D = (k: keyof typeof HINT) => { const h = document.getElementById('s3-hint'); if (h) h.textContent = HINT[k](); };
 const on3D = {
   onTear() {
     if (batch()) { if (mat.torn) return; mat.torn = true; } else if (mat.mode === 'pack') mat.mode = 'cards'; else return;
-    FX.tear(); head3D(); hint3D(batch() ? 'batchCards' : 'cards');
+    FX.tear(); head3D(); hint3D(run ? 'run' : batch() ? 'batchCards' : 'cards');
+    if (run) table!.flipAll(); // 连开: the picks turn over together as soon as they're out, no tap per card
   },
   onFlip(i: number, c: Pull) {
     mat.up.add(i); mat.cur = i;
-    const pg = document.getElementById('mat-prog'); if (pg) pg.textContent = prog();
-    const none = batch() && !S.HITS.includes(c.kind); // a batch without a single hit flies its best card instead
-    const cap = document.getElementById('s3-cap'); if (cap) { cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${none ? `${mat.packs.length} 包一张好卡都没有 · ` : ''}${esc(c.name)}</b>${capHTML(c)}`; }
+    const pg = document.getElementById('mat-prog'); if (pg && !run) pg.textContent = prog();
+    const none = batch() && !mat.picks.some(([p, k]) => S.HITS.includes(mat.packs[p][k].kind)); // a batch without a single hit flies its best card instead
+    if (!run) caption(c, none ? `${mat.packs.length} 包一张好卡都没有 · ` : '', batch() && mat.news.includes(i)); // 连开 turns them all at once: the new card gets its caption when it's held up (showNew)
     if (!mat.quiet) FX.flip(rar(c).t);
   },
   onPick(k: number) { document.querySelectorAll<HTMLButtonElement>('#s3-shelf button')[k]?.click(); }, // through events.ts, like the label itself
@@ -166,8 +169,8 @@ function mat3D(el: HTMLElement) {
   if (mat.mode === 'idle') { shelf3D(); return true; }
   document.getElementById('s3-shelf')?.remove();
   el.querySelector('.summary')?.remove(); $('s3-cap').innerHTML = '';
-  head3D(); hint3D(batch() ? 'batch' : 'pack');
-  if (batch()) table.showBatch(mat.set, mat.packs, mat.picks); else table.showPack(mat.set, mat.cards);
+  head3D(); hint3D(run ? 'run' : batch() ? 'batch' : 'pack');
+  if (batch()) { table.showBatch(mat.set, mat.packs, mat.picks, { news: mat.news, quick: !!run }); if (run) table.flip(0); } else table.showPack(mat.set, mat.cards);
   return true;
 }
 
@@ -208,10 +211,11 @@ function waitFor3D() { if (!waited) { waited = true; threeReady.then(ok => { if 
 // While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
 export let hold = false;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-const batchHits = () => mat.packs.flat().filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price);
+// The 2D spread: the picks that are hits or new to 亲手开出, dearest first.
+const batchHits = () => mat.picks.filter(([p, i], k) => S.HITS.includes(mat.packs[p][i].kind) || mat.news.includes(k)).map(([p, i]) => mat.packs[p][i]).reverse();
 const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
 const prog = () => {
-  const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : S.HITS.includes(cs[0].kind) ? '好卡' : '没出好卡，最值钱的';
+  const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : mat.news.length ? '翻开' : S.HITS.includes(cs[0].kind) ? '好卡' : '没出好卡，最值钱的';
   return `${label} ${mat.up.size}/${cs.length} · ${money(cs.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
 };
 const ready = (img: HTMLImageElement | null) => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
@@ -264,22 +268,93 @@ function spotlight(ms: number) { const m = $('mat'); m.classList.add('spot'); cl
 
 function finish() {
   if (mat.finished) return; mat.finished = true;
-  const el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
-  if (!el.querySelector('.summary')) el.insertAdjacentHTML('beforeend', batch() ? batchSummary() : packSummary(mat.cards, G.setById(mat.set)));
-  release(); // after the summary is in: the guide anchors its share step on the summary's button
+  const more = roundEnd(), el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
+  if (!el.querySelector('.summary') || run) { el.querySelector('.summary')?.remove(); el.insertAdjacentHTML('beforeend', batch() ? batchSummary() : packSummary(mat.cards, G.setById(mat.set))); }
+  if (run) runHead();
+  if (more) return;
+  if (run?.end === 'new') { const tok = mat; showNew().then(() => { if (mat === tok) release(); }); } // the story waits until the new card has been seen
+  else release(); // after the summary is in: the guide anchors its share step on the summary's button
 }
 function batchSummary() {
-  const set = G.setById(mat.set), v = S.packValue(mat.packs.flat()), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost, sp = shareSpec(), stock = G.state.stock[set.id] || 0;
+  const set = G.setById(mat.set), sp = shareSpec(), stock = G.state.stock[set.id] || 0, r = run;
+  if (r && !r.end) return `<div class="summary"><p>连开第 ${r.rounds} 轮开完，${r.stop ? '停下了' : '下一轮马上开始'}。</p><div class="btns">${r.stop ? '' : stopBtn()}</div></div>`;
+  const [n, v, cost] = r ? [r.packs, r.value, r.cost] : [mat.packs.length, S.packValue(mat.packs.flat()), G.wholesale(set.id) * mat.packs.length], d = v - cost;
+  const again = hunt(set.id) && canGo(set.id) ? `<button type="button"${stock ? '' : ' class="primary"'} data-act="autorun" data-id="${set.id}">连开到出新卡</button>` : '';
   return `<div class="summary">
-      <p>${mat.packs.length} 包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。</p>
-      <p class="rank">最好的一包 ${money(sp.bestPack)}，${sp.rank}。</p>
-      <div class="btns">${stock ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}${shareBtn()}</div></div>`;
+      <p>${r ? `连开 ${r.rounds} 轮 ${n} 包${r.bought ? `（其中现进 ${r.bought} 包）` : ''}` : `${n} 包`}开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。</p>
+      ${r ? `<p class="run-end">${runEnd(r, set.id)}</p>` : ''}
+      <p class="rank">${r ? '最后一轮' : ''}最好的一包 ${money(sp.bestPack)}，${sp.rank}。</p>
+      <div class="btns">${stock ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}${again}${shareBtn()}</div></div>`;
+}
+
+// ---------- 连开 ----------
+// 连开到出新卡: rounds of up to ten packs, revealed without a tap per card (the 3D table runs a little faster), until a card
+// never pulled by hand in this set comes up, the player stops it, RUN_MAX rounds pass, or the warehouse is empty and the cash
+// can't restock it. When the warehouse has fewer than ten it tops up at the wholesale price, the same buy as 补 N 包，开十连.
+// One hold for the whole run: the side panels, achievements and story wait until it ends, as they wait for any pack.
+const RUN_MAX = 50, RUN_GAP = 600;
+interface Run { id: string; rounds: number; packs: number; value: number; cost: number; bought: number; fresh: Pull[]; end: '' | 'new' | 'stop' | 'max' | 'empty'; stop?: boolean }
+let run: Run | null = null;
+// Offered once ten packs would most likely not bring a new card (the easiest missing one takes more than ten packs on
+// average); before that every 十连 stops on new cards anyway.
+export const huntable = (id: string) => hunt(id) && canGo(id); // the 图鉴 row offers 连开 too (goals.ts)
+const hunt = (id: string) => { const m = G.handMissing(id); return m.length > 0 && m[m.length - 1].packs > 10; };
+const canGo = (id: string) => (G.state.stock[id] || 0) > 0 || G.state.cash >= G.wholesale(id);
+const stopBtn = () => `<button type="button" class="ghost" data-act="runstop"${run?.stop ? ' disabled' : ''}>${run?.stop ? '这轮开完就停' : '停'}</button>`;
+const runProg = () => { const r = run!; return `连开第 ${r.rounds + (mat.finished ? 0 : 1)} 轮 · 已开 ${r.packs + (mat.finished ? 0 : mat.packs.length)} 包 · 亲手开出 ${G.handCount(r.id) - (mat.finished ? 0 : mat.news.length)}/${G.dexTotal(r.id)}`; }; // the round's new cards count once they're shown
+function runEnd(r: Run, id: string) {
+  const h = G.handCount(id), tot = G.dexTotal(id);
+  if (r.end === 'new') return `亲手开出新卡：${r.fresh.map(c => esc(c.name)).join('、')}。${G.setById(id).name}亲手开出 ${h}/${tot}。`;
+  const miss = G.handMissing(id), last = miss.length ? `，${miss.length > 1 ? '最难的一张' : '这张'}平均约 ${Math.round(miss[0].packs).toLocaleString('en-US')} 包出一张` : '';
+  const why = r.end === 'max' ? `连开 ${RUN_MAX} 轮还没出新卡` : r.end === 'empty' ? '仓库空了，现金也不够再进' : '停下了';
+  return `${why}。${G.setById(id).name}亲手开出 ${h}/${tot}，还差 ${tot - h} 张${last}。`;
+}
+export function startRun(id: string) { run = { id, rounds: 0, packs: 0, value: 0, cost: 0, bought: 0, fresh: [], end: '' }; nextRound(run); }
+function nextRound(r: Run) {
+  const n = G.state.stock[r.id] || 0, top = n >= 10 ? 0 : Math.min(10 - n, Math.floor(G.state.cash / G.wholesale(r.id)));
+  if (top) { const n0 = n; if (G.buy(r.id, top)) r.bought += (G.state.stock[r.id] || 0) - n0; }
+  openBatch(r.id, true);
+}
+// A round's reveal is done (finish): tally it, then either queue the next round (true: keep holding) or end the run here.
+function roundEnd() {
+  const r = run; if (!r || !batch()) return false;
+  r.rounds++; r.packs += mat.packs.length; r.value += S.packValue(mat.packs.flat()); r.cost += G.wholesale(r.id) * mat.packs.length;
+  r.fresh.push(...mat.news.map(k => picked()[k]));
+  r.end = r.fresh.length ? 'new' : r.stop ? 'stop' : r.rounds >= RUN_MAX ? 'max' : !canGo(r.id) ? 'empty' : '';
+  if (r.end) return false;
+  const tok = mat;
+  setTimeout(() => {
+    if (mat !== tok || run !== r) return;
+    if (r.stop) { r.end = 'stop'; $('mat').querySelector('.summary')?.remove(); $('mat').insertAdjacentHTML('beforeend', batchSummary()); runHead(); release(); }
+    else nextRound(r);
+  }, RUN_GAP);
+  return true;
+}
+function runHead() {
+  if (table) return head3D();
+  const pg = document.getElementById('mat-prog'); if (pg) pg.textContent = runProg();
+  if (run?.end) $('mat').querySelector('.mat-head [data-act="runstop"]')?.remove();
+}
+export function stopRun() {
+  const r = run; if (!r || r.end) return; r.stop = true;
+  document.querySelectorAll<HTMLButtonElement>('#mat [data-act="runstop"]').forEach(b => { b.disabled = true; b.textContent = '这轮开完就停'; });
+}
+// The run stopped on a new card: the dearest new one is picked up and held to the camera (3D), with its caption.
+function showNew() {
+  const k = mat.news.reduce((a, b) => (picked()[b].price > picked()[a].price ? b : a)), c = picked()[k];
+  FX.flip(rar(c).t);
+  if (!table) return Promise.resolve();
+  return table.lookAt(k).then(() => { if (run?.end === 'new') caption(c, '', true); return new Promise(r => setTimeout(r, 1800)); });
+}
+function caption(c: Pull, pre: string, fresh: boolean) {
+  const cap = document.getElementById('s3-cap'); if (!cap) return;
+  cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${fresh ? '<i class="hand-new">新 · 亲手开出</i>' : ''}${pre}${esc(c.name)}</b>${capHTML(c)}`;
 }
 
 // Ten packs at once: the hits flip one after another, cheapest first, best last.
 function revealBatch(tok: Mat) {
   const hits = batchHits(), n = hits.length;
-  if (!n) { FX.miss(); release(); return; }
+  if (!n) { FX.miss(); finish(); return; }
   const btns = [...document.querySelectorAll<HTMLElement>('.mat .spread .card')], step = reduced() ? 0 : Math.min(240, 2400 / n);
   for (let k = 0; k < n; k++) {
     const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
@@ -288,28 +363,39 @@ function revealBatch(tok: Mat) {
       const t = rar(hits[i]).t; if (t >= 4 && k === n - 1 && !reduced()) spotlight(2200); armThumb(btns[i], hits[i]); FX.flip(t); FX.burst(btns[i].closest('.slot'), t);
     }, delay);
   }
-  setTimeout(() => { if (mat === tok) release(); }, (reduced() ? 0 : 350 + n * step + 1200));
+  setTimeout(() => { if (mat === tok) finish(); }, (reduced() ? 0 : 350 + n * step + 1200));
 }
 
 // ---------- actions (called from events.ts) ----------
 // Warm the cache before the flips (CORS mode, so the share poster can reuse it).
 const warm = (cards: Pull[]) => cards.forEach(c => { if (c.r !== 'E') for (const size of ['low', 'high']) { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = imgUrl(c, size); } });
 export function startPack(id: string) {
-  hold = true;
+  run = null; hold = true;
   const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
   warm(cards);
   mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0, m3d: true } as Mat;
   renderMat();
 }
-// What flies to the front of the 3D table: every hit, cheapest first (best last); a batch without one shows its best card.
-function pickOrder(packs: Pull[][]) {
+// What flies to the front of the 3D table: every hit and every card new to 亲手开出, cheapest first (best last); a batch
+// with neither shows its best card. fresh: the new cards (first copy of each), from handNew() before the packs were opened.
+function pickOrder(packs: Pull[][], fresh: Set<Pull>) {
   const all = packs.flatMap((p, pi) => p.map((c, ci) => ({ c, at: [pi, ci] as [number, number] })));
-  const hits = all.filter(x => S.HITS.includes(x.c.kind));
+  const hits = all.filter(x => S.HITS.includes(x.c.kind) || fresh.has(x.c));
   return (hits.length ? hits : [all.reduce((a, b) => (b.c.price > a.c.price ? b : a))]).sort((a, b) => a.c.price - b.c.price).map(x => x.at);
 }
-export function openBatch(id: string) {
-  hold = true; const packs = G.open(id, 10); if (!packs.length) { release(); return; }
-  mat = { mode: 'batch', set: id, packs, picks: pickOrder(packs), up: new Set(), cur: 0, m3d: true } as Mat;
+// The card numbers of a set already pulled by hand (state.dex keys are set|n|kind; energy isn't a card of the set).
+const handHave = (id: string) => new Set(Object.keys(G.state.dex).filter(k => k.startsWith(id + '|')).map(k => k.split('|')[1]));
+function handNew(packs: Pull[][], have: Set<string>) {
+  const fresh = new Set<Pull>();
+  for (const c of packs.flat()) if (c.r !== 'E' && !have.has(c.n)) { have.add(c.n); fresh.add(c); }
+  return fresh;
+}
+// keep: the next round of a 连开 run; any other open ends the run.
+export function openBatch(id: string, keep = false) {
+  if (!keep) run = null;
+  hold = true; const have = handHave(id), packs = G.open(id, 10); if (!packs.length) { run = null; release(); return; }
+  const fresh = handNew(packs, have), picks = pickOrder(packs, fresh);
+  mat = { mode: 'batch', set: id, packs, picks, news: picks.flatMap(([p, i], k) => (fresh.has(packs[p][i]) ? [k] : [])), up: new Set(), cur: 0, m3d: true, quiet: !!run } as Mat;
   warm(picked());
   renderMat();
   if (!mat.m3d) revealBatch(mat);
@@ -320,7 +406,7 @@ export function flipAll() { if (mat.m3d) { mat.quiet = true; table!.flipAll(); r
 export function toggleMute() { FX.setMuted(!FX.muted()); }
 document.addEventListener('ptcg:sound', () => document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; })); // also muted from the 声音 panel
 export function shareMat() { showPack(shareSpec()); }
-export function resetMat() { hold = false; G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
+export function resetMat() { run = null; hold = false; G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
 
 // ---------- input ----------
 export function bindMatInput() {
@@ -358,7 +444,7 @@ export function bindMatInput() {
     FX.unlock();
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
-    else if (batch() && mat.m3d && !mat.finished) { e.preventDefault(); table!.flip(mat.up.size); }
+    else if (batch() && mat.m3d && !mat.finished) { e.preventDefault(); if (!run) table!.flip(mat.up.size); }
     else if (table && !(e.target as Element).closest('button, a')) e.preventDefault(); // a finished or idle 3D table: Space doesn't scroll the page away
   });
 }

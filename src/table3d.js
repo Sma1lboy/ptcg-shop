@@ -43,7 +43,7 @@ let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, ra
 // Render on demand: a frame is drawn only while something moves (tweens, drag, pointer tilt, particles, a show) and for IDLE ms
 // after it, while the mat keeps breathing; then the idle-sway fades out and the loop stops. The shop runs for hours.
 let awake = 0, breath = 0, aliveUntil = 0;
-const IDLE = 2500;
+const IDLE = 2500, QUICK = .7; // QUICK: a 连开 round's tweens run at this share of their time
 let hand, grip, L, parts, rays, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
 let R = null; // the pack on the mat right now
 let lean = 0;
@@ -712,7 +712,7 @@ function spreadHalos(run) {
 }
 function tags(run) {
   const box = host && host.querySelector('.s3-tags'); if (!box) return;
-  box.innerHTML = run.data.map(c => `<span class="s3-tag">${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price
+  box.innerHTML = run.data.map((c, k) => `<span class="s3-tag">${run.news?.includes(k) ? '<i class="hand-new">新</i>' : ''}${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price; 新 = first pulled by hand
   run.tagEls = [...box.children]; run.tagW = run.tagEls.map(e => e.offsetWidth); // measured once: placeTags runs every frame
 }
 // An overlapping fan shows only each card's left side: the price goes under that corner. A tag (mark + price) is wider than
@@ -803,9 +803,9 @@ function fanOf(n, np) {
   if (room) pts.push(SHOWCASE().setY(2.2 + 2)); // only the showcase's foot: the fan's picks are the point, they stay big
   return { poses, tight, wrap, pts, cam: frameOn(pts, new V3(0, 0, fz), room ? SPREAD_PITCH : 1.08, .94, tall ? -.66 : -.74, room ? .98 : .92) };
 }
-function buildBatch(set, packs, picks) {
+function buildBatch(set, packs, picks, news) {
   const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]);
-  const run = { batch: true, data, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
+  const run = { batch: true, data, news, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
   run.shot = run.grid.cam;
   run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; Object.assign(p.userData, { col: grid.col[k], yaw: (Math.random() - .5) * .2, wy: (Math.random() - .5) * .12 }); scene.add(p); return p; });
   const inPack = {};
@@ -1471,7 +1471,8 @@ function mountTable(el, o) {
   opts = o; speed = o.reducedMotion ? 0 : 1; host = el;
   ro.observe(el); io.observe(el); el.prepend(canvas); resize();
   for (const k in moodNow) moodNow[k] = MOODS.base[k];
-  const fresh = () => {
+  const fresh = (quick = false) => {
+    speed = o.reducedMotion ? 0 : quick ? QUICK : 1;
     resize(); // mat.ts has just rewritten the header / dropped the summary: lay the new run out for the canvas as it is now, not as the ResizeObserver last saw it
     tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0()); canvas.style.cursor = '';
     mood('base', 400); // tws = [] also dropped a show's fade back to base (a new pack started right after a gold pull kept its rays)
@@ -1502,11 +1503,20 @@ function mountTable(el, o) {
     },
     // Ten packs (or however many the stock allowed) at once. picks: [packIndex, cardIndex] of the cards that fly to the
     // front, in the order they turn over (cheapest first). onFlip(k, card) then counts picks, not cards.
-    showBatch(set, packs, picks) {
+    // news: pick indexes whose price tag says 新 (first pulled by hand); quick: a 连开 round, every move at QUICK × its time.
+    /** @param {{ news?: number[], quick?: boolean }} [o2] */
+    showBatch(set, packs, picks, o2 = {}) {
+      const { news = [], quick = false } = o2;
       if (opts !== o) return;
       const froms = R?.shelf ? takeFromShelf(R, set, packs.length) : [];
-      fresh();
-      R = buildBatch(set, packs, picks); enterBatch(R, froms);
+      fresh(quick);
+      R = buildBatch(set, packs, picks, news); enterBatch(R, froms);
+    },
+    // Once the batch is laid out, pick k is lifted to the camera as a tap on it would (tap again to put it back). Resolves when it's up.
+    async lookAt(k) {
+      const run = R; if (opts !== o || !run?.batch) return;
+      while (R === run && (run.stage !== 'spread' || run.busy)) await wait(100);
+      if (R === run && !run.look) await look(run, run.cards[k]);
     },
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {

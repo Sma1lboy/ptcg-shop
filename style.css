@@ -699,6 +699,10 @@ button:disabled { cursor: not-allowed; }
 /* under each card in the spread: card.ts's tray caption (mark + market price), the same as the 2D mat's */
 .s3-tag { position: absolute; left: 0; top: 0; background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
 .s3-tag .cf-cap { flex-wrap: nowrap; }
+/* 新: first pulled by hand (亲手开出). Lit by the shop lamp, not yellow (that's for what you press) or gold (rarity) */
+.hand-new { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 2px; background: var(--lamp); color: var(--sticker-ink); font: 900 11px/16px var(--font-display); font-style: normal; vertical-align: 1px; }
+.s3-tag .hand-new { float: left; margin: 2px 4px 0 -2px; }
+.slot figcaption:has(> .hand-new) { display: flex; align-items: baseline; }
 .mat.m3d .summary { padding: 14px 18px 16px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
   /* one row in every state: a head that wrapped as the running total grew (or 全部翻开 came and went) resized the scene
