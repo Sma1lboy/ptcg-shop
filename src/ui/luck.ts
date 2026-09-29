@@ -43,7 +43,7 @@ export function renderLuck() {
       ${label(g)}
       ${pct == null ? '' : html`<p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>一块评级卡壳：这张标签 + 你开出过最贵的卡</small></p>`}
       <p class="verdict-sub">${pct == null ? `拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。`
-        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家：${S.LUCK_TRIALS} 个模拟玩家各开同样这些包（同系列、同包数、同概率），你排在这里。只抽了 ${S.LUCK_TRIALS} 个，这个数有 ±${margin(pct)} 个百分点的误差（95%）${L.packs < 300 ? '；包数少时总值主要看有没有开出一两张大卡' : ''}。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
+        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家（${S.LUCK_TRIALS} 个，各开同样这些包：同系列、同包数、同概率；只比了 ${S.LUCK_TRIALS} 个，所以这个数有 ±${margin(pct)} 个百分点的抽样误差，95% 置信）${L.packs < 300 ? '；包数少时总值主要看有没有开出一两张大卡' : ''}。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
         ${BANDS.map(([a, b, n]) => html`<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`)}
         ${pct == null ? '' : html`<i style="left:${pct}%"></i>`}
