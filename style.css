@@ -17,6 +17,8 @@
   --mat-ink: #E6EBF1;
   --mat-gain: #45C483; --mat-loss: #FF6C75; --mat-gold: #E1B54B; /* semantic colours for use ON the dark mat; the page's own gain/loss are tuned for the light panel */
   --mat-muted: #93A1B3;
+  --mat-gain: #45C483;    /* semantic colours for text on the dark mat; --gain/--loss are tuned for the page background */
+  --mat-loss: #FF6C75;
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
   --fx-gold: #F3CB4E;
   --back-1: #1D3F86;      /* card back */
@@ -137,7 +139,6 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .mat .btns button { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); color: var(--mat-ink); }
 .mat .btns button.primary { background: var(--sticker); border-color: var(--sticker); color: var(--sticker-ink); }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mat .gain { color: var(--gain); } }
 
 /* luck detector */
 .verdict { font: 400 46px/1 var(--font-display); margin: 4px 0 6px; letter-spacing: .04em; }
@@ -284,3 +285,37 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .pack:not(.torn) .pack-crimp:not(.bottom) { transform: translate(calc(var(--tear, 0) * 90px), calc(var(--tear, 0) * -22px)) rotate(calc(var(--tear, 0) * 14deg)); transform-origin: 0 100%; }
 .pack-hint::after { content: "，或向右拖动撕开"; }
 @media (prefers-reduced-motion: reduce) { .stage .slot.away { display: none; } }
+/* polish pass: mat semantic colours, narrow-panel fixes, phone tap targets */
+.mat .gain, .mat .summary .gain, .mat-head b.gain { color: var(--mat-gain); }
+.mat .loss, .mat .summary .loss, .mat-head b.loss { color: var(--mat-loss); }
+.singles li.muted, .singles li:only-child.muted { display: block; }
+.meter-labels span:nth-last-child(-n+2) { flex: 0 0 auto; padding-left: 8px; }
+.meter-labels span:nth-last-child(3) { text-align: left; }
+.tally th:nth-child(4), .tally td:nth-child(4) { width: auto; white-space: nowrap; font-size: 11px; }
+.tally td:first-child { padding-right: 6px; }
+@media (max-width: 779px) {
+  .btns button, .bulk button, .singles button, .ups button, .tiers button, .trophy button, #share button, #share .dl, .ghost { min-height: 40px; }
+  .log { max-height: 140px; }
+  .mat { padding: 14px; min-height: 0; }
+  .stage { width: min(260px, 66vw); }
+  .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
+  .tray figcaption { font-size: 9px; }
+  .verdict { font-size: 38px; }
+}
+.tally td:nth-child(4) { padding-left: 8px; }
+@media (max-width: 779px) {
+  .top { gap: 2px 12px; }
+  .stats { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; gap: 16px; scrollbar-width: none; }
+  .stats > div { flex: none; }
+  .stats dt { font-size: 11px; line-height: 1.2; }
+  .stats dd { font-size: 14px; line-height: 1.3; }
+  .top .ghost { margin-left: auto; }
+}
+
+/* price-basis footer + luck notes */
+.basis { margin-top: 8px; }
+.basis summary { cursor: pointer; color: var(--ink); }
+.basis table { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+.basis th, .basis td { text-align: left; padding: 2px 16px 2px 0; }
+.basis-note { font-size: 12px; margin: 8px 0; }
+.dd-note { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
