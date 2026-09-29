@@ -12,6 +12,7 @@ const UFX: Record<string, (lv: number) => string> = {
   depth: lv => `每架 ${G.DEPTH_BASE + G.DEPTH_STEP * lv} 包`,
   case: lv => `${G.CASE_BASE + G.CASE_STEP * lv} 个柜位`,
   supplier: lv => `进货打 ${+((G.WHOLESALE - G.WHOLESALE_STEP * lv) * 10).toFixed(1)} 折`,
+  expand: lv => `客流上限 ×${G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv}`,
   clerk: lv => ['没有店员', '巡货架，补到半满', '补满，卖散卡'][lv],
 };
 
@@ -35,7 +36,7 @@ export const pad = (n: number) => n % 2 ? html`<li class="gtile empty" aria-hidd
 // Everything cash can level, as one list: the goal the header points at is the cheapest of these.
 function buyables() {
   return [
-    ...Object.entries(G.UPGRADES).map(([k, u]) => ({ k, act: 'up', name: u.name, lv: G.lvl(k), cost: G.upgradeCost(k), fx: UFX[k] })),
+    ...Object.entries(G.UPGRADES).filter(([k]) => G.canUpgrade(k)).map(([k, u]) => ({ k, act: 'up', name: u.name, lv: G.lvl(k), cost: G.upgradeCost(k), fx: UFX[k] })),
     ...Object.entries(G.SKILLS).filter(([k]) => G.canLearn(k)).map(([k, s]) => ({ k, act: 'learn', name: s.name, lv: G.skill(k), cost: G.skillCost(k), fx: s.fx })),
   ].filter(b => b.cost != null) as { k: string; act: string; name: string; lv: number; cost: number; fx: (lv: number) => string }[];
 }
@@ -74,6 +75,7 @@ export function renderUpgrades() {
       </div>` : html`<p class="gh-goal gg-k">都升满了。</p>`}
       <dl class="gh-now">
         <div><dt>进店</dt><dd>${(G.rate() * 60).toFixed(1)} 人/分</dd></div>
+        <div><dt>客流加成</dt><dd>×${G.crowdMult().toFixed(2)}${G.crowdRaw() > G.CROWD_KNEE ? `（叠加 ×${G.crowdRaw().toFixed(2)}，上限 ×${G.crowdCap()}）` : ''}</dd></div>
         <div><dt>进货价</dt><dd>市价打 ${+(G.wholesaleRate() * 10).toFixed(1)} 折</dd></div>
         <div><dt>货架</dt><dd>${G.racks()} × ${G.depth()} 包</dd></div>
         <div><dt>展示柜</dt><dd>${G.slots()} 格</dd></div>
@@ -83,5 +85,6 @@ export function renderUpgrades() {
     </header>
     ${milestones()}`, $('grow-top'));
   render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
-    <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: [UFX[k](l), UFX[k](l + 1)], act: 'up', k }); })}${pad(ups.length)}</ul>`, $('upgrades'));
+    <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
+      blocked: G.canUpgrade(k) ? '' : `客流加成叠到 ×${G.CROWD_KNEE} 以上才用得上（现在 ×${G.crowdRaw().toFixed(2)}）` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
 }
