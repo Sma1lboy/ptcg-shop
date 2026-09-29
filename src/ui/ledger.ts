@@ -31,10 +31,10 @@ export function renderDue() {
 
 export function renderLedger() {
   const s = G.state, o = s.overdue, b = G.nextBill(), d0 = G.debt0(), r = G.loanRate(), credit = G.credit(), broke = s.branch.broke || 0;
-  const head = html`<h2>账本 <small>欠九姐的 · 第 ${s.branch.n + 1} 家店 · 第 ${s.week} 周${broke ? ` · 破产 ${broke} 次` : ''}</small></h2>`;
+  const head = html`<h2>账本 <small>欠九姐的 · 第 ${s.branch.n + 1} 家店（${G.street().name}） · 第 ${s.week} 周${broke ? ` · 破产 ${broke} 次` : ''}</small></h2>`;
   if (!s.debt && !o) {
     render(html`${head}<div class="lg-free"><p><b>债还清了。</b>这家店是你的了，不再有账单。</p>
-      <p>下面「开分店」能带走名气；九姐出下一家店的本钱（${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (s.branch.n + 1))))}）。</p></div>`, $('ledger'));
+      <p>下面「开分店」能带走名气；九姐在${G.street(s.branch.n + 1).name}出下一家店的本钱（${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (s.branch.n + 1))))}）。</p></div>`, $('ledger'));
     return;
   }
   const paid = Math.max(0, Math.min(1, 1 - s.owe / d0)), short = o ? Math.max(0, o.amount - s.cash) : 0;

@@ -740,3 +740,55 @@ console.log('ok luck percentile');
   for (let lv = 0; lv < G.SKILLS.crowd.max; lv++, G.state.skills.crowd = lv) assert.ok(G.peek('crowd', G.rate) / G.rate() > 1.05, `人气 Lv${lv + 1}`);
   console.log(`ok 成长节奏: longest wait between buys per 2 h ${p.map(wait).join(' / ')} min over 16 h; 人气 ≥ +5% walk-ins every level`);
 }
+// hitTail convolves one binomial per odds instead of stepping pack by pack: it must match the per-pack DP (the old code, kept
+// here as the reference) over several sets and 手气 levels, on both sides of the mean, and a 20-hour save (~90k packs, 14k RR)
+// must take milliseconds, not the seconds per row that froze the late game's every tick.
+{
+  const ref = (counts, kind, k) => {
+    const probs = []; let mean = 0;
+    for (const key in counts) { const { id, m } = S.parseKey(key), p = (S.ratesFor(PTCG_SETS.find(s => s.id === id), m)[kind] || 0) / 100; for (let i = 0; i < counts[key]; i++) probs.push(p); mean += p * counts[key]; }
+    const pmf = new Float64Array(k + 1); pmf[0] = 1;
+    for (const p of probs) for (let j = k; j >= 0; j--) pmf[j] = pmf[j] * (1 - p) + (j ? pmf[j - 1] * p : 0);
+    const le = pmf.reduce((a, b) => a + b, 0), lt = le - pmf[k];
+    return k >= mean ? 1 - lt : le;
+  };
+  const counts = { sv08: 700, 'sv08@1.05': 900, 'sv08.5': 400, 'me01@1.1': 600, sv10: 300 };
+  let worst = 0;
+  for (const kind of ['RR', 'UR', 'IR', 'SIR', 'REV', 'MHR']) {
+    const mean = Object.entries(counts).reduce((a, [key, n]) => { const { id, m } = S.parseKey(key); return a + n * (S.ratesFor(PTCG_SETS.find(s => s.id === id), m)[kind] || 0) / 100; }, 0);
+    for (const f of [0, 0.5, 0.9, 1, 1.1, 1.5]) { const k = Math.round(mean * f); worst = Math.max(worst, Math.abs(S.hitTail(counts, kind, k) - ref(counts, kind, k))); }
+  }
+  assert.ok(worst < 1e-9, `hitTail vs per-pack DP: worst ${worst}`);
+  const big = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 3000], [S.rateKey(s.id, 1.05), 6000]])), t0 = performance.now();
+  for (const kind of S.HITS) S.hitTail(big, kind, Math.round(Object.values(big).reduce((a, b) => a + b, 0) * 0.15));
+  const ms = performance.now() - t0;
+  assert.ok(ms < 500, `hitTail on ${Object.values(big).reduce((a, b) => a + b, 0)} packs took ${ms.toFixed(0)} ms`);
+  console.log(`ok hitTail: matches the per-pack DP (worst ${worst.toExponential(1)}); 9 rows over 90k packs in ${ms.toFixed(0)} ms`);
+}
+// luckPercentile draws a set with ≥ 1,000 packs 100 at a time from a pool of block sums: it must agree with the pack-by-pack
+// resampling it replaced (same 60k simulated packs per set, rebuilt here with the seed sim.ts uses), and take milliseconds.
+{
+  const counts = { sv08: 2000 }, r0 = S.rng(0xC0FFEE ^ 'sv08'.length), pool = Float64Array.from({ length: 60000 }, () => S.packValue(S.openPack('sv08', r0)));
+  const r = S.rng(11), vs = Array.from({ length: 2000 }, () => { let v = 0; for (let i = 0; i < 2000; i++) v += pool[Math.floor(r() * pool.length)]; return v; }).sort((x, y) => x - y);
+  for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile(counts, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.03, `block-sampled percentile at pack-by-pack q=${q} came out ${got}`); }
+  const big = { sv08: 30000, 'sv08@1.05': 30000, sv10: 30000 }, ev = Object.entries(big).reduce((s, [k, n]) => s + n * S.packEV(k), 0);
+  S.luckPercentile(big, ev); const t0 = performance.now(); S.luckPercentile(big, ev); const ms = performance.now() - t0;
+  assert.ok(ms < 100, `luckPercentile on 90k packs took ${ms.toFixed(0)} ms`);
+  console.log(`ok luckPercentile: block draws agree with pack-by-pack resampling; 90k packs in ${ms.toFixed(0)} ms`);
+}
+
+// 街口 (GAMEPLAY.md §6.2): shop n stands on STREETS[n % 4]. The first shop (老街) is the old numbers exactly; later streets tilt
+// pack demand, and a bankruptcy keeps the street. The pure manager who branches as soon as the debt is paid still clears every
+// shop in 6–11 h (「每家店用时大致不变」) and takes 名气 from each.
+{
+  const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(3), storage: null });
+  assert.equal(Z.street().name, '老街');
+  for (const s of PTCG_SETS) assert.deepEqual(Z.demand(s.id), Z.DEMAND[s.id], `老街 leaves ${s.id} as it was`);
+  const r0 = Z.rate(); Z.state.branch.n = 2; assert.ok(Math.abs(Z.rate() / r0 - Z.STREETS[2].crowd) < 1e-9, '夜市 walk-ins');
+  Z.state.branch.n = 1; assert.equal(Z.demand('sv09').w, Z.DEMAND.sv09.w * Z.STREETS[1].sets.sv09.w, '学校旁 sv09 demand');
+  Z.state.branch.n = 4; assert.equal(Z.street().name, '老街', 'the fifth shop is back on 老街');
+  const { play } = await import('../scripts/autoplay.mjs'), shops = []; let t0 = 0, got = 0;
+  play({ hours: 34, openShare: 0, pct: 0.95, reserve: 1, repay: true, branch: 'paid', log: 3600, hook: G => { let n = 0; return t => { if (G.state.branch.n !== n) { shops.push({ h: (t - t0) / 3600, fame: G.state.branch.got - got }); t0 = t; got = G.state.branch.got; n = G.state.branch.n; } }; } });
+  assert.ok(shops.length >= 4 && shops.every(s => s.h >= 6 && s.h <= 11 && s.fame >= 5), `shops: ${JSON.stringify(shops)}`);
+  console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
+}

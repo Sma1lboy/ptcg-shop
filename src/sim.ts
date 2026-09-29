@@ -110,6 +110,16 @@ export function packPercentile(key: string, value: number) {
   let up = lo; while (up < a.length && a[up] <= value + 1e-9) up++;
   return (lo + (up - lo) / 2) / a.length;
 }
+// Sums of BLOCK packs drawn from valueSamples, BLOCKS per key (~10 ms once): a set with thousands of packs is drawn a block at
+// a time, so a 20-hour save (90k packs) costs ~1M draws a check instead of 90M (0.5 s after every pack opened). 8k blocks put the
+// median 2pp off the pack-by-pack answer (the pool's spread is itself a sample); 32k is within its ~0.6pp noise.
+const BLOCK = 100, BLOCKS = 32000, blocks: Record<string, Float64Array> = {};
+function blockSamples(key: string) {
+  if (blocks[key]) return blocks[key];
+  const a = valueSamples(key), r = rng(0xB10C ^ key.length), b = new Float64Array(BLOCKS);
+  for (let i = 0; i < b.length; i++) for (let k = 0; k < BLOCK; k++) b[i] += a[Math.floor(r() * a.length)];
+  return (blocks[key] = b);
+}
 // Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
 export function luckPercentile(counts: Record<string, number>, value: number, trials?: number) { // counts: {rateKey: packs}
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
@@ -117,19 +127,42 @@ export function luckPercentile(counts: Record<string, number>, value: number, tr
   const r = rng(7); let below = 0, ties = 0;
   for (let t = 0; t < trials; t++) {
     let v = 0;
-    for (const id in counts) { const a = valueSamples(id); for (let k = 0; k < counts[id]; k++) v += a[Math.floor(r() * a.length)]; }
+    for (const id in counts) {
+      const a = valueSamples(id); let n = counts[id];
+      if (n >= 10 * BLOCK) { const b = blockSamples(id); for (; n >= BLOCK; n -= BLOCK) v += b[Math.floor(r() * b.length)]; }
+      for (let k = 0; k < n; k++) v += a[Math.floor(r() * a.length)];
+    }
     if (v < value - 1e-9) below++; else if (Math.abs(v - value) <= 1e-9) ties++;
   }
   return (below + ties / 2) / trials;
 }
 
 // Exact chance of seeing `k` or more (k >= expected) / `k` or fewer (k < expected) hits of one rarity,
-// over packs opened in several sets at the odds each was opened with (Poisson-binomial by DP, truncated at k+1 entries).
+// over packs opened in several sets at the odds each was opened with (Poisson-binomial). Packs opened at the same odds are one
+// binomial, so this convolves one binomial per odds instead of stepping pack by pack (a 20-hour save: 88k packs × 14k RR took
+// seconds per row). Terms below 1e-18 of the largest are dropped and mass past k is never needed; both cost < 1e-15.
 export function hitTail(counts: Record<string, number>, kind: string, k: number) { // counts: {rateKey: packs}
-  const probs = []; let mean = 0;
-  for (const key in counts) { const { id, m } = parseKey(key), p = (ratesFor(setOf(id), m)[kind] || 0) / 100; for (let i = 0; i < counts[key]; i++) probs.push(p); mean += p * counts[key]; }
-  const pmf = new Float64Array(k + 1); pmf[0] = 1; // P(X = j) for j <= k
-  for (const p of probs) for (let j = k; j >= 0; j--) pmf[j] = pmf[j] * (1 - p) + (j ? pmf[j - 1] * p : 0);
-  const le = pmf.reduce((a, b) => a + b, 0), lt = le - pmf[k];
+  const by = new Map<number, number>(); let mean = 0;
+  for (const key in counts) { const { id, m } = parseKey(key), p = (ratesFor(setOf(id), m)[kind] || 0) / 100; if (p > 0) by.set(p, (by.get(p) || 0) + counts[key]); mean += p * counts[key]; }
+  let cur = new Float64Array(k + 1), a = 0, b = 0; cur[0] = 1; // P(X = j) for j <= k, nonzero on [a, b]
+  for (const [p, n] of by) {
+    const g = binom(n, p), lo = a + g.lo, hi = Math.min(b + g.lo + g.q.length - 1, k), next = new Float64Array(k + 1);
+    for (let j = a; j <= b; j++) { const c = cur[j]; if (c) for (let i = 0; i < g.q.length && j + g.lo + i <= hi; i++) next[j + g.lo + i] += c * g.q[i]; }
+    cur = next; a = lo; b = hi;
+    if (a > b) return k >= mean ? 1 : 0; // every outcome is above k
+    let max = 0; for (let j = a; j <= b; j++) max = Math.max(max, cur[j]);
+    while (a < b && cur[a] < max * 1e-18) a++; while (b > a && cur[b] < max * 1e-18) b--;
+  }
+  let le = 0; for (let j = a; j <= b; j++) le += cur[j];
+  const lt = le - cur[k];
   return k >= mean ? 1 - lt : le;
+}
+// Binomial(n, p) pmf from lo up, built outward from the mode by the term ratio (no (1-p)^n underflow), cut below 1e-18 of the mode.
+function binom(n: number, p: number) {
+  if (p >= 1) return { lo: n, q: [1] };
+  const r = p / (1 - p), m = Math.min(n, Math.floor((n + 1) * p)), up = [1], down: number[] = [];
+  for (let j = m, t = 1; j < n && (t *= (n - j) / (j + 1) * r) > 1e-18; j++) up.push(t);
+  for (let j = m, t = 1; j > 0 && (t *= j / (n - j + 1) / r) > 1e-18; j--) down.push(t);
+  const q = [...down.reverse(), ...up], sum = q.reduce((x, y) => x + y, 0);
+  return { lo: m - down.length, q: q.map(x => x / sum) };
 }
