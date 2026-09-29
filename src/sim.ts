@@ -110,7 +110,8 @@ export function packPercentile(key: string, value: number) {
 // is, per rarity, the sum of that many uniform picks from its card list. A simulated player draws those counts, adds up small counts
 // card by card and large ones (> PICKS picks from one list) as a normal with the list's exact mean and variance. There is no finite
 // pool to resample: the old 60k-pack pool's mean was off by ~1/245 SD per pack, and summed over n packs that bias grew as n while
-// the spread grew as √n (1.35 SD at 88k packs). Cost doesn't grow with pack count. Error: the trial count, ±1.96·√(p(1−p)/T).
+// the spread grew as √n (1.35 SD at 88k packs). Cost doesn't grow with pack count. Error: the trial count, ±1.96·√(p(1−p)/T), plus the
+// normal approximations above (large counts only, where they are tight).
 export const LUCK_TRIALS = 4000;
 const PICKS = 100;
 interface List { v: Float64Array; mu: number; sd: number }

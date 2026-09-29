@@ -783,6 +783,12 @@ console.log('ok luck percentile');
     return { mean, v };
   };
   for (const set of PTCG_SETS) for (const key of [set.id, S.rateKey(set.id, 1.25)]) assert.ok(Math.abs(moments(key).mean - S.packEV(key)) < 1e-9, `packEV ${key} (the cosmos-foil Energy counts)`);
+  // The player's side counts the same cards (151 stocked directly, it unlocks later in the game): every pulled card (Energy and cosmos foil included) repriced from state.dex.
+  {
+    const mem = {}, Gv = createGame({ now: () => 1_700_000_000_000, random: S.rng(3), storage: { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } } });
+    Gv.state.stock['sv03.5'] = 60; const got = Gv.open('sv03.5', 60).flat();
+    assert.ok(got.some(c => c.kind === 'FE') && Math.abs(Gv.luck().value - S.packValue(got)) < 1e-6, 'luck value is every pulled card at the price openPack gave it');
+  }
   // Large: 88k packs over three keys is a sum of 88k independent packs, so it is normal to within its skew (≈ 0.1 SD here).
   const big = { sv08: 30000, 'sv08@1.05': 30000, 'sv08.5': 28000 };
   let M = 0, V = 0; for (const k in big) { const x = moments(k); M += big[k] * x.mean; V += big[k] * x.v; }
