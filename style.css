@@ -639,6 +639,7 @@ button:disabled { cursor: not-allowed; }
 #share-pop:focus-visible { outline: none; } /* focus lands on the dialog while the image renders; its buttons keep their ring */
 #share-pop img { display: block; width: 100%; height: auto; border-radius: var(--r); }
 #share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+#share-pop .pop-hint { margin: 8px 0 0; font-size: var(--fs-cap); }
 
 /* pack-opening feel: fast bulk cards, card slides off, drag-to-rip pack, swipe (ui.js) */
 .stage { touch-action: pan-y; }
