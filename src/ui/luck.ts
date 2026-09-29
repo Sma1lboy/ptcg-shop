@@ -1,5 +1,5 @@
-// 欧气检测: the verdict as a grading label, where your total sits among the simulated players (the same chart and sentences as the
-// share image, share.ts), per-rarity tally with exact tail odds.
+// 欧气检测: the verdict on the shopkeeper's BW trainer card (DESIGN.md「训练家卡」), where your total sits among the simulated
+// players (the same chart and sentences as the share image, share.ts), per-rarity tally with exact tail odds.
 import { html, render, svg } from 'lit-html';
 import * as S from '../sim.ts';
 import { G, $, money, rarLabel } from './common.ts';
@@ -12,17 +12,25 @@ function barcode(b: number[]) {
   return html`<svg class="g-bar" viewBox="0 0 ${x} 1" preserveAspectRatio="none" aria-hidden="true">${rects}</svg>`;
 }
 
-function label(g: Grade) {
-  if (g.pct == null) return html`<figure class="grade blank"><div class="g-id"><p class="g-k">欧气卡铺 · 欧气鉴定</p><p>开几包就能鉴定</p></div>
-    <p class="g-grade"><b>待鉴定</b></p></figure>`;
-  return html`<figure class="grade" aria-label="欧气鉴定：${g.L.title}，超过 ${pctText(g.pct)}% 的模拟玩家">
-    <div class="g-id">
-      <p class="g-k">欧气卡铺 · 欧气鉴定</p>
-      <p>${g.what}</p>
-      ${g.best ? html`<p class="g-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></p>` : ''}
-      <p class="g-cert">${barcode(g.bars)}<span>No. ${g.cert}</span></p>
+// The BW trainer card: a blue card with a title band, the shopkeeper's portrait on the right, the facts in rows, the verdict word
+// as the card's big line and an ID number with its barcode at the foot. Before any pack: the same card, 待鉴定
+function card(g: Grade) {
+  const who = html`<img class="tc-who" src="gen/story/owner.webp" alt="" @error=${(e: Event) => ((e.target as HTMLElement).hidden = true)}>`;
+  if (g.pct == null) return html`<figure class="tcard blank"><p class="tc-h"><span>训练家卡</span><span>欧气鉴定</span></p>
+    <div class="tc-body"><dl class="tc-rows"><div><dt>店</dt><dd>欧气卡铺</dd></div><div><dt>鉴定</dt><dd>开几包就能鉴定</dd></div></dl>
+    <p class="tc-grade"><b>待鉴定</b></p>${who}</div></figure>`;
+  return html`<figure class="tcard" aria-label="欧气鉴定：${g.L.title}，超过 ${pctText(g.pct)}% 的模拟玩家">
+    <p class="tc-h"><span>训练家卡</span><span>欧气鉴定</span></p>
+    <div class="tc-body">
+      <dl class="tc-rows">
+        <div><dt>店</dt><dd>欧气卡铺 · 第 ${G.state.branch.n + 1} 家</dd></div>
+        <div><dt>开了</dt><dd>${g.what}</dd></div>
+        ${g.best ? html`<div><dt>最贵</dt><dd class="tc-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></dd></div>` : ''}
+      </dl>
+      <p class="tc-grade"><b class=${g.L.title.length > 3 ? 'long' : ''}>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
+      ${who}
     </div>
-    <p class="g-grade"><b class=${g.L.title.length > 3 ? 'long' : ''}>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
+    <p class="tc-id">${barcode(g.bars)}<span>ID No. ${g.cert}</span></p>
   </figure>`;
 }
 
@@ -52,9 +60,9 @@ export function renderLuck() {
   const g = grade(), L = g.L, e = G.expectedTally(), t = G.state.tally, pct = g.pct;
   const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 id="luck-h">欧气检测</h2>
-      <div class="lk-a">${label(g)}
+      <div class="lk-a">${card(g)}
       ${pct == null ? html`<p class="verdict-sub">拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。</p>` : html`
-      <p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>分享图印的就是这张标签和下面这张分布</small></p>
+      <p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>分享图印的是这份鉴定和下面这张分布</small></p>
       <p class="dist-head">${g.head}</p>
       ${dist(g)}
       <p class="dist-note">${g.method}</p>

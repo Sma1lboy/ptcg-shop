@@ -38,6 +38,7 @@
   --paper: #FFFFFF;       /* the BW text box: white in both versions of the game, so white in both themes (story, receipts, labels) */
   --paper-ink: #262B33; --paper-muted: #59606D; --paper-gain: #C8261C; --paper-loss: #56698F;
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
+  --tcard: #BFE0F6; --tcard-band: #2A74D0; /* the BW trainer card (欧气鉴定): sky-blue card, blue title band. A printed object, same in both themes */
   --fx-gold: #F6A533;
   --stock-rim: #C9CED6;   /* blank card stock (DESIGN.md「卡面」): the silver border, the paper, the print, the cut edge. A printed object, same in */
   --stock: #E9ECF0;       /* both themes; the card shows it while its scan loads, and with its name when the scan can't load */
@@ -534,9 +535,36 @@ button:disabled { cursor: not-allowed; }
 .g-grade { display: grid; justify-items: end; text-align: right; }
 .g-grade b { font: 900 var(--fs-display)/1 var(--font-display); }
 .g-grade span { margin-top: 6px; font-size: var(--fs-body); font-weight: 600; }
-.grade.blank { color: var(--muted); box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 6px var(--line-strong), 0 1px 2px rgba(0, 0, 0, .2); }
-.grade.blank .g-grade b { font-size: var(--fs-lg); color: var(--muted); }
 .g-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -4px 0 16px; } .g-act small { color: var(--muted); }
+/* 训练家卡 (luck.ts card()): the BW trainer card — a light blue card with rounded corners and the dark double rim, a blue title
+   band, info rows on white strips, the shopkeeper's pixel portrait on the right, the verdict word big, an ID number and barcode at
+   the foot. A printed object: the same in both themes (like --paper). The verdict word is ink, never coloured by how good it is */
+.tcard { --ink: var(--paper-ink); --muted: var(--paper-muted); --ink-shadow: #CDD3DC; position: relative; margin: 4px 0 16px; padding: 0 0 10px; overflow: hidden; color: var(--ink);
+  border: 3px solid #262B33; border-radius: 14px; background: repeating-linear-gradient(135deg, transparent 0 8px, rgba(255, 255, 255, .28) 8px 16px), var(--tcard);
+  box-shadow: inset 0 0 0 3px var(--tcard), inset 0 0 0 4px #fff, 0 4px 0 rgba(0, 0, 0, .12); }
+.tcard p { margin: 0; }
+.tc-h { display: flex; justify-content: space-between; margin: 4px 4px 0 !important; padding: 6px 14px; border-radius: 9px 9px 0 0; background: var(--tcard-band); color: #fff;
+  font: 400 var(--fs-h)/1.2 var(--font-pixel); text-shadow: 1px 1px 0 #16305C; }
+.tc-body { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; min-height: 150px; padding: 12px 150px 4px 16px; }
+.tc-rows { display: grid; gap: 4px; margin: 0; align-content: start; }
+.tc-rows div { display: grid; grid-template-columns: 3em minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 3px 10px; border-radius: 6px; background: rgba(255, 255, 255, .78); }
+.tc-rows dt { font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--tcard-band); }
+.tc-rows dd { margin: 0; min-width: 0; font-size: var(--fs-cap); line-height: 1.5; }
+.tc-best { display: flex; gap: 8px; } .tc-best span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc-best b { font: 400 var(--fs-cap)/1.5 var(--font-tag); }
+.tc-grade { display: grid; justify-items: end; align-content: center; text-align: right; }
+.tc-grade b { font: 400 var(--fs-display)/1 var(--font-pixel); text-shadow: 3px 3px 0 var(--ink-shadow); }
+.tc-grade b.long { font-size: var(--fs-cash); }
+.tc-grade span { margin-top: 6px; font: 400 var(--fs-cap)/1 var(--font-pixel); }
+.tc-who { position: absolute; right: 8px; bottom: -14px; height: 172px; image-rendering: pixelated; pointer-events: none; }
+.tc-id { display: flex; align-items: center; gap: 8px; margin: 2px 16px 0 !important; font: 400 var(--fs-cap)/1 var(--font-tag); color: var(--muted); }
+.tc-id .g-bar { width: 92px; height: 16px; }
+.tcard.blank .tc-grade b { font-size: var(--fs-lg); color: var(--muted); text-shadow: none; }
+@media (max-width: 559px) {
+  .tc-body { grid-template-columns: minmax(0, 1fr); padding-right: 104px; min-height: 0; }
+  .tc-grade { justify-items: start; text-align: left; }
+  .tc-who { height: 120px; bottom: -8px; right: 2px; }
+}
 .verdict-sub { margin: 0 0 16px; color: var(--muted); }
 .verdict-sub b { color: var(--ink); }
 /* 分布 (luck.ts dist()): the simulated players' totals on a log money axis, the same chart as the share image's. Ink for the
