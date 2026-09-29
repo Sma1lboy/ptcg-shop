@@ -9,7 +9,7 @@ import { SETS } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel, batchBtn } from './common.ts';
 import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
-import { mountTable, ready as threeReady } from '../table3d.js';
+import { mountTable, packFront, ready as threeReady } from '../table3d.js';
 import { bill } from '../debt.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
@@ -74,7 +74,7 @@ export function renderMat() {
   }
   if (table) { table.dispose(); table = null; }
   el.classList.remove('m3d');
-  if (mat.mode === 'idle') { el.innerHTML = '<div class="mat-idle" id="mat-idle"></div>'; renderIdle(); return; }
+  if (mat.mode === 'idle') { el.innerHTML = `<div class="mat-head"><h2>今天拆哪包？</h2><span id="m3-line"></span>${sndBtn()}</div><div class="mat-idle" id="mat-idle"></div>`; renderIdle(); return; }
   const set = G.setById(mat.set);
   if (mat.mode === 'pack') {
     el.innerHTML = `<div class="mat-pack"><button type="button" class="pack" data-act="tear" aria-label="撕开这包${set.name}">
@@ -100,17 +100,24 @@ export function renderMat() {
       ${mat.finished ? batchSummary() : ''}`;
 }
 
-// Idle mat: the sealed packs in the warehouse lie on it, one tap opens one (or buys one and opens it when the warehouse is empty).
+// Idle mat without the 3D table (reduced motion, no WebGL, three.js still loading): the same 今天拆哪包？ as the 3D table — each
+// set's stack of warehouse packs in its printed foil (table3d.js packFront, the 3D pack's own art), labelled like the 3D labels
+// (shelfItems), the locked sets as one line. One tap opens one (or buys one and opens it when the warehouse is empty).
 // lit is safe here: #mat-idle is created fresh each time the mat goes idle, and innerHTML drops it (and lit's part) on the next pack.
+const fronts: Record<string, string> = {}; // set → the pack front's data URL, '' while it's drawn or when it can't be
+// The stack under the top pack: one crimp edge per 8 packs, at most 5, like the 3D stacks growing with the stock.
+const stackShadow = (n: number) => Array.from({ length: Math.min(5, Math.ceil(n / 8)) }, (_, i) => `0 ${3 * i + 2}px 0 var(--back-2), 0 ${3 * i + 3}px 0 var(--foil-3)`)
+  .concat('0 18px 26px rgba(0, 0, 0, .5)').join(', ');
 function renderIdle() {
   const box = document.getElementById('mat-idle'); if (!box) return;
-  const s = G.state, sets = SETS.filter(x => G.unlocked(x.id));
-  render(html`<p class="mat-big">开包台</p><ul class="idle-packs">${sets.map(x => {
-    const n = s.stock[x.id] || 0, w = G.wholesale(x.id);
-    return html`<li><button type="button" class="idle-pack" data-act="${n ? 'open1' : 'buyopen'}" data-id="${x.id}" ?disabled=${!n && s.cash < w}>
-        <img src="${logoUrl(x.id)}" alt=""><span class="ip-name">${x.name}</span></button>
-      <span class="ip-note">${n ? `仓库 ${n} 包 · 点开一包` : `进 1 包就开 · ${money(w)}`}</span></li>`;
-  })}</ul>`, box);
+  const items = shelfItems(), line = document.getElementById('m3-line'); if (line) line.textContent = idleLine();
+  for (const it of items) if (!(it.set in fronts)) { fronts[it.set] = ''; packFront(it.set).then((u: string | null) => { if (u) { fronts[it.set] = u; renderIdle(); } }); }
+  render(html`<ul class="idle-packs">${items.map(it => html`<li>
+      <button type="button" class="idle-pack${it.n ? '' : ' none'}" data-act="${it.n ? 'open1' : 'buyopen'}" data-id="${it.set}" ?disabled=${it.off}>
+        <span class="ip-face${fronts[it.set] ? ' art' : ''}" style="box-shadow: ${stackShadow(it.n)}">${fronts[it.set] ? html`<img src="${fronts[it.set]}" alt="">`
+          : html`<img src="${logoUrl(it.set)}" alt=""><span class="ip-name">${it.name}</span>`}</span>
+        <span class="ip-tag"><b>${it.name}</b><small>${it.note}${it.price ? html`<span>${it.price}</span>` : ''}</small></span></button></li>`)}</ul>
+    <p class="ip-next">${nextUnlock()}</p>`, box);
 }
 export const refreshIdle = () => { if (mat.mode === 'idle') { if (table) shelf3D(); else renderIdle(); } };
 
@@ -292,15 +299,16 @@ function spotlight(ms: number) { const m = $('mat'); m.classList.add('spot'); cl
 function finish() {
   if (mat.finished) return; mat.finished = true;
   const more = roundEnd(), el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
-  if (!el.querySelector('.summary') || run) { el.querySelector('.summary')?.remove(); el.insertAdjacentHTML('beforeend', batch() ? batchSummary() : packSummary(mat.cards, G.setById(mat.set))); }
   if (run) runHead();
+  // Between 连开 rounds no summary: the head already has the run's progress and 停, and a summary coming and going every round
+  // would resize the canvas (the table reframes) and throw the hint between the bottom and the top edge.
   if (more) return;
+  if (!el.querySelector('.summary') || run) { el.querySelector('.summary')?.remove(); el.insertAdjacentHTML('beforeend', batch() ? batchSummary() : packSummary(mat.cards, G.setById(mat.set))); }
   if (run?.end === 'new') { const tok = mat; showNew().then(() => { if (mat === tok) release(); }); } // the story waits until the new card has been seen
   else release(); // after the summary is in: the guide anchors its share step on the summary's button
 }
 function batchSummary() {
   const set = G.setById(mat.set), sp = shareSpec(), stock = G.state.stock[set.id] || 0, r = run;
-  if (r && !r.end) return `<div class="summary"><p>连开第 ${r.rounds} 轮开完，${r.stop ? '停下了' : '下一轮马上开始'}。</p><div class="btns">${r.stop ? '' : stopBtn()}</div></div>`;
   const [n, v, cost] = r ? [r.packs, r.value, r.cost] : [mat.packs.length, S.packValue(mat.packs.flat()), G.wholesale(set.id) * mat.packs.length], d = v - cost;
   const again = hunt(set.id) && canGo(set.id) ? `<button type="button"${stock ? '' : ' class="primary"'} data-act="autorun" data-id="${set.id}">连开到出新卡</button>` : '';
   return `<div class="summary">

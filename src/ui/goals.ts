@@ -1,4 +1,4 @@
-// 顾客 (#customers) and 店员 (#clerk) on the 货柜 page, 图鉴 (#dex) on the 欧气 page. Frozen while a pack is being revealed (dex progress would spoil the pull).
+// 顾客 (#customers) and 店员 (#clerk) on the 货柜 page. Frozen while a pack is being revealed.
 // 顾客 reads the last MISS_WINDOW of walk-ins (G.state.recent; 没买到 is G.missed, the shelf wall's count) by what they came for: pack buyers per set, each set with a price rail (every
 // customer's ceiling against your tag), then the case browsers by the rarity they asked for. Each group says what to change.
 import { html, render } from 'lit-html';
@@ -8,7 +8,7 @@ import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
 import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
-import { hold, huntable } from './mat.ts';
+import { hold } from './mat.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
@@ -174,44 +174,6 @@ function customers() {
   render(html`<h2>顾客 · 单卡</h2>${showcase(rec) || html`<p class="muted">${lately()}没有人来翻展示柜和卡本，也没有人来卖卡。</p>`}`, $('case-cust'));
 }
 
-function dex() {
-  return SETS.filter(s => G.unlocked(s.id) || G.handCount(s.id)).map(s => {
-    const c = G.dexCount(s.id), tot = G.dexTotal(s.id), share = c / tot, next = G.DEX_TIERS.find(([at]) => share < at - 1e-9);
-    const need = next ? Math.ceil(next[0] * tot - 1e-9) - c : 0;
-    return html`<li><div class="dx-h"><span>${s.name}</span><b>${c}/${tot}</b></div>
-        <div class="dx-bar" role="img" aria-label="${s.name} 图鉴 ${Math.round(share * 100)}%"><i style="width:${share * 100}%"></i>${G.DEX_TIERS.map(([at]) => html`<u style="left:${at * 100}%"></u>`)}</div>
-        <small class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(s.id) * 100)}%</small>${G.unlocked(s.id) ? collect(s.id) : ''}${hand(s.id)}</li>`;
-  });
-}
-
-// 图鉴补卡: buy the missing hits at market into the binder (never resellable); C/U/R only come from packs. 100% = 大师套.
-function collect(id: string) {
-  if (G.master(id)) return html`<small class="master">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
-  const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
-  const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
-  if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
-  return html`<div class="btns"><button type="button" data-act="collect" data-id="${id}" ?disabled=${cash < miss[0].price} title="按市价从同行买，只收进图鉴册，不能再卖">补 ${miss[0].name} ${money(miss[0].price)}</button>
-      ${miss.length > 1 ? html`<button type="button" data-act="collect" data-id="${id}" data-n="all" ?disabled=${cash < all}>闪卡全补 ${money(all)}</button>` : ''}</div>
-    <small class="muted">闪卡还缺 ${miss.length} 张，最贵的是 ${top.name} ${money(top.price)}${baseNote ? ` · ${baseNote}` : ''}</small>`;
-}
-
-// 亲手开出: the same set counted only from packs you opened (bought cards don't count). What is left, by rarity, and the one that
-// takes longest, in packs at today's 手气: the honest length of the line, not a promise.
-const packsFmt = (n: number) => (n >= 100 ? Math.round(n / 10) * 10 : Math.round(n)).toLocaleString('en-US');
-function hand(id: string) {
-  const h = G.handCount(id), tot = G.dexTotal(id);
-  if (G.handDone(id)) return html`<div class="dx-hand"><div class="dx-h"><span>亲手开出</span><b>${h}/${tot}</b></div><div class="dx-bar"><i style="width:100%"></i></div>
-      <small class="master">一张没买，全是自己开的 · 名气 +${G.HAND_FAME}（开分店时拿）</small></div>`;
-  if (!h && !G.master(id)) return ''; // nothing pulled yet: the line under the grid says what it is
-  const miss = G.handMissing(id), by: Record<string, number> = {};
-  for (const c of miss) by[c.r] = (by[c.r] || 0) + 1;
-  const left = Object.entries(by).sort((a, b) => (S.RANK[b[0]] ?? 0) - (S.RANK[a[0]] ?? 0)), top = miss[0];
-  return html`<div class="dx-hand"><div class="dx-h"><span>亲手开出</span><b>${h}/${tot}</b></div>
-      <div class="dx-bar" role="img" aria-label="${G.setById(id).name} 亲手开出 ${h}/${tot}"><i style="width:${h / tot * 100}%"></i></div>
-      <small class="muted">${h ? html`还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
-      ${G.unlocked(id) && huntable(id) ? html`<div class="btns"><button type="button" data-act="autorun" data-id="${id}" title="十包一轮自动开，出一张没亲手开出过的卡就停；仓库不够按进货价补">连开到出新卡</button></div>` : ''}</div>`;
-}
-
 function clerk() {
   if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，自动进货补上，你不在线也照样补。</p>`;
   return html`<ul class="auto">${SETS.filter(s => G.unlocked(s.id)).map(s =>
@@ -222,17 +184,7 @@ function clerk() {
 function renderGoals() {
   if (hold) return;
   customers();
-  // 回头客 is the nominal sum; past CROWD_KNEE the word-of-mouth multiplier (图鉴 × 新系列) is damped, so say what it adds up to
-  const capped = G.crowdRaw() > G.CROWD_KNEE;
-  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2><ul class="dex">${dex()}</ul>${handSum()}`, $('dex'));
   render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
-}
-
-// the line across all sets, under the grid: how far the whole book is pulled by hand
-function handSum() {
-  const h = SETS.reduce((a, s) => a + G.handCount(s.id), 0), tot = SETS.reduce((a, s) => a + G.dexTotal(s.id), 0), done = SETS.filter(s => G.handDone(s.id)).length;
-  if (!h) return '';
-  return html`<p class="dx-sum muted">亲手开出 <b>${h.toLocaleString('en-US')}/${tot.toLocaleString('en-US')}</b> 张（只数开包开出来的，补的不算）· 亲手开齐 ${done}/${SETS.length} 个系列，每套下次开分店名气 +${G.HAND_FAME} · 开分店、破产都不清零</p>`;
 }
 
 export function initGoals() {
