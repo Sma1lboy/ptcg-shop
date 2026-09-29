@@ -438,15 +438,20 @@ button:disabled { cursor: not-allowed; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
-/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
+/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box.
+   It feeds out of the till's printer slot — a strip of the case trim (gen/plate.webp) that drops in first; the paper is never framed */
 .notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05);
-  position: relative; max-width: 300px; margin: 0 0 28px; padding: 14px 16px 26px; background: var(--paper); color: var(--ink);
+  position: fixed; z-index: 15; top: calc(var(--top-h) + 4px); right: 24px; width: 290px; padding-top: 12px; color: var(--ink); }
+.notice[hidden] { display: none; }
+.notice::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 18px; border: 4px solid var(--trim);
+  border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
+  animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
+.notice .paper { position: relative; margin: 0 0 28px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
-  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%; }
-.notice[hidden] { display: none; }
-/* the receipt prints out under the register (top right), whatever page the player lands on */
-.notice { position: fixed; z-index: 15; top: calc(var(--top-h) + 10px); right: 24px; width: 290px; animation: print .6s cubic-bezier(.23, 1, .32, 1); }
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
+  animation: print .9s .22s steps(18, jump-end) backwards; } /* stepped: a thermal printer feeds in jerks, not a glide */
+@keyframes slot { from { opacity: 0; transform: translateY(-14px) scaleX(.85); } }
 @keyframes print { from { clip-path: inset(0 0 100% 0); translate: 0 -16px; } to { clip-path: inset(0 0 -20px 0); } }
 .notice h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
 .notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
@@ -540,6 +545,11 @@ button:disabled { cursor: not-allowed; }
 .summary .rank { color: var(--mat-ink); font-weight: 600; }
 #share-pop { padding: 14px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 18px / 0 stretch; background-clip: padding-box; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); background: var(--panel) padding-box; color: var(--ink); max-width: min(520px, 94vw); max-height: 94vh; overflow: auto; }
 #share-pop::backdrop { background: rgba(4, 8, 14, .72); }
+/* the share window swings up like a case door: the trim lands first with a slight overshoot, the room dims behind it */
+#share-pop[open] { animation: case-in .42s cubic-bezier(.2, 1.1, .3, 1); }
+#share-pop[open]::backdrop { animation: dim .3s ease-out; }
+@keyframes case-in { from { opacity: 0; transform: perspective(900px) translateY(28px) rotateX(14deg) scale(.94); } 55% { opacity: 1; } }
+@keyframes dim { from { opacity: 0; } }
 #share-pop:focus-visible { outline: none; } /* focus lands on the dialog while the image renders; its buttons keep their ring */
 #share-pop img { display: block; width: 100%; height: auto; border-radius: var(--r); }
 #share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
@@ -871,13 +881,19 @@ button:disabled { cursor: not-allowed; }
 .gh-goal .gt-save { max-width: 260px; }
 .ach-note { margin: 0; font-size: var(--fs-cap); }
 
-/* the unlock pop: a label printed out at the bottom right of the counter (the receipt prints top right), then pressed flat */
-.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; }
+/* the unlock pop: the grading label rises out of a slot in the counter's aluminium edge at the bottom right (the receipt prints
+   top right), then is pressed flat. The slot (gen/plate.webp) slides in once when the pop opens; queued labels rise out of it in turn */
+.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; padding-bottom: 10px; }
+.ach-pop::after { content: ""; position: absolute; left: -12px; right: -12px; bottom: 0; height: 18px; border: 4px solid var(--trim);
+  border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 8px 18px rgba(4, 8, 14, .4);
+  animation: slot-up .3s cubic-bezier(.23, 1, .32, 1) backwards; }
+@keyframes slot-up { from { opacity: 0; transform: translateY(14px) scaleX(.85); } }
+@keyframes rise { from { clip-path: inset(100% 0 0 0); translate: 0 24px; } to { clip-path: inset(-20px 0 0 0); } }
 .ach-pop[hidden] { display: none; }
 .ach-pop a { display: block; color: inherit; text-decoration: none; }
 .ach-pop ul { list-style: none; margin: 0; padding: 0; }
 .grade.pop { box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2);
-  animation: print .5s cubic-bezier(.23, 1, .32, 1), press .9s .45s cubic-bezier(.23, 1, .32, 1) backwards; }
+  animation: rise .5s .12s cubic-bezier(.23, 1, .32, 1) backwards, press .9s .57s cubic-bezier(.23, 1, .32, 1) backwards; }
 .grade.pop .g-grade b { animation: ink .7s .5s cubic-bezier(.2, .9, .3, 1.2) backwards; }
 @keyframes press { 0% { transform: translateY(-3px) rotate(-.8deg); } 30% { transform: translateY(1px) rotate(0); } 100% { transform: none; } }
 @keyframes ink { from { opacity: 0; transform: scale(1.5); } }
