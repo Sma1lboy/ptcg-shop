@@ -87,8 +87,13 @@ export function renderMat() {
   if (mat.mode === 'idle') { el.innerHTML = `<div class="mat-head"><h2>今天拆哪包？</h2><span id="m3-line"></span>${sndBtn()}</div><div class="mat-idle" id="mat-idle"></div>`; renderIdle(); return; }
   const set = G.setById(mat.set);
   if (mat.mode === 'pack') {
-    el.innerHTML = `<div class="mat-pack"><button type="button" class="pack" data-act="tear" aria-label="撕开这包${set.name}">
-        <span class="pack-crimp"></span><img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span><span class="pack-hint">点击撕开</span><span class="pack-crimp bottom"></span></button>${sndBtn()}</div>`;
+    // the pack in hand is the 3D pack's printed front (table3d.js packFront), the same art as the idle stacks; the top crimp is the
+    // art's own top strip (--art), so tearing it pulls off the printed edge. Logo + name on foil until the art has been drawn.
+    const art = fronts[set.id];
+    if (!(set.id in fronts)) { fronts[set.id] = ''; packFront(set.id).then((u: string | null) => { if (u) { fronts[set.id] = u; if (mat.mode === 'pack' && mat.set === set.id && !el.querySelector('.pack:is(.dragging, .torn)')) renderMat(); } }); }
+    el.innerHTML = `<div class="mat-head"><h2>${set.name}</h2><span class="pack-hint">点击撕开</span>${sndBtn()}</div>
+      <div class="mat-pack"><button type="button" class="pack${art ? ' art' : ''}" data-act="tear" aria-label="撕开这包${set.name}"${art ? ` style="--art: url(${art})"` : ''}>
+        <span class="pack-crimp"></span>${art ? `<img class="pack-face" src="${art}" alt="">` : `<img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span>`}<span class="pack-crimp bottom"></span></button></div>`;
     return;
   }
   if (mat.mode === 'cards') {

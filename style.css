@@ -251,7 +251,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* game buttons (DESIGN.md「按钮」): BW command buttons — a rounded face with a darker lip underneath, a dark rim, pixel print.
    Secondary is the pale command, primary the card-border yellow (one per group), danger deep red (清空存档 only). Hover lifts
    the face under the blue cursor ring, pressed drops onto the lip, disabled is a flat grey face. All CSS: no images to miss */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) { /* :is so it outranks the bare `button { color: inherit }` */
   --lip: color-mix(in oklab, var(--btn-face) 72%, var(--frame));
   min-height: 34px; padding: 6px 16px 8px; border: 2px solid var(--frame); border-radius: 8px;
   background: var(--btn-face); color: var(--btn-ink); box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5);
@@ -510,6 +510,11 @@ button:disabled { cursor: not-allowed; }
 .pack-crimp.bottom { top: auto; bottom: 0; border-radius: 0 0 6px 6px; }
 .pack.torn .pack-crimp:not(.bottom) { transform: translate(60px, -40px) rotate(18deg); opacity: 0; }
 .pack.torn { transform: scale(.97); }
+/* with the set's printed front (mat.ts, table3d.js packFront): the art is the pack; the top crimp is the art's own top strip */
+.pack.art { width: min(240px, 60vw); aspect-ratio: auto; padding: 0; border-radius: 3px; background: none; }
+.pack.art .pack-face { display: block; width: 100%; border-radius: inherit; }
+.pack.art .pack-crimp { height: 7%; border-radius: 3px 3px 0 0; background: var(--art) top / 100% auto no-repeat; }
+.pack.art .pack-crimp.bottom { display: none; }
 
 /* what the pack came to is the BW battle message box under the field: the white text box (the same in both themes, like the
    story's), the double frame, ink text. Its money colours are the receipt's (--paper-*), since it sits on paper, not on the mat */
@@ -765,7 +770,6 @@ button:disabled { cursor: not-allowed; }
 .mat-peek .cf-cap { color: var(--mat-muted); } .mat-peek .cf-price { color: var(--mat-ink); }
 .snd { margin-left: auto; }
 .snd + .ghost { margin-left: 0; }
-.mat-pack .snd { display: block; margin: 18px auto 0; }
 @keyframes deal { from { transform: translateX(70px) rotate(4deg); opacity: 0; } }
 @keyframes shake { 20% { translate: -5px 2px; } 40% { translate: 5px -3px; } 60% { translate: -3px 2px; } 80% { translate: 2px -1px; } }
 .fx-shake { animation: shake .45s; }
@@ -809,16 +813,16 @@ button:disabled { cursor: not-allowed; }
 .coach[data-strip="mat"] :is(.co-k, h3) { display: none; }
 .coach[data-strip="tab"] p { display: none; } .coach[data-strip="tab"] h3 { flex: 1; margin: 0; } /* just 「测欧气：到「欧气」页」 */
 .coach[data-strip] .co-btns { flex: none; margin: 0; }
-.coach .co-k { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
-.coach h3 { margin: 2px 0 4px; font-size: var(--fs-h); }
-.coach h3 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); }
+.coach .co-k { margin: 0; font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--muted); }
+.coach h3 { margin: 2px 0 4px; font: 400 var(--fs-h)/1.4 var(--font-pixel); }
+.coach h3 small { font: 400 var(--fs-cap)/1.4 var(--font-pixel); color: var(--muted); }
 .coach p { margin: 0; text-wrap: pretty; }
 .coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .coach-on { outline: 2px dashed var(--sticker-edge); outline-offset: 3px; }
 /* 声音 (src/ui/sound.ts): the footer's popover, the same BW window as the guide. Controls stay native (ink as their accent: not yellow, which is only for prices and the one primary button) */
 .sound { position: fixed; inset: auto 16px 16px auto; margin: 0; width: min(300px, calc(100vw - 32px)); padding: 12px 16px 14px; color: var(--ink);
   font-size: var(--fs-body); line-height: 1.6; accent-color: var(--ink); }
-.sound h3 { margin: 0 0 6px; font-size: var(--fs-h); }
+.sound h3 { margin: 0 0 6px; font: 400 var(--fs-h)/1.4 var(--font-pixel); }
 .sd-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
 .sd-row input[type="range"] { flex: 1; }
 .sd-row input { margin: 0; } .sd-row input:disabled { opacity: .5; }
@@ -1602,6 +1606,7 @@ button:disabled { cursor: not-allowed; }
   color: var(--ink); font: 400 var(--fs-cap)/1 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow); opacity: 0; transition: opacity .2s; }
 .story .st-next:is(:hover, :active) { box-shadow: none; transform: none; padding: 4px 6px; }
 .story .st-next.ready { opacity: 1; }
+.story .st-next:focus-visible { outline: none; } /* the ▼ itself is the affordance (Enter / Space / tap anywhere turns the page); a ring made it a round button */
 .story .st-next::after { content: ""; width: 14px; height: 10px; background: var(--ink); clip-path: polygon(0 0, 100% 0, 50% 100%); animation: nudge .8s steps(2, jump-none) infinite; }
 @keyframes nudge { 50% { transform: translateY(3px); } }
 @media (prefers-reduced-motion: reduce) { .story .st-next::after { animation: none; } }
@@ -1691,10 +1696,12 @@ div.rs-list { padding-top: 12px; }
   .rs-get { grid-row: 1; grid-column: 2; justify-self: end; padding-top: 2px; }
 }
 
-/* 破产结算: a case door like the share dialog, the shop dark behind it. Plain list of what went; no paper, no red (it is not money coming in) */
-.wreck { padding: 20px 22px 22px; color: var(--ink); width: min(460px, calc(100vw - 32px)); }
+/* 破产结算: the same BW window as the others, the shop dark behind it; the title is the window's dark title bar (like 凑钱), one
+   size up. Plain list of what went; no paper, no red (it is not money coming in). 重新开张 is the one key, so it's the yellow one */
+.wreck { padding: 0 22px 22px; color: var(--ink); width: min(460px, calc(100vw - 32px)); }
 .wreck::backdrop { background: rgba(4, 8, 14, .8); }
-.wreck h2 { margin: 0 0 8px; font: 400 var(--fs-display)/1.1 var(--font-display); letter-spacing: .08em; }
+.wreck h2 { --ink: var(--hud-ink); margin: 0 -22px 14px; padding: 10px 22px; border-radius: calc(var(--r-frame) - 3px) calc(var(--r-frame) - 3px) 0 0; background: var(--hud);
+  color: var(--ink); font: 400 var(--fs-lg)/1.3 var(--font-pixel); letter-spacing: .08em; text-shadow: 2px 2px 0 #0B0D10; }
 .wreck p { margin: 0 0 10px; }
 .wr-say { color: var(--muted); }
 .wr-list { display: grid; gap: 4px; margin: 0 0 14px; }

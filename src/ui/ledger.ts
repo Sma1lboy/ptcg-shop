@@ -201,7 +201,7 @@ export function renderWreck() {
     </dl>
     <p class="wr-keep"><b>留下</b>图鉴 ${dex} 张、成就 ${ach} 个、欧气检测记录、名气 ${s.branch.fame}${s.branch.got ? ' 和名气加成' : ''}。</p>
     <p class="wr-keep"><b>往后</b>同一家店从第 1 周重来，欠 ${money(s.debt)}；借款周息 ${pct(G.loanRate())}（每破产一次 +${pct(G.LOAN_MARK)}）。</p>
-    <button type="button" data-act="ackwreck">重新开张</button>`, dlg);
+    <button type="button" class="primary" data-act="ackwreck">重新开张</button>`, dlg);
   if (!dlg.open) dlg.showModal();
 }
 
