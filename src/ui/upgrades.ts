@@ -118,7 +118,8 @@ function milestones() {
 // 闲钱 under 下一步: what is free to spend once the next bill is set aside — the number the 成长 badge counts with.
 function spareLine() {
   const b = G.state.overdue ?? G.nextBill(); if (!b) return '';
-  return html`<p class="gg-spare">闲钱 <b>${money(G.spare())}</b><span>现金 ${money(G.state.cash)} − ${G.state.overdue ? '逾期的账' : `第 ${b.week} 周的账`} ${money(b.amount)}。升级先用闲钱，账单的钱留着</span></p>`;
+  const lp = G.state.overdue ? 0 : G.nextBill()?.loanPay || 0; // 顺手还 is set aside too (G.spare)
+  return html`<p class="gg-spare">闲钱 <b>${money(G.spare())}</b><span>现金 ${money(G.state.cash)} − ${G.state.overdue ? '逾期的账' : `第 ${b.week} 周的账`} ${money(b.amount)}${lp ? ` − 顺手还借款 ${money(lp)}` : ''}。升级先用闲钱，账单的钱留着</span></p>`;
 }
 
 export function renderUpgrades() {

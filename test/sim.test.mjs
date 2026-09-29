@@ -556,10 +556,12 @@ console.log('ok luck percentile');
   st().cash = 1e5; st().earned.sealed = 1; week();
   assert.deepEqual(evs.map(e => [e.type, e.week, e.amount]), [['bill_due', 1, G.BILL0], ['bill_paid', 1, G.BILL0]]);
   assert.deepEqual([st().week, st().owe, st().billsPaid, st().cash], [2, G.DEBT0 - G.BILL0, 1, 1e5 - G.BILL0]);
-  // Loan interest: $1,000 left alone for two weeks is $1,210 (10% a week, compounded); repaying takes the loan first.
-  assert.ok(G.takeLoan(1000)); assert.equal(evs.at(-1).type, 'loan_taken'); week(); week();
-  assert.equal(st().loan, 1210, 'weekly compound interest'); assert.equal(st().debt, st().owe + st().loan);
-  const owe0 = st().owe; G.repay(1300); assert.deepEqual([st().loan, st().owe], [0, owe0 - 90], 'repay: loan first, then the installments');
+  // Loan interest: 10% a week, compounded; a till with money beyond the float pays it down after each bill (顺手还). This used to
+  // assert $1,000 → $1,210 in two weeks with $100k in the till; since R32 that till pays it back ($1,100 → $100 → 0), and the
+  // $1,210 case (a till with nothing to spare) is in the 顺手还 test at the end of this file. Repaying takes the loan first.
+  assert.ok(G.takeLoan(1000)); assert.equal(evs.at(-1).type, 'loan_taken'); assert.equal(G.loanWeeks(), 2); week();
+  assert.equal(st().loan, 100, 'grown to 1,100, then 顺手还 takes the minimum back'); assert.equal(st().debt, st().owe + st().loan); week(); assert.equal(st().loan, 0);
+  G.takeLoan(1000); const owe0 = st().owe; G.repay(1300); assert.deepEqual([st().loan, st().owe], [0, owe0 - 300], 'repay: loan first, then the installments');
   // Short of cash: bill_missed, 5 minutes of grace (paying works once cash is there), then 九姐 lends the difference.
   evs.length = 0; st().cash = 10; st().stock.sv08 = 50; week(); // (packs in the back room: no soft-lock loan in the way)
   assert.deepEqual(evs.map(e => e.type), ['bill_due', 'bill_missed']); assert.ok(st().overdue && !G.payBill(), 'overdue, and 10 cash does not pay it');
@@ -594,7 +596,7 @@ console.log('ok luck percentile');
   const mgr = KINDS['纯经营']({ hours: 4, seed: 1 }).debt, idle = KINDS['挂机离线']({ hours: 48, seed: 1 }).debt, noob = KINDS['新手乱点']({ hours: 2, seed: 1 }).debt;
   assert.deepEqual([mgr.broke, idle.broke, noob.broke], [[], [], []], 'no bankruptcy for the manager (4h), the idler (48h) or the newbie in the first 2h');
   assert.ok(mgr.paid >= 11 && mgr.forced === 0, `the manager pays every bill from takings (${mgr.paid} paid, ${mgr.forced} forced loans)`);
-  console.log(`ok 债务: ${w - 1} installments, $1,000 → $1,210 in 2 weeks, grace → loan → bankruptcy, 8h closed = 1 week; manager ${mgr.paid} bills in 4h, idler ${idle.paid} in 48h, newbie ${noob.paid} in 2h`);
+  console.log(`ok 债务: ${w - 1} installments, a $1,000 loan paid back in 2 weeks from a full till, grace → loan → bankruptcy, 8h closed = 1 week; manager ${mgr.paid} bills in 4h, idler ${idle.paid} in 48h, newbie ${noob.paid} in 2h`);
 }
 // 剧情: every scene has lines, every line renders to text (debt lines with and without a bill; milestones always get their card/set); debt beats degrade to nothing
 // on a game without the economy, map each event to its scene once per week, and a paid week after the first plays the short line.
@@ -1019,4 +1021,35 @@ console.log('ok luck percentile');
   const rash = runs('冲动新手'), calm = runs('冲动新手·看闲钱'), loans = r => r.reduce((a, d) => a + d.loans, 0);
   assert.ok(loans(rash) >= 3 && loans(calm) === 0, `growth bought with the bill's money borrows (${loans(rash)} loans in 3 × 3 h), out of 闲钱 none`);
   console.log(`ok 闲钱/退回: badge counts cash beyond the bill, this week's buys go back at ${G.REFUND * 100}% while short; 冲动新手 ${loans(rash)} loans, 看闲钱 0`);
+}
+
+// 顺手还 (GAMEPLAY §4.5): after a week's bill is paid, 九姐 takes a third of the loan (at least LOAN_MIN) back from cash above the
+// float. It never makes a bill late, is never borrowed for and never bankrupts; a till with nothing beyond the float just compounds.
+// And the point of it: the player who spends every dollar on growth and never repays (冲动新手) used to end with the loan stuck at the
+// credit line for good (~$50k at 16 h, 0/20 seeds cleared); now the loan shrinks whenever the till has room.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(8), storage: null }), st = () => G.state, evs = []; G.on(ev => { if (ev?.type) evs.push(ev); });
+  const week = () => { for (let i = 0; i < G.WEEK; i += 20) { T += 20e3; G.tick(); } };
+  // a shop that sells nothing (packs in the back room only, so no soft-lock loan either) and a till just over the bills
+  st().shelves.forEach(x => { x.qty = 0; }); st().stock.sv08 = 50; st().loan = 1000; st().debt = st().owe + 1000;
+  st().cash = G.installment(1) + G.installment(2) + 500;
+  assert.equal(G.nextBill().loanPay, G.LOAN_MIN, 'scheduled: the minimum (a third of $1,100 is less)');
+  assert.equal(G.spare(), Math.max(0, st().cash - G.nextBill().amount - G.LOAN_MIN), '闲钱 sets the 顺手还 aside too');
+  week(); week();
+  assert.deepEqual(evs.map(e => e.type), ['bill_due', 'bill_paid', 'bill_due', 'bill_paid'], 'both bills paid, nothing borrowed');
+  assert.equal(st().loan, 1210, 'nothing above the float: it compounds, $1,000 → $1,210 in two weeks');
+  // money above the float: the scheduled third comes back, and the float stays in the till
+  st().best = 1e5; st().loan = 30000; st().debt = st().owe + st().loan; st().cash = G.installment(3) + G.loanFloat() + 50000; // under a $100k credit line
+  assert.equal(G.nextBill().loanPay, 11000); week(); assert.ok(Math.abs(st().loan - 22000) < 1, 'grown to $33,000, a third back');
+  st().cash = G.installment(4) + G.loanFloat() + 700; const L2 = st().loan; week();
+  assert.ok(Math.abs(st().loan - (L2 * (1 + G.loanRate()) - 700)) < 1 && Math.abs(st().cash - G.loanFloat()) < 1, 'only what is above the float');
+  // a bill the till can't cover: no 顺手还 on top, and the forced loan is still exactly the shortfall
+  evs.length = 0; st().cash = 10; const L3 = st().loan; week(); for (let i = 0; i < G.GRACE + 40; i += 20) { T += 20e3; G.tick(); }
+  const forced = evs.find(e => e.type === 'loan_taken'); assert.ok(forced?.forced && Math.abs(st().loan - (L3 * (1 + G.loanRate()) + forced.amount - (evs.find(e => e.type === 'bill_paid').amount - G.installment(5)))) < 1, 'overdue: borrowed the short, nothing else taken');
+  // the loan is the last of the debt: 顺手还 clears it and the shop is yours
+  st().owe = 0; st().loan = 500; st().debt = 500; st().cash = G.loanFloat() + 1e4; evs.length = 0; week();
+  assert.ok(st().debt === 0 && evs.some(e => e.type === 'story' && e.id === 'debt_cleared'), '顺手还 can clear the debt');
+  const { KINDS } = await import('../scripts/autoplay.mjs'), r = KINDS['冲动新手']({ hours: 16, seed: 1 });
+  assert.ok(r.debt.cleared && r.debt.broke.length === 0, `冲动新手 seed 1 clears the debt in 16 h (${r.debt.cleared?.h} h; before 顺手还 its loan was $53k)`);
+  console.log(`ok 顺手还: poor till compounds to $1,210, a rich one pays a third back above the float; 冲动新手 cleared at ${r.debt.cleared.h} h`);
 }
