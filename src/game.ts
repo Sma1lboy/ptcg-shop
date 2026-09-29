@@ -63,6 +63,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     sv09: { tag: '平价好开', w: 0.9, tol: -0.03, budget: 0.7, crowd: 0.1 }, // cheapest pack, a double rare in 1 of 5: kids on pocket money, shopping around
     me01: { tag: '新世代', w: 1.2, tol: 0.04, budget: 1.2, crowd: 0.1 },    // first Mega Evolution set: everyone wants a look at the new series
     me02: { tag: '追喷火龙', w: 1.4, tol: 0.12, budget: 1.5, crowd: 0.1 },   // Mega Charizard X SIR is the chase card of the era: chasers pay over market
+    me03: { tag: '便宜没大卡', w: 0.9, tol: -0.04, budget: 0.8, crowd: 0.1 }, // cheapest Mega set, its best cards (Meowth ex SIR, Mega Zygarde MHR) only ~$100: bought on price
+    me04: { tag: '追忍蛙', w: 1.2, tol: 0.08, budget: 1.3, crowd: 0.1 },     // Mega Greninja ex SIR and MHR (~$150 each): fans pay a little over market
+    me05: { tag: '新品上市', w: 1.3, tol: 0.03, budget: 1, crowd: 0.1 },     // newest release (Mega Darkrai ex): the most asked-for set, at a normal price
   };
   const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
@@ -90,7 +93,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // returns toward CROWD_KNEE + room(), room = CROWD_ROOM + ROOM_STEP per 店面扩建 level. Game setting, so the late shop keeps
   // growing without traffic running away; 店面扩建 is the open-ended place late cash goes (cost ×1.6 a level, the gain shrinks).
   const CROWD_KNEE = 2, CROWD_ROOM = 1, ROOM_STEP = 0.5;
-  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000 }; // lifetime revenue needed before a set can be stocked
+  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
     racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i)) }, // up to one per set: a second shelf of a set is only more depth

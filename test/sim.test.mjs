@@ -38,10 +38,11 @@ for (const set of PTCG_SETS) {
 }
 // 手气 (game bonus) must leave the measured odds alone: with no bonus, openPack is byte-identical to the pre-手气 code
 // (hash recorded from that code, 2000 packs per set, seed 42), and the default argument is the same as m = 1.
-// Sets are locked in groups so adding a set never moves an existing digest: the first four sets, then the three added with MHR.
+// Sets are locked in groups so adding a set never moves an existing digest: the first four sets, the three added with MHR, then me03–me05.
 {
   const LOCK = [[['sv08', 'sv10', 'sv08.5', 'sv03.5'], '321b156f4309598b9545f432c25e2ae6fa16e292adf9bb8643c5a5e6c7df7254'],
-    [['sv09', 'me01', 'me02'], 'fbedfccba29145577bd60d0040e7a88b3a6615c1c359e8afdb0c978ccd524953']];
+    [['sv09', 'me01', 'me02'], 'fbedfccba29145577bd60d0040e7a88b3a6615c1c359e8afdb0c978ccd524953'],
+    [['me03', 'me04', 'me05'], '8d63816751b209fc6187278b106fe6341f6aa8fbb4a4acef17e86e8f1d6070c4']];
   assert.deepEqual(LOCK.flatMap(([ids]) => ids), PTCG_SETS.map(s => s.id), 'every set is hash-locked');
   for (const [ids, digest] of LOCK) for (const m of [undefined, 1]) {
     const h = createHash('sha256');
@@ -339,7 +340,7 @@ console.log('ok luck percentile');
     G.reset(); T += 1; const r0 = G.rate();
     assert.equal(G.lineup(), 0, 'no new-set crowd before anything unlocks');
     const late = PTCG_SETS.filter(s => G.DEMAND[s.id]?.crowd).sort((a, b) => a.released.localeCompare(b.released));
-    assert.ok(PTCG_SETS.every(s => G.DEMAND[s.id]) && late.length === 3, 'every set has buyers');
+    assert.ok(PTCG_SETS.every(s => G.DEMAND[s.id]) && late.length === PTCG_SETS.length - 4, 'every set has buyers, every set after the first four brings walk-ins');
     assert.ok(late.every((s, i) => G.unlockAt(s.id) > G.unlockAt('sv03.5') && (!i || G.unlockAt(s.id) > G.unlockAt(late[i - 1].id))), 'later releases unlock later');
     st().earned.sealed = G.unlockAt(late[0].id); assert.ok(Math.abs(G.rate() / r0 - 1 - G.DEMAND[late[0].id].crowd) < 1e-9, 'one new set, its crowd');
     st().earned.sealed = 1e9; assert.ok(Math.abs(G.rate() / r0 - 1 - late.reduce((a, s) => a + G.DEMAND[s.id].crowd, 0)) < 1e-9, 'all of them');
