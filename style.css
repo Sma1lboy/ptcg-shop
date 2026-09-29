@@ -49,7 +49,8 @@
   --back-2: #0E214D;
   --back-ring: #E9ECF2;
   --foil-1: #C9D1DC; --foil-2: #F4F6F9; --foil-3: #9AA6B5;
-  --foil-gold-1: #DBA256; --foil-gold-2: #FBEBC4; --foil-gold-3: #B8812F; /* 金标 / 黑标 achievement labels: gold foil stock, amber like --gold */
+  --foil-gold-1: #DBA256; --foil-gold-2: #FBEBC4; --foil-gold-3: #B8812F; /* 金牌 / 荣誉 medals (成就): gold foil, amber like --gold */
+  --foil-bronze-1: #C98C5E; --foil-bronze-2: #F2CFAE; --foil-bronze-3: #8E5A36; /* 铜牌 medals: the first tier, below silver */
   --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the lamp over the table, warm white by day */
   --lamp-fill: #DCE4EF;   /* daylight fill from the room */
   --lamp-rim: #CFDDF5;    /* back light that outlines the pack's edges */
@@ -516,25 +517,7 @@ button:disabled { cursor: not-allowed; }
 .mat .btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
 
-/* 欧气鉴定 (luck.ts label()): the verdict printed as the label of a graded-card slab: white label stock with the card-back navy
-   print and an inset navy frame, paper in both themes like the receipt. Left what was graded and the cert barcode, right the grade.
-   share.ts prints the same fields on the slab in the share image */
-.grade { --ink: var(--paper-ink); --muted: var(--paper-muted); --line-strong: rgba(20, 32, 58, .34);
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 20px; margin: 4px 0 16px; padding: 16px 20px;
-  background: var(--paper); color: var(--ink); border-radius: 3px;
-  box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 1px 2px rgba(0, 0, 0, .2); }
-.grade p { margin: 0; }
-.g-id { display: grid; gap: 2px; min-width: 0; font-size: var(--fs-cap); line-height: 1.45; }
-.g-k { font-size: var(--fs-body); font-weight: 700; letter-spacing: .06em; }
-.g-best { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
-.g-best span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.g-best b { font: 600 var(--fs-body)/1 var(--font-tag); }
-.grade .g-cert { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
-.g-bar { width: 92px; height: 18px; flex: none; fill: var(--ink); }
-.g-cert span { white-space: nowrap; }
-.g-grade { display: grid; justify-items: end; text-align: right; }
-.g-grade b { font: 900 var(--fs-display)/1 var(--font-display); }
-.g-grade span { margin-top: 6px; font-size: var(--fs-body); font-weight: 600; }
+.g-bar { flex: none; fill: var(--ink); } /* the barcode on the trainer card's foot (luck.ts barcode()) */
 .g-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -4px 0 16px; } .g-act small { color: var(--muted); }
 /* 训练家卡 (luck.ts card()): the BW trainer card — a light blue card with rounded corners and the dark double rim, a blue title
    band, info rows on white strips, the shopkeeper's pixel portrait on the right, the verdict word big, an ID number and barcode at
@@ -885,10 +868,6 @@ button:disabled { cursor: not-allowed; }
   .mat { padding: 14px; }
   .stage { width: min(260px, 66vw); }
   .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
-  .g-grade b { font-size: 36px; }
-  .g-grade b.long { font-size: 28px; }
-  .g-bar { width: 64px; }
-  .grade { gap: 4px 14px; padding: 14px 16px; }
 }
 .tally td:nth-child(4) { padding-left: 8px; }
 
@@ -1467,7 +1446,8 @@ button:disabled { cursor: not-allowed; }
   .subnav { flex: 1 1 100%; } .subnav a { flex: 1; min-width: 0; padding: 0 6px; height: 44px; white-space: nowrap; } .sub-k { display: none; }
   .cust-head { gap: 4px 10px; } .cust-head .cust-bar { flex-basis: 100%; max-width: none; order: 1; }
 }
-@media (max-width: 379px) { .cash .k { display: none; } } /* 360-wide phones: the coin goes, the money box still says 所持金 by its white frame */
+@media (max-width: 429px) { .cash .k { display: none; } } /* phones: the coin goes (the money box still reads as 所持金 by its white frame), so a 7-character sum ($129.62, $31,262) fits beside both readouts */
+@media (max-width: 379px) { .sub dd { font-size: var(--fs-cap); } .sub div { padding: 3px 5px; } } /* 320–379: three-digit readouts ("598 包") beside a 7-character sum */
 @media (max-width: 359px) { .due .bar { display: none; } } /* 320–359: the countdown stays, its HP bar goes (the ledger has it) */
 @media (min-width: 780px) and (max-width: 859px) { .due .bar { width: 44px; --in: 3px; } .due .bar::before { display: none; } .nav a { padding: 0 6px; } }
 
@@ -1511,80 +1491,70 @@ button:disabled { cursor: not-allowed; }
   .nav a::before { width: 18px; height: 18px; }
 }
 
-/* 成就 (ui/ach.ts, DESIGN.md「成就」): each achievement is a small grading label, the same object as the 欧气鉴定 label —
-   earned: navy frame, cert number and the day, the achievement's word as the grade, on the label stock of its tier; not yet: one
-   outline row (name, what to do, progress, which stock it prints on). Labels sit flat on the page in a grid; the page is not boxed */
+/* 奖章 (ui/ach.ts, DESIGN.md「奖章」): BW2's medal box. Earned: a round medal struck in its tier with the achievement's word on it,
+   beside a small white window (group · tier, name, what it took, the day, the bonus). Not yet: one outline row (name, what to do,
+   progress, which medal it would be). Medals are struck objects: the same in both themes */
 .page-ach { --page-ink: var(--ink); --page-muted: var(--muted); --page-line: var(--line-strong); grid-template-columns: minmax(0, 1fr); }
 .ach-group { margin-top: 36px; }
 .ach-group > h2 { margin-bottom: 12px; }
 .ach-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px 16px; }
-.grade.ach { --gain: var(--paper-gain); --lbl: var(--paper); position: relative; margin: 0; padding: 14px 16px 14px 18px; gap: 4px 14px; align-items: start; }
-.grade.ach .g-id { gap: 1px; }
 .a-name { font-size: var(--fs-h); font-weight: 700; line-height: 1.35; }
-.grade.ach .g-k { font-size: var(--fs-cap); letter-spacing: .04em; }
-.grade.ach .g-cert { justify-content: space-between; margin-top: 6px; font-family: var(--font-tag); font-size: var(--fs-body); }
-.grade.ach .g-grade { align-self: stretch; align-content: center; min-width: 3.2em; }
-.grade.ach .g-grade b { font-size: 34px; }
-.grade.ach .g-grade b.long { font-size: 22px; }
-.grade.ach .g-grade b.tag { font: 700 40px/1 var(--font-tag); }
-.grade.ach .g-grade span { font: 600 var(--fs-body)/1.2 var(--font-tag); }
-.a-new { display: inline-block; margin-right: 6px; padding: 0 4px; border-radius: 2px; background: var(--ink); color: var(--lbl); font-style: normal; font-weight: 700; letter-spacing: 0; }
-/* tiers = the label stock, as graders print special labels for rare grades. 银标 / 金标: a foil band round the navy frame; 黑标:
-   card-back navy stock, light print, the grade word stamped in gold foil. 金标 and 黑标 carry a resting glint that sweeps on unlock */
-.t-silver { --foil: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1) 55%, var(--foil-2) 75%, var(--foil-3)); }
-:is(.t-gold, .t-black) { --foil: linear-gradient(135deg, var(--foil-gold-3), var(--foil-gold-2) 35%, var(--foil-gold-1) 55%, var(--foil-gold-2) 75%, var(--foil-gold-3)); }
-.grade.ach:is(.t-silver, .t-gold, .t-black) { border: 5px solid transparent; padding: 9px 11px 9px 13px; background: linear-gradient(var(--lbl) 0 0) padding-box, var(--foil) border-box;
-  box-shadow: inset 0 0 0 3px var(--lbl), inset 0 0 0 5px var(--ink), 0 1px 2px rgba(0, 0, 0, .2); }
-.grade.ach.t-black { --lbl: var(--back-2); --ink: var(--mat-ink); --muted: var(--mat-muted); --gain: var(--mat-gain); box-shadow: inset 0 0 0 3px var(--lbl), inset 0 0 0 4px var(--foil-gold-3), 0 1px 2px rgba(0, 0, 0, .3); }
-.grade.ach.t-black .g-grade b { background: var(--foil); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.grade.ach:is(.t-gold, .t-black)::after { content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: soft-light;
-  background: linear-gradient(115deg, transparent 40%, rgba(255, 255, 255, .9) 50%, transparent 60%) 70% 0 / 300% 100% no-repeat; transition: background-position .6s; }
-.grade.ach:is(.t-gold, .t-black):hover::after { background-position: 20% 0; }
-/* not yet: an outline row on the page, not a label; the chip is the stock it would print on */
+/* tier = what the medal is struck in: 铜 / 银 / 金 foil faces, 荣誉 the card-back navy with a gold rim and a gold word */
+.t-white { --m1: var(--foil-bronze-1); --m2: var(--foil-bronze-2); --m3: var(--foil-bronze-3); --m-ink: #3A2616; }
+.t-silver { --m1: var(--foil-1); --m2: var(--foil-2); --m3: var(--foil-3); --m-ink: #262B33; }
+.t-gold { --m1: var(--foil-gold-1); --m2: var(--foil-gold-2); --m3: var(--foil-gold-3); --m-ink: #3A2616; }
+.t-black { --m1: var(--back-1); --m2: #2C4F94; --m3: var(--back-2); --m-ink: var(--foil-gold-2); }
+.medal { position: relative; display: grid; place-items: center; flex: none; width: 64px; height: 64px; border: 3px solid #262B33; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, var(--m2), var(--m1) 45%, var(--m3) 100%);
+  box-shadow: inset 0 0 0 3px color-mix(in oklab, var(--m2) 70%, transparent), inset 0 0 0 5px var(--m3), 0 3px 0 rgba(0, 0, 0, .18); }
+.t-black .medal { border-color: var(--foil-gold-3); }
+.medal b { font: 400 var(--fs-h)/1 var(--font-pixel); color: var(--m-ink); text-shadow: 1px 1px 0 color-mix(in oklab, var(--m2) 80%, white); }
+.medal b.long { font-size: var(--fs-cap); }
+.medal b.tag { font: 400 var(--fs-lg)/1 var(--font-tag); }
+.t-black .medal b { text-shadow: 1px 1px 0 #0B0D10; }
+/* the medal's window: a small BW window, the medal half over its left edge */
+.medal-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; margin: 0; padding: 10px 12px; color: var(--ink);
+  border: 2px solid var(--frame); border-radius: var(--r-frame); background: var(--panel); box-shadow: inset 0 0 0 2px var(--panel), inset 0 0 0 3px var(--frame-in), 0 3px 0 rgba(0, 0, 0, .08); }
+.medal-row p { margin: 0; }
+.m-txt { display: grid; gap: 1px; min-width: 0; font-size: var(--fs-cap); line-height: 1.45; }
+.m-k { font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--muted); }
+.m-desc { color: var(--muted); }
+.m-foot { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px !important; font: 400 var(--fs-cap)/1.5 var(--font-tag); color: var(--muted); }
+.m-foot b { font-weight: 400; color: var(--ink); } .m-foot b.gain { color: var(--gain); }
+.a-new { display: inline-block; margin-right: 6px; padding: 0 4px; border-radius: 4px; background: var(--sel); color: var(--panel); font-style: normal; text-shadow: none; } /* the cursor blue: news, not a button */
+/* not yet: an outline row on the page; the chip is a small medal of the tier it would be */
 .ach-todos { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 16px; }
 .ach-todo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-content: start; gap: 2px 12px; padding: 9px 2px 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: var(--fs-cap); line-height: 1.45; }
 .ach-todo p { margin: 0; }
 .ach-todo .a-name { color: var(--ink); font-size: var(--fs-body); font-weight: 700; }
 .ach-todo .a-pay { display: flex; align-items: center; gap: 6px; white-space: nowrap; font-family: var(--font-tag); font-size: var(--fs-body); }
 .ach-todo :is(.a-desc, .a-prog) { grid-column: 1 / -1; }
-.a-chip { display: inline-block; flex: none; width: 10px; height: 13px; border-radius: 1px; vertical-align: -2px; background: var(--paper); box-shadow: inset 0 0 0 1px var(--line-strong); }
-:is(.t-silver, .t-gold) .a-chip { background: var(--foil); box-shadow: none; }
-.t-black .a-chip { background: var(--back-2); box-shadow: inset 0 0 0 1.5px var(--foil-gold-3); }
+.a-chip { display: inline-block; flex: none; width: 12px; height: 12px; border: 1.5px solid #262B33; border-radius: 50%; vertical-align: -2px; background: radial-gradient(circle at 34% 30%, var(--m2), var(--m1) 50%, var(--m3)); }
 .gh-tier dt { display: flex; align-items: center; gap: 6px; }
 .a-prog { display: flex; align-items: center; gap: 8px; margin-top: 4px !important; font-family: var(--font-tag); font-size: var(--fs-body); }
 .a-prog .bar { flex: 1; max-width: 160px; }
 .gh-goal .bar { max-width: 260px; }
 .ach-note { margin: 0; font-size: var(--fs-cap); }
 
-/* the unlock label prints out of the same slot as the receipt (.pops), under it if the receipt is hanging, then is pressed flat */
+/* the unlock pops out of the same slot as the receipt (.pops): the window prints down, then the medal drops onto it and rings */
 .ach-pop[hidden] { display: none; }
 .ach-pop a { display: block; color: inherit; text-decoration: none; }
 .ach-pop ul { list-style: none; margin: 0; padding: 0; }
-.grade.pop { box-shadow: inset 0 0 0 5px var(--lbl), inset 0 0 0 7px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2);
-  animation: print .5s .12s steps(10, jump-end) backwards, press .9s .57s cubic-bezier(.23, 1, .32, 1) backwards; }
-.grade.pop .g-grade b { animation: ink .7s .5s cubic-bezier(.2, .9, .3, 1.2) backwards; }
-@keyframes press { 0% { transform: translateY(-3px) rotate(-.8deg); } 30% { transform: translateY(1px) rotate(0); } 100% { transform: none; } }
-@keyframes ink { from { opacity: 0; transform: scale(1.5); } }
-.grade.pop:is(.t-silver, .t-gold, .t-black) { box-shadow: inset 0 0 0 3px var(--lbl), inset 0 0 0 5px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2); }
-.grade.pop.t-black { box-shadow: inset 0 0 0 3px var(--lbl), inset 0 0 0 4px var(--foil-gold-3), 0 14px 34px rgba(4, 8, 14, .4); }
-.grade.pop:is(.t-gold, .t-black)::after { animation: sheen 1.1s 1s cubic-bezier(.3, 0, .2, 1) backwards; } /* the foil catches the light once it is pressed down */
-@keyframes sheen { from { background-position: 100% 0; } to { background-position: 70% 0; } }
-@media (prefers-reduced-motion: reduce) { .grade.pop, .grade.pop .g-grade b, .grade.pop::after { animation: none; } .grade.ach::after { transition: none; } }
+.medal-row.pop { box-shadow: inset 0 0 0 2px var(--panel), inset 0 0 0 3px var(--frame-in), 0 12px 28px rgba(4, 8, 14, .3);
+  animation: print .5s .12s steps(10, jump-end) backwards; }
+.medal-row.pop .medal { animation: strike .6s .55s steps(6, jump-end) backwards; }
+@keyframes strike { from { opacity: 0; transform: translateY(-18px) scale(1.4); } 60% { opacity: 1; transform: translateY(2px) scale(.95); } }
+@media (prefers-reduced-motion: reduce) { .medal-row.pop, .medal-row.pop .medal { animation: none; } }
 @media (max-width: 779px) {
   .ach-todos { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  /* phones: the earned labels as a two-up binder page, each only the grade word and its prize, the stock and the name */
+  /* phones: two medals a row, each only its medal, name and prize */
   .ach-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .page-ach .grade.ach:not(.pop) { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 10px 11px; }
-  .page-ach .grade.ach:is(.t-silver, .t-gold, .t-black) { padding: 7px 8px; }
-  .page-ach .grade.ach:not(.pop) .g-grade { order: -1; display: flex; align-items: baseline; justify-content: space-between; gap: 6px; min-width: 0; }
-  .page-ach .grade.ach:not(.pop) .g-grade b { font-size: 26px; } .page-ach .grade.ach:not(.pop) .g-grade b.long { font-size: 17px; } .page-ach .grade.ach:not(.pop) .g-grade b.tag { font-size: 30px; }
-  .page-ach .grade.ach:not(.pop) .g-grade span { margin: 0; font-size: var(--fs-cap); }
-  .page-ach .grade.ach:not(.pop) :is(.a-shop, .g-id > p:not(.g-k, .a-name)) { display: none; }
-  .page-ach .grade.ach:not(.pop) .a-name { font-size: var(--fs-body); }
+  .page-ach .medal-row:not(.pop) { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; gap: 6px; padding: 10px 8px; }
+  .page-ach .medal-row:not(.pop) :is(.m-desc, .m-k) { display: none; }
+  .page-ach .medal-row:not(.pop) .a-name { font-size: var(--fs-body); }
+  .page-ach .medal-row:not(.pop) .m-foot { justify-content: center; }
   .sound { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); } /* above the docked nav */
-  /* phones: only the name and the prize, two lines */
-  .ach-pop .grade.pop { padding-block: 10px; }
-  .ach-pop .grade.pop :is(.g-id > p:not(.g-k, .a-name), .a-shop) { display: none; }
+  .ach-pop .medal-row.pop .m-desc { display: none; } /* phones: only the name and the prize */
   .nav a { padding: 0 2px; }
 }
 

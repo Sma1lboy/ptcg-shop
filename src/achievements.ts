@@ -14,9 +14,9 @@ export interface Ach {
 }
 
 export const GROUPS: [string, string][] = [['open', '开包'], ['luck', '欧气'], ['dex', '收藏'], ['shop', '经营'], ['hidden', '隐藏']];
-// The label stock a slab gets, as graders print a special label for the rare grades: read off the reward, which is already paced
-// by how hard the achievement is. 黑标 are the honour-only ones (a whole collection done), the rarest there are.
-export const TIERS: [string, string][] = [['black', '黑标'], ['gold', '金标'], ['silver', '银标'], ['white', '白标']];
+// The medal an achievement is struck in (DESIGN.md「奖章」, BW2's medal box): read off the reward, which is already paced by how
+// hard the achievement is. 荣誉 are the honour-only ones (a whole collection done), the rarest there are.
+export const TIERS: [string, string][] = [['black', '荣誉'], ['gold', '金牌'], ['silver', '银牌'], ['white', '铜牌']];
 export const tier = (a: Ach) => (!a.cash ? 'black' : a.cash >= 300 ? 'gold' : a.cash >= 50 ? 'silver' : 'white');
 const GOLD = ['IR', 'SIR', 'HR', 'MHR'];   // the gold-star rarities (and the Mega series' four-pointed star)
 const LUCK_MIN = 30;                        // packs before 欧气检测 titles count: fewer and one lucky pull decides it

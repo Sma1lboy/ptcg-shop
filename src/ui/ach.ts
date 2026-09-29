@@ -1,6 +1,6 @@
-// 成就 page (#ach) and the unlock pop, in the grading-label language of 欧气鉴定 (DESIGN.md「成就」): every achievement is a small
-// label off a graded-card slab. Earned: the label stock of its tier (白 / 银 / 金 / 黑标), navy print, a cert number and the day; the
-// grade on the right is the achievement's word in the card-name 黑体. Not yet: a one-row outline with its tier and progress.
+// 成就 page (#ach) and the unlock pop as a BW medal box (DESIGN.md「奖章」): every earned achievement is a round medal struck in its
+// tier (铜 / 银 / 金牌, 荣誉 the dark one) with the achievement's word on its face, beside a small window with its name, what it
+// took, the day and the bonus. Not yet: a one-row outline with its tier and progress.
 // Achievements are judged (check) only outside a reveal, so the pop never gives away a pull before its card is flipped;
 // the counters (note, watch) are kept on every emit.
 import { html, render } from 'lit-html';
@@ -12,22 +12,25 @@ import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 
 const day = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1} 月 ${d.getDate()} 日`; };
-const cert = (a: Ach, at: number) => String([...a.id + at].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % 1e8).padStart(8, '0');
 const amount = (a: Ach, v: number) => (a.money ? money(v) : v.toLocaleString('en-US'));
 const groupName = (g: string) => GROUPS.find(([k]) => k === g)![1];
 
 const tierName = (t: string) => TIERS.find(([k]) => k === t)![1];
 const pay = (a: Ach) => (a.cash ? `奖金 ${money(a.cash)}` : '荣誉');
 
-// An earned label. The label stock is the tier (DESIGN.md「成就」): 白标 the plain white label, 银标 / 金标 a foil band round the
-// print, 黑标 the card-back navy with foil print. `新`: earned since the player last looked at this page.
-function label(a: Ach, cls = '') {
-  const at = G.state.ach[a.id], word = a.seal, t = tier(a);
-  const wide = /^[A-Z]+$/.test(word) ? 'tag' : word.length > 3 ? 'long' : ''; // SIR in the price-label numerals, like the grade digits on a slab
-  return html`<li class="grade ach t-${t} ${cls}">
-      <div class="g-id"><p class="g-k">${at > seenAt && !cls ? html`<em class="a-new">新</em>` : ''}<span class="a-shop">欧气卡铺 · ${groupName(a.group)}成就 · </span>${tierName(t)}</p><p class="a-name">${a.name}</p><p>${a.desc}</p>
-        <p class="g-cert"><span>No. ${cert(a, at)}</span><span>${day(at)}</span></p></div>
-      <p class="g-grade"><b class=${wide}>${word}</b>${a.cash ? html`<span class="gain">+${money(a.cash)}</span>` : html`<span>荣誉</span>`}</p>
+// The medal: its face is the tier (DESIGN.md「奖章」); the word is struck on it (SIR-like words in the price digits, long words
+// smaller). `新`: earned since the player last looked at this page.
+const medal = (t: string, word: string) => {
+  const wide = /^[A-Z]+$/.test(word) ? 'tag' : word.length > 2 ? 'long' : '';
+  return html`<i class="medal t-${t}" aria-hidden="true"><b class=${wide}>${word}</b></i>`;
+};
+function earned(a: Ach, cls = '') {
+  const at = G.state.ach[a.id], t = tier(a);
+  return html`<li class="medal-row t-${t} ${cls}">
+      ${medal(t, a.seal)}
+      <div class="m-txt"><p class="m-k">${at > seenAt && !cls ? html`<em class="a-new">新</em>` : ''}${groupName(a.group)} · ${tierName(t)}</p>
+        <p class="a-name">${a.name}</p><p class="m-desc">${a.desc}</p>
+        <p class="m-foot"><span>${day(at)}</span>${a.cash ? html`<b class="gain">+${money(a.cash)}</b>` : html`<b>荣誉</b>`}</p></div>
     </li>`;
 }
 // Not yet earned: only the label's outline, one row: what it is, what to do, how far along, and which stock it would print on.
@@ -66,10 +69,10 @@ export function renderAch() {
       mine.sort((a, b) => rank(a) - rank(b) || got[b.id] - got[a.id]);
       rest.sort((a, b) => share(b) - share(a));
       return html`<section class="ach-group"><h2>${name} <small>${mine.length} / ${list.length}${g === 'hidden' ? ' · 解锁之前只有一句提示' : ''}</small></h2>
-        ${mine.length ? html`<ul class="ach-grid">${mine.map(a => label(a))}</ul>` : ''}
+        ${mine.length ? html`<ul class="ach-grid">${mine.map(a => earned(a))}</ul>` : ''}
         ${rest.length ? html`<ul class="ach-todos" aria-label="还没拿到">${rest.map(todo)}</ul>` : ''}</section>`;
     })}
-    <p class="muted ach-note">解锁就发一次奖金（游戏设定，见页脚），不改开包概率、不改价钱。标签的底色按奖金分：白标不到 $50，银标 $50 起，金标 $300 起，黑标是只有荣誉的那三个。清空存档会连成就一起清掉。</p>`, $('achs'));
+    <p class="muted ach-note">解锁就发一次奖金（游戏设定，见页脚），不改开包概率、不改价钱。奖章按奖金分：铜牌不到 $50，银牌 $50 起，金牌 $300 起，荣誉是只有荣誉、没有奖金的那三个。清空存档会连成就一起清掉。</p>`, $('achs'));
 }
 
 // ---------- 新 and the 成就 tab dot: feat.achSeen is the last moment the player had this page open. Labels earned after the moment
@@ -95,15 +98,16 @@ function next() {
   const many = queue.length > 3 ? queue.splice(0) : [queue.shift()!], a = many[0], cash = many.reduce((s, x) => s + x.cash, 0);
   el.hidden = false;
   render(keyed(`${a.id}${many.length}`, many.length === 1
-    ? html`<a href="#ach"><ul>${label(a, 'pop')}</ul></a>`
-    : html`<a href="#ach"><ul><li class="grade ach pop ${many.some(x => tier(x) === 'black') ? 't-black' : many.some(x => tier(x) === 'gold') ? 't-gold' : ''}">
-        <div class="g-id"><p class="g-k">欧气卡铺 · 成就</p><p class="a-name">一次解锁 ${many.length} 个成就</p><p>${many.slice(0, 4).map(x => x.name).join('、')}${many.length > 4 ? ' 等' : ''}</p></div>
-        <p class="g-grade"><b>${many.length}</b>${cash ? html`<span class="gain">+${money(cash)}</span>` : ''}</p></li></ul></a>`), el);
+    ? html`<a href="#ach"><ul>${earned(a, 'pop')}</ul></a>`
+    : html`<a href="#ach"><ul><li class="medal-row pop">
+        ${medal(many.some(x => tier(x) === 'black') ? 'black' : many.some(x => tier(x) === 'gold') ? 'gold' : many.some(x => tier(x) === 'silver') ? 'silver' : 'white', String(many.length))}
+        <div class="m-txt"><p class="m-k">成就</p><p class="a-name">一次解锁 ${many.length} 个成就</p><p class="m-desc">${many.slice(0, 4).map(x => x.name).join('、')}${many.length > 4 ? ' 等' : ''}</p>
+        ${cash ? html`<p class="m-foot"><span></span><b class="gain">+${money(cash)}</b></p>` : ''}</div></li></ul></a>`), el);
   shown = many;
-  // 金标 / 黑标 print with a foil sweep, a shower of sparks and a bell on top of the press
+  // 金牌 / 荣誉 strike with a sheen, a shower of sparks and a bell on top of the press
   const big = many.some(x => ['gold', 'black'].includes(tier(x)));
   FX.award(big);
-  if (big) FX.burst(el.querySelector('.grade'), 3);
+  if (big) FX.burst(el.querySelector('.medal'), 3);
   clearTimeout(timer); timer = window.setTimeout(next, many.length > 1 ? 6500 : 4800);
 }
 
