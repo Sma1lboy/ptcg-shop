@@ -44,8 +44,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const WHOLESALE = 0.72;        // distributor price as a share of the current market pack price (supplier upgrades lower it)
   const WHOLESALE_STEP = 0.03;   // per supplier level
   const BUYLIST = 0.7;           // what a fellow shop pays for your singles, share of market
-  const START_CASH = 150;
-  const ARRIVAL = 0.20;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
+  const START_CASH = 1000;
+  const ARRIVAL = 0.5;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
   const WAREHOUSE = 200;         // packs per set the back room holds; only shelf packs are for sale
   const MIN_PCT = 0.6, MAX_PCT = 1.6, PCT_STEP = 0.05; // asking price as a share of market, for shelf packs and case singles
   // Customer types. tol = the most a customer will pay, as a share of market (mean; sd is the spread between individuals).
@@ -79,7 +79,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
   // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
   // settle half the time); deeper shelves = longer before a shelf sells out, while you are away or between the clerk's rounds.
-  const RACK_BASE = 3, DEPTH_BASE = 20, DEPTH_STEP = 20;
+  const RACK_BASE = 3, DEPTH_BASE = 40, DEPTH_STEP = 40;
   const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop sales credited on return
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
@@ -97,25 +97,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // returns toward CROWD_KNEE + room(), room = CROWD_ROOM + ROOM_STEP per 店面扩建 level. Game setting, so the late shop keeps
   // growing without traffic running away; 店面扩建 is the open-ended place late cash goes (cost ×1.6 a level, the gain shrinks).
   const CROWD_KNEE = 2, CROWD_ROOM = 1, ROOM_STEP = 0.5;
-  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // lifetime revenue needed before a set can be stocked
+  // Scale (game setting): the shop trades in volume (ARRIVAL, baskets, shelf depth), so every price the shop pays for growth —
+  // upgrades, skills, unlock thresholds — is COST_X times its old list; market prices of packs and cards are never scaled.
+  const COST_X = 4;
+  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // ×COST_X below // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
-    signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
-    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i)) }, // up to one per set: a second shelf of a set is only more depth
-    depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640] },
-    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
-    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
-    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}：加成叠到 ×${CROWD_KNEE} 以上时才用得上`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100) },
-    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
+    signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750].map(c => c * COST_X) },
+    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i) * COST_X) }, // up to one per set: a second shelf of a set is only more depth
+    depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640].map(c => c * COST_X) },
+    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
+    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map(c => c * COST_X) },
+    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}：加成叠到 ×${CROWD_KNEE} 以上时才用得上`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100 * COST_X) },
+    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
   };
   // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
   // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
   const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
-    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
-    talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
-    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
-    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
-    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
+    talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300 * COST_X, grow: 1.75, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
+    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
+    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
 
   // 开分店 (prestige), game setting: once this shop's revenue reaches BRANCH_AT you can start over in a new shop for
@@ -149,7 +152,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const shelves = () => { while (state.shelves.length < racks()) state.shelves.push({ id: null, qty: 0 }); return state.shelves; }; // padded here, so a level set any way shows up
   const slots = () => CASE_BASE + CASE_STEP * lvl('case');
   const revenue = () => state.earned.sealed + state.earned.singles;
-  const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * (1 - ACCESS_STEP * perk('access')));
+  const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * COST_X * (1 - ACCESS_STEP * perk('access')));
   const unlocked = (id: string) => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
   const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
@@ -404,13 +407,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const type = pickW(Object.keys(TYPES), typeWeight), tol = tolOf(type), hits = state.shown;
     const onShelf = SETS.filter(s => shelfQty(s.id) > 0).map(s => s.id), v: Visit = { at: vnow, t: type, r: 'none', max: tol };
     if (type === 'opener') {
-      const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
+      const want = (r => r < 0.4 ? 2 : r < 0.75 ? 4 : 5 + Math.floor(random() * 6))(random());
       let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
       if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); while (m[0] < vnow - MISS_WINDOW * 1000) m.shift(); } // the set they came for, before any settling
       if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, facings); } // settles for another set, more likely one on several shelves
       v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
-        const n = Math.min(want, shelfQty(id), Math.floor(lognorm(25 * demand(id).budget, 0.6) / ask(id)));
+        const n = Math.min(want, shelfQty(id), Math.floor(lognorm(60 * demand(id).budget, 0.6) / ask(id)));
         if (n >= 1 && pctOf(id) <= v.max) sellPacks(id, n, v); else { v.r = 'pricey'; v.price = sealedPrice(id); v.pct = pctOf(id); if (v.pct <= v.max) v.why = 'budget'; }
       }
     } else if (type === 'flipper') {
