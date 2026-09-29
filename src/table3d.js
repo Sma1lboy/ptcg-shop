@@ -912,14 +912,16 @@ async function batchSpread(run) {
 // the label has the count), one pack when it's out, in the lamp's shadow when it can't be opened. Labels are mat.ts's buttons
 // (.s3-shelf, index-aligned with the items), placed under each stack every frame. Pointing at a stack lifts its top pack;
 // tapping it calls onPick(k). The pack that gets opened rises from its stack into the hand (enter / enterBatch).
-const SHELF_MAX = 12, SHELF_PITCH = .74, SGX = PW + 2.8, LIFT = 1.1;
+const SHELF_MAX = 12, SHELF_PITCH = .74, SHELF_BACK = 13, SGX = PW + 2.8, LIFT = 1.1;
 // The column count that shows the packs biggest at this aspect; item 0 front left. The packs fill the lower part of the shot;
 // the top shows the back of the counter (showcase, binder), so the table reads as a place and not a black box.
 function shelfGrid(n) {
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
-    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 7.5 : 4.4); // portrait: the labels need more room between rows
-    const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2)); // the front row's near edge stays on the mat
+    const rows = Math.ceil(n / cols), pos = [], pts = [], SGZ = PH + (camera.aspect < .8 ? 9.5 : 4.4); // portrait: the labels need more room between rows
+    // The front row's near edge stays on the mat, and the back row stays within ~16 cm of the props, so one or two rows
+    // don't leave a strip of bare mat between the packs and the back of the counter.
+    const off = Math.min(-3.5, MZ + MH / 2 - 1.5 - ((rows - 1) / 2 * SGZ + PH / 2), (rows - 1) / 2 * SGZ - SHELF_BACK);
     for (let k = 0; k < n; k++) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
       pos.push(at);
