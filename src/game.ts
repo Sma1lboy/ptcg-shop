@@ -85,6 +85,23 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     me04: { tag: '追忍蛙', w: 1.2, tol: 0.08, budget: 1.3, crowd: 0.1 },     // Mega Greninja ex SIR and MHR (~$150 each): fans pay a little over market
     me05: { tag: '新品上市', w: 1.3, tol: 0.03, budget: 1, crowd: 0.1 },     // newest release (Mega Darkrai ex): the most asked-for set, at a normal price
   };
+  // 街口 (game setting): shop n stands on STREETS[n % 4]. The first shop (老街) is the numbers above exactly; every later shop
+  // tilts who walks in and which sets they come for, so a new shop asks for different stock and prices instead of replaying the
+  // last one. Only pack buyers and set demand tilt (the case is fed by the hits you pull, too few to carry a street; GAMEPLAY §6.2).
+  // types = weight × per customer type; budget / tol = on every pack buyer; crowd = × walk-ins (outside the cap, like 人气);
+  // sets = per-set w / tol / budget on top of DEMAND, tag = what the 货柜 card says about that set on this street.
+  interface Street { name: string; say: string; types?: Record<string, number>; budget?: number; tol?: number; crowd?: number; sets?: Record<string, { w?: number; tol?: number; budget?: number; tag?: string }> }
+  const STREETS: Street[] = [
+    { name: '老街', say: '什么人都有一点' },
+    { name: '城东学校旁', say: '放学的学生多：来拆包的多，零花钱少，便宜的系列好卖、贵的难走',
+      types: { opener: 1.3, flipper: 0.5 }, budget: 0.75, tol: -0.03,
+      sets: { sv09: { w: 2, tag: '学生最爱' }, me03: { w: 1.8, tag: '学生最爱' }, me01: { w: 1.3 }, 'sv03.5': { w: 0.4, tag: '学生买不起' }, 'sv08.5': { w: 0.7 } } },
+    { name: '火车站夜市', say: '人来人往：进店的人多两成半，倒爷多一倍，标价高了扭头就走',
+      types: { flipper: 2 }, crowd: 1.25, tol: -0.03 },
+    { name: '旧货街', say: '老玩家扎堆：进店的人少，绝版和抢手的系列有人肯多付、带的钱也多',
+      types: { opener: 0.9, collector: 1.5 }, crowd: 0.85, budget: 1.2,
+      sets: { 'sv03.5': { w: 2.2, tol: 0.08, tag: '老粉专程来' }, 'sv08.5': { w: 1.6, tol: 0.05 }, sv09: { w: 0.6 }, me03: { w: 0.6 } } },
+  ];
   const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
@@ -213,7 +230,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Cards of a set not yet pulled by hand, rarest first, with the packs one takes on average at today's 手气.
   const handMissing = (id: string) => { const have = new Set(Object.keys(state.dex).filter(k => k.split('|')[0] === id).map(k => k.split('|')[1]));
     return DATA[id].cards.filter(c => !have.has(c.n)).map(c => ({ n: c.n, name: c.name, r: c.r, packs: 1 / cardOdds(id, c.n) })).sort((a, b) => b.packs - a.packs); };
-  const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
+  const street = (n = state.branch.n) => STREETS[n % STREETS.length]; // derived from the shop number: a bankruptcy keeps the street, old saves need nothing
+  const demand = (id: string) => {
+    const d0 = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }, st = street(), x = st.sets?.[id];
+    const d = st === STREETS[0] ? d0 : { ...d0, tag: x?.tag ?? d0.tag, w: d0.w * (x?.w ?? 1), tol: d0.tol + (st.tol ?? 0) + (x?.tol ?? 0), budget: d0.budget * (st.budget ?? 1) * (x?.budget ?? 1) };
+    return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d;
+  };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
   const lineup = () => SETS.reduce((a, s) => a + (unlocked(s.id) ? DEMAND[s.id]?.crowd || 0 : 0), 0);
@@ -221,7 +243,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const room = () => CROWD_ROOM + ROOM_STEP * lvl('expand');
   const crowdCap = () => CROWD_KNEE + room();
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
-  const rate = () => ARRIVAL * (1 + REG_STEP * perk('regulars')) * (1 + SKILLS.crowd.step * skill('crowd')) * crowdMult(); // walk-ins per second; 老主顾 and 人气 sit outside the cap (each has its own max)
+  const rate = () => ARRIVAL * (street().crowd ?? 1) * (1 + REG_STEP * perk('regulars')) * (1 + SKILLS.crowd.step * skill('crowd')) * crowdMult(); // walk-ins per second; 老主顾 and 人气 sit outside the cap (each has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
     debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null });
@@ -467,7 +489,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
   const lognorm = (median: number, sigma: number) => median * Math.exp(sigma * gauss());
   const pickW = <T,>(items: T[], w: (it: T) => number) => { let x = random() * items.reduce((a, it) => a + w(it), 0); return items.find(it => (x -= w(it)) < 0) || items[0]; };
-  const typeWeight = (t: string) => TYPES[t].w * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
+  const typeWeight = (t: string) => TYPES[t].w * (street().types?.[t] ?? 1) * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
   // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the trophy, plus personal spread.
   const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage') + SKILLS.talk.step * skill('talk')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
   const heatW = (id: string) => { const h = state.heat[id]; return h > 1 ? 2 : h < 1 ? 0.5 : 1; };
@@ -759,7 +781,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
-    demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
+    demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,
   };
 }

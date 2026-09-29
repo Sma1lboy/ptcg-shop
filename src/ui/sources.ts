@@ -5,6 +5,13 @@ import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
 import { ACH } from '../achievements.ts';
 
+// A street's numbers in words, for 游戏设定 (game.ts STREETS): customer types, pack buyers' ceiling and budget, walk-ins, per set.
+const x = (v: number) => `×${+v.toFixed(2)}`;
+function streetFx(st: ReturnType<typeof G.street>) {
+  const TY = st.types ? Object.entries(st.types).map(([t, w]) => `${G.TYPES[t].name}${x(w)}`) : [];
+  const sets = st.sets ? Object.entries(st.sets).map(([id, o]) => `${G.setById(id).name}${o.w != null ? ` 买整包的人${x(o.w)}` : ''}${o.tol ? ` 肯付上限 +${Math.round(o.tol * 100)} 个百分点` : ''}`) : [];
+  return [...TY, st.crowd && `进店人数${x(st.crowd)}`, st.tol && `拆包玩家肯付上限 ${st.tol > 0 ? '+' : '−'}${Math.round(Math.abs(st.tol) * 100)} 个百分点`, st.budget && `拆包玩家预算${x(st.budget)}`, ...sets].filter(Boolean).join('、');
+}
 const maxM = () => S.roundM(1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max)); // the ceiling: 手气 maxed plus 名气「手气底子」maxed
 
 export function renderSources() {
@@ -25,7 +32,7 @@ export function renderSources() {
       <p>债务（游戏设定）：第 1 家店开张欠九姐 ${money(G.DEBT0)}（含开张的 $${G.START_CASH.toLocaleString('en-US')}），第 N 家店欠 ×(1 + ${G.DEBT_STEP}×(N−1))。一周 = 页面开着的 ${G.WEEK / 60} 分钟；关掉页面（打烊）不管多久，账期最多只走一周，九姐趁你不在只来一次。第 w 周的账 = $${G.BILL0} × ${G.BILL_G}^(w−1)（后面的店同样按比例放大），分期不计息，付到欠款为零为止；到期时收银机里的钱够就直接扣。
       付不上有 ${G.GRACE / 60} 分钟宽限，宽限到了差多少就替你借多少（打烊期间当场借）；借不到就破产。借款每周利滚利 ${Math.round(G.LOAN_RATE * 100)}%（每破产一次 +${Math.round(G.LOAN_MARK * 100)} 个百分点，最多 +${Math.round(G.LOAN_MARK * 300)}），额度 = 这家店做到过的最好一周营业额，最少 ${money(G.LOAN_FLOOR)}；借款滚到额度以上的部分并进下一张账。借的钱不算营业额。随时可以提前还，先还借款再还分期。
       破产：现金、仓库和货架上的包、卡册和展示柜里的卡、升级、技能、营业额都被收走，这家店不给名气，同一家店从第 1 周重来、欠同样的钱；图鉴、成就、欧气检测记录、名气和名气加成留下。</p>
-      <p>开分店（游戏设定）：这家店的债还清以后可以关掉它去开一家新的，带走名气 = √(本店营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 取整（${[5e5, 1e6, 2e6].map(v => `${money(v)} → ${G.fameFor(v)}`).join('，')}）。新店从零开始，欠九姐的本钱多 ${G.DEBT_STEP * 100}%：现金 $${G.START_CASH}、没有货、没有升级和技能、营业额归零（后面的系列要重新解锁）；卡册和展示柜里的卡、图鉴、成就和欧气检测的全部记录都带走，成就奖金不会再发一次。
+      <p>开分店（游戏设定）：这家店的债还清以后可以关掉它去开一家新的，带走名气 = √(本店营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 取整（${[5e5, 1e6, 2e6].map(v => `${money(v)} → ${G.fameFor(v)}`).join('，')}）。新店从零开始，欠九姐的本钱多 ${G.DEBT_STEP * 100}%：现金 $${G.START_CASH}、没有货、没有升级和技能、营业额归零（后面的系列要重新解锁）；卡册和展示柜里的卡、图鉴、成就和欧气检测的全部记录都带走，成就奖金不会再发一次。每家店开在一条街上，按店号轮流：${G.STREETS.map((st, i) => `第 ${i + 1}${i ? '' : '、' + (G.STREETS.length + 1)} 家${st.name}（${i ? streetFx(st) : '上面这些数字原样'}）`).join('，')}，往后照此循环；破产重来还在同一条街。
       名气买永久加成，第 L+1 级要 首级价 + L 名气，每项都有上限：${Object.values(G.PERKS).map(p => `${p.name}（${p.max} 级，首级 ${p.base} 名气；满级 ${p.fx(p.max)}）`).join('；')}。老主顾加在基础客流上，不受客流上限递减；手气底子只加「手气」的级数，满级开包仍是负期望（见「价格口径」）。</p>
       <p>成就（游戏设定）：${ACH.length} 个，每个解锁时发一次现金奖金，从 ${money(Math.min(...ACH.filter(a => a.cash).map(a => a.cash)))} 到 ${money(Math.max(...ACH.map(a => a.cash)))}，全部加起来 ${money(ACH.reduce((s, a) => s + a.cash, 0))}；「全图鉴」「全手开图鉴」「满级卡铺」只有标签没有奖金。奖金不算营业额（不提前解锁系列），不改开包概率、价钱和顾客；欧气类成就（欧洲人、欧皇本皇、非酋补贴）开满 30 包后按欧气检测的百分位算，手气加成开的包照旧只和同样加成的模拟玩家比。隐藏成就解锁前只露一句提示。清空存档会连成就一起清掉。</p>`, $('sources'));
 }

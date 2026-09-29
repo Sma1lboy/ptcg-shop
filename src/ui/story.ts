@@ -87,7 +87,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
 // 还清 / 开分店, read at the moment: before branching, the 名气 this shop would take and the next shop's debt; after, this shop's
 const storyCtx = (): Ctx => {
   const s = G.state, n = s.debt ? s.branch.n : s.branch.n + 1;
-  return { ...billCtx(), bills: s.billsPaid, fame: G.fameFor() + G.handFame(), shop: s.branch.n + 1, debt: money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * n))) };
+  return { ...billCtx(), bills: s.billsPaid, fame: G.fameFor() + G.handFame(), shop: s.branch.n + 1, street: G.street(n).name, streetSay: n % G.STREETS.length ? G.street(n).say : undefined, debt: money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * n))) };
 };
 const unlockedSets = () => SETS.filter(s => G.unlocked(s.id)).map(s => s.id);
 
