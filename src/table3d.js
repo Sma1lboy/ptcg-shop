@@ -1134,7 +1134,7 @@ function relayout() {
 // The counter the player stands behind (DESIGN.md「题材」): a laminate top with a bevelled edge and an aluminium trim, the shop's
 // rubber playmat on it, and at the back what a card counter holds: a glass countertop showcase with graded slabs and a booster
 // box, a binder, a stack of toploaders, a pack of sleeves. Colours come from tokens (laminate = --bg, binder = card-back navy,
-// aluminium = --foil-1); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
+// aluminium trim = --trim, the skin's navy anodized case frame); the props sit outside the lamp's cone and in the fog, so the packs and cards stay the lit subject.
 // None of the props casts a shadow; the whole world is ~16 draw calls.
 let world0 = null; // theme-dependent textures: { laminate canvas, mat canvas, binder canvas, materials }
 function drawMat(c) {
@@ -1192,7 +1192,7 @@ function world() {
   const matC = canvasOf(1536, Math.round(1536 * MH / MW)), matMap = canvasTex(matC); matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5);
   const binC = canvasOf(512, 600), binMap = canvasTex(binC);
   grain.repeat.set(1 / 5, 1 / 5);
-  const metal = new T.MeshStandardMaterial({ color: css('--foil-1'), metalness: 1, roughness: .3, envMapIntensity: 1.1 });
+  const metal = new T.MeshStandardMaterial({ color: css('--trim'), metalness: 1, roughness: .36, envMapIntensity: 1.3 }); // anodized: satin, not mirror
   const glass = new T.MeshPhysicalMaterial({ color: 0xFFFFFF, transparent: true, opacity: .1, roughness: .03, metalness: 0, envMapIntensity: 1.6, depthWrite: false });
   const acrylic = glass.clone(); acrylic.opacity = .22;
   const place = (m, x, y, z, yaw = 0) => { m.position.set(x, y, z); m.rotation.y = yaw; scene.add(m); return m; };
@@ -1254,14 +1254,17 @@ function world() {
   place(tops, -4, TOP, -41, -.3);
   place(new T.Mesh(new T.BoxGeometry(7.2, 1.3, 9.6), new T.MeshStandardMaterial({ color: 0xF2F4F8, transparent: true, opacity: .62, roughness: .35 })), 5, TOP + .65, -45, .5);
 
-  world0 = { lamC, matC, binC, lam, matMap, binMap, metal, led };
+  world0 = { lamC, matC, binC, lam, matMap, binMap, led };
 }
 function theme() {
-  const bg = new T.Color(css('--bg'));
-  renderer.setClearColor(bg); scene.fog.color.copy(bg);
+  // The room past the counter is the shop in the lamp's shadow (the HUD's navy, both themes), not the page: a white fog in the
+  // light theme washed the whole table out inside the navy case frame. A white laminate is held under the lamp so it doesn't clip.
+  const room = new T.Color(css('--hud')), bg = new T.Color(css('--bg')), hsl = {};
+  renderer.setClearColor(room); scene.fog.color.copy(room);
+  counter.material.color.setScalar(bg.getHSL(hsl).l > .6 ? .72 : 1);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
   const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC);
-  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = true; w.metal.color.set(css('--foil-1')); w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
+  w.matMap.needsUpdate = w.lam.needsUpdate = w.binMap.needsUpdate = true; w.led.material.color.set(css('--lamp')).multiplyScalar(2.2);
   wake(100);
 }
 
