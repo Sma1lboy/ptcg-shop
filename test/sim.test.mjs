@@ -1,6 +1,7 @@
 // Fairness check: 200k simulated packs per set must land inside TCGplayer's measured 95% CI for every rarity.
 // Run: node test/sim.test.mjs
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { SETS as PTCG_SETS, DATA as PTCG_DATA } from '../src/sets.ts';
 import * as S from '../src/sim.ts';
 import { createGame } from '../src/game.ts';
@@ -27,6 +28,35 @@ for (const set of PTCG_SETS) {
   const ev = S.packEV(set.id), mean = value / N;
   assert.ok(Math.abs(mean - ev) / ev < 0.05, `${set.id} EV ${ev.toFixed(2)} vs sim mean ${mean.toFixed(2)}`);
   console.log(`ok ${set.id.padEnd(7)} EV $${ev.toFixed(2)} / pack $${set.packPrice} (${(ev / set.packPrice * 100).toFixed(0)}%)`);
+}
+// 手气 (game bonus) must leave the measured odds alone: with no bonus, openPack is byte-identical to the pre-手气 code
+// (hash recorded from that code, 2000 packs per set, seed 42), and the default argument is the same as m = 1.
+{
+  for (const m of [undefined, 1]) {
+    const h = createHash('sha256');
+    for (const set of PTCG_SETS) { const r = S.rng(42); for (let i = 0; i < 2000; i++) for (const c of S.openPack(set.id, r, m)) h.update(set.id + c.n + c.kind + '|'); }
+    assert.equal(h.digest('hex'), '321b156f4309598b9545f432c25e2ae6fa16e292adf9bb8643c5a5e6c7df7254', `no-bonus packs changed (m=${m})`);
+  }
+  console.log('ok 手气 off = official odds, byte for byte');
+}
+// Each 手气 level: every hit rarity lands on official × m (the number the skill page and footer print), and so does each
+// slot's total hit rate, which is what separates neighbouring levels. 40k packs per set per level, 4.5σ bands.
+{
+  const G0 = createGame({ storage: { getItem: () => null, setItem() {} } }), luckSkill = G0.SKILLS.luck;
+  for (let lv = 1; lv <= luckSkill.max; lv++) {
+    const m = S.roundM(1 + luckSkill.step * lv), n = 40000;
+    for (const set of PTCG_SETS) {
+      const eff = S.ratesFor(set, m), r = S.rng(1000 + lv), got = {};
+      for (let i = 0; i < n; i++) for (const c of S.openPack(set.id, r, m)) got[c.kind] = (got[c.kind] || 0) + 1;
+      const near = (count, pct, what) => { const p = pct / 100, sd = Math.sqrt(p * (1 - p) / n); assert.ok(Math.abs(count / n - p) <= 4.5 * sd, `手气 Lv${lv} ${set.id} ${what}: ${(count / n * 100).toFixed(2)}% vs stated ${pct.toFixed(2)}%`); };
+      for (const k of S.HITS) if (set.rates[k]) { assert.ok(Math.abs(eff[k] - set.rates[k] * m) < 1e-9); near(got[k] || 0, eff[k], k); }
+      for (const [slot, table] of Object.entries(S.slotTables(set, m))) {
+        const sum = Object.values(table).reduce((a, b) => a + b, 0); assert.ok(sum < 100, `${set.id} ${slot} at ×${m} sums to ${sum}%`);
+        if (sum) near(Object.keys(table).reduce((a, k) => a + (got[k] || 0), 0), sum, `${slot} slot total`);
+      }
+    }
+  }
+  console.log('ok 手气 levels hit their stated odds');
 }
 const p = S.luckPercentile({ sv08: 36 }, 0);
 assert.equal(p, 0, 'zero value must be the unluckiest');
@@ -74,9 +104,10 @@ console.log('ok luck percentile');
   const env = { now: () => T, random: () => S.rng(seed++)(), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } }; // deterministic, but a fresh stream per call is fine for shop rolls
   const G = createGame(env), st = () => G.state;
 
-  // 1. No money pump: opening a pack and selling it at market value returns less than the pack costs even at the best supplier level.
-  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length;
-  for (const set of PTCG_SETS) assert.ok(S.packEV(set.id) < set.packPrice * bestWholesale, `${set.id}: opening packs must stay negative EV`);
+  // 1. No money pump: opening a pack and selling it at market value returns less than the pack costs even at the best supplier level,
+  //    with 手气 maxed too.
+  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length, maxM = S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
+  for (const set of PTCG_SETS) assert.ok(S.packEV(S.rateKey(set.id, maxM)) < set.packPrice * bestWholesale, `${set.id}: opening packs must stay negative EV even at 手气 ×${maxM}`);
   assert.ok(bestWholesale > G.BUYLIST * 0.8, 'supplier discount must not undercut what the sealed sale is worth');
   for (const [k, u] of Object.entries(G.UPGRADES)) assert.ok(u.costs.every((c, i, a) => !i || c > a[i - 1]), `${k} costs must increase`);
   assert.ok(G.DEX_TIERS.every(([a, b], i, t) => !i || (a > t[i - 1][0] && b >= t[i - 1][1])) && G.DEX_TIERS.at(-1)[0] === 1, 'dex tiers ascend and end at 100%');
@@ -150,7 +181,7 @@ console.log('ok luck percentile');
 
   // 8. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
   {
-    G.reset(); st().cash = 1e6; G.buy('sv08', 20); G.open('sv08', 20);
+    G.reset(); st().cash = 1e6; G.buy('sv08', 40); G.open('sv08', 40);
     const v0 = G.luck().value; assert.ok(G.luck().live && Math.abs(v0 - st().pulled) < 1e-6, 'fresh save: repriced value equals snapshot');
     for (const c of PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] *= 2; // prices double after a data refresh
     G.buy('sv08', 1); G.open('sv08', 1); // clears the luck cache
@@ -204,6 +235,28 @@ console.log('ok luck percentile');
     assert.ok(Math.abs(G.demand('sv08').tol - tol0 - G.MASTER.tol) < 1e-9 && G.demand('sv08').w > w0, '大师套: that set\'s pack buyers pay more and come more');
     assert.ok(G.rate() > rate0 && Math.abs(G.dexBonusOf('sv08') - G.DEX_TIERS.reduce((x, t) => x + t[1], 0)) < 1e-9, '大师套 collects every dex tier of that set');
   }
+  // 11. 手气 in the shop: each pack is recorded with the odds it was opened at, expected value and tallies follow those odds,
+  //     and the luck percentile is judged against players with the same bonus (a boosted pull is not "you got lucky").
+  {
+    G.reset(); st().cash = 1e9; T += 1;
+    assert.equal(G.luckMult(), 1); G.buy('sv08', 4); G.open('sv08', 4);
+    for (let i = 0; i < G.SKILLS.luck.max; i++) assert.ok(G.learn('luck'));
+    assert.equal(G.learn('luck'), false, 'maxed'); const m = G.luckMult(), key = S.rateKey('sv08', m);
+    G.buy('sv08', 6); G.open('sv08', 6);
+    assert.deepEqual(st().packsBy, { sv08: 4, [key]: 6 }); assert.equal(st().opened.sv08, 10);
+    const L = G.luck(); assert.equal(L.boosted, 6);
+    assert.ok(Math.abs(L.expected - 4 * S.packEV('sv08') - 6 * S.packEV(key)) < 1e-9, 'expected value uses the odds each pack was opened at');
+    assert.ok(Math.abs(G.expectedTally().SIR - (4 * 1 + 6 * m) * PTCG_SETS[0].rates.SIR / 100) < 1e-9);
+    assert.equal(G.learn('apprentice'), false, '带徒弟 needs a clerk first');
+    // Unbiased: 60 maxed-手气 players of 40 packs average the 50th percentile against boosted peers, but would read as lucky against official odds.
+    let fair = 0, naive = 0;
+    for (let i = 0; i < 60; i++) {
+      G.reset(); st().cash = 1e9; st().skills.luck = G.SKILLS.luck.max; G.buy('sv08', 40); G.open('sv08', 40);
+      fair += G.luck().pct / 60; naive += S.luckPercentile({ sv08: 40 }, G.luck().value, 1000) / 60;
+    }
+    assert.ok(Math.abs(fair - 0.5) < 0.1 && naive > fair + 0.06, `手气 players sit mid-pack among boosted peers (${fair.toFixed(2)}), not above official ones (${naive.toFixed(2)})`);
+    store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 7 } }); assert.deepEqual(createGame(env).state.packsBy, { sv08: 7 }, 'old saves: all packs at official odds'); delete store['ptcg-shop-v1'];
+  }
   console.log('ok economy');
 }
 
@@ -215,6 +268,8 @@ console.log('ok luck percentile');
   assert.ok(shop[3].net > shop[1].net * 2, 'income keeps growing, upgrades pay off');
   assert.ok(shop[3].up >= 5, `several upgrades bought within 3h (${shop[3].up})`);
   assert.ok(opener[3].net < shop[3].net, 'opening packs is a fun expense, not a money machine, even when hits are sold at +20%');
+  const lucky = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, luck: 'max', log: 3600 });
+  assert.ok(lucky[3].net < shop[3].net, `still a fun expense with 手气 maxed from the start ($${lucky[3].net} vs $${shop[3].net})`);
   console.log(`ok growth: net after 1h/3h = $${shop[1].net}/$${shop[3].net}; the same shop that opens 5% of its packs: $${opener[3].net}`);
   // Long game: a player who puts 10% of revenue into master sets has a next goal for hours, and it pays for itself.
   const plain = play({ hours: 10, openShare: 0, pct: 1, log: 3600 }), chase = play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.1, log: 3600 });

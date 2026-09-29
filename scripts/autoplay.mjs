@@ -12,12 +12,14 @@ export function boot(seed = 1) {
   return { G, S, SETS, advance: sec => { T += sec * 1000; }, now: () => T };
 }
 
-// One "visit" every `step` seconds: buy upgrades first, then stock (kept back for opening or put on the shelf at `pct` of market),
+// One "visit" every `step` seconds: buy the cheapest upgrade or 技能 first (手气 only if this player opens packs; 看店 never, it never closes), then stock (kept back for opening or put on the shelf at `pct` of market),
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, log = 600 } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, log = 600 } = {}) {
   const { G, SETS, advance } = boot(seed), st = G.state, rows = []; let spent = 0, pot = 0, rev = 0;
   const pctOf = id => typeof pct === 'number' ? pct : pct[id] ?? 1;
   const baseLeft = id => G.dexTotal(id) - G.dexCount(id) - G.missing(id).length; // C/U/R still to pull
+  const wants = k => k !== 'watch' && (k !== 'luck' || (luck ?? (openShare > 0 || masterShare > 0)));
+  if (luck === 'max') st.skills.luck = G.SKILLS.luck.max; // a player who starts with 手气 maxed (balance check)
   const sold = { opener: 0, seeker: 0, collector: 0, flipper: 0 };
   for (let t = 0; t <= hours * 3600; t += step) {
     advance(step); G.tick();
@@ -25,7 +27,8 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     for (const [k, c] of Object.entries(st.singles)) if (c.price < 25) G.sell(k);
     for (const [k] of Object.entries(st.singles)) if (G.list(k)) st.shown[st.shown.length - 1].pct = cardPct;
     let best = null; for (const k of Object.keys(G.UPGRADES)) { const c = G.upgradeCost(k); if (c != null && (!best || c < best[1])) best = [k, c]; }
-    if (best && st.cash >= best[1]) { spent += best[1]; G.upgrade(best[0]); best = null; }
+    for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
+    if (best && st.cash >= best[1]) { spent += best[1]; if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
     const hold = best && st.cash > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
     pot += (G.revenue() - rev) * masterShare; rev = G.revenue(); // the master-set budget: a share of what came in since last visit
     const goal = SETS.filter(x => G.unlocked(x.id) && !G.master(x.id)).sort((a, b) => a.packPrice * baseLeft(a.id) - b.packPrice * baseLeft(b.id))[0];
@@ -42,7 +45,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
       }
     }
     if (!hold) for (const set of SETS) { const n = Math.floor(G.shelfQty(set.id) * openShare); if (n > 0) { G.unshelve(set.id, n); G.open(set.id, n); } }
-    if (t % log === 0) rows.push({ min: t / 60, cash: Math.round(st.cash), net: Math.round(st.cash + spent + SETS.reduce((a, x) => a + (G.shelfQty(x.id) + (st.stock[x.id] || 0)) * G.wholesale(x.id), 0)), perMin: '', rev: Math.round(G.revenue()), revMin: '', up: Object.values(st.up).reduce((a, b) => a + b, 0), packs: Object.values(st.opened).reduce((a, b) => a + b, 0), dex: SETS.map(x => G.master(x.id) ? '★' : Math.round(G.dexCount(x.id) / G.dexTotal(x.id) * 100)).join('/'), rate: +(G.rate() * 60).toFixed(1), sold: st.cust.sold, pricey: st.cust.pricey, none: st.cust.none });
+    if (t % log === 0) rows.push({ min: t / 60, cash: Math.round(st.cash), net: Math.round(st.cash + spent + SETS.reduce((a, x) => a + (G.shelfQty(x.id) + (st.stock[x.id] || 0)) * G.wholesale(x.id), 0)), perMin: '', rev: Math.round(G.revenue()), revMin: '', up: Object.values(st.up).reduce((a, b) => a + b, 0) + Object.values(st.skills).reduce((a, b) => a + b, 0), packs: Object.values(st.opened).reduce((a, b) => a + b, 0), dex: SETS.map(x => G.master(x.id) ? '★' : Math.round(G.dexCount(x.id) / G.dexTotal(x.id) * 100)).join('/'), rate: +(G.rate() * 60).toFixed(1), sold: st.cust.sold, pricey: st.cust.pricey, none: st.cust.none });
   }
   for (let i = 1; i < rows.length; i++) { rows[i].perMin = Math.round((rows[i].net - rows[i - 1].net) / (log / 60)); rows[i].revMin = Math.round((rows[i].rev - rows[i - 1].rev) / (log / 60)); }
   return rows;

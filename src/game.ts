@@ -15,9 +15,10 @@ export interface State {
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: { t: string; r: string; text: string }[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
   shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>;
+  skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   offline: { secs: number; sales: number; revenue: number; lost: number } | null;
 }
-export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number }
+export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
 export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
 export type Game = ReturnType<typeof createGame>;
 
@@ -72,9 +73,22 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
     clerk:    { name: '店员', desc: '1 级：货架见底自动进货上架（含打烊时）；2 级：补满货架，并把散卡卖给同行', costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
   };
+  // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
+  // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
+  // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
+  const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
+    luck: { name: '手气', group: '幸运', desc: '开包时每种闪卡（RR 及以上）的概率乘上一个系数；官方概率本身不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
+    talk: { name: '口才', group: '经营', desc: '顾客肯多付的上限再加（倒爷不吃这套）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数（和图鉴口碑相乘）', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
+    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
+    apprentice: { name: '带徒弟', group: '经营', desc: '店员把单卡库存里最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+  };
 
   const setById = (id: string) => SETS.find(s => s.id === id)!;
   const lvl = (k: string) => state.up[k] || 0;
+  const skill = (k: string) => state.skills[k] || 0;
+  const luckMult = () => S.roundM(1 + SKILLS.luck.step * skill('luck'));
+  const offlineCap = () => OFFLINE_CAP + SKILLS.watch.step * 3600 * skill('watch');
   const wholesaleRate = () => WHOLESALE - WHOLESALE_STEP * lvl('supplier');
   const wholesale = (id: string) => Math.round(setById(id).packPrice * wholesaleRate() * 100) / 100;
   const sealedPrice = (id: string) => Math.round(setById(id).packPrice * (state.heat[id] || 1) * 100) / 100;
@@ -96,9 +110,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
-  const rate = () => ARRIVAL * (1 + dexBonus()); // walk-ins per second: only word of mouth (图鉴) grows it
+  const rate = () => ARRIVAL * (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')); // walk-ins per second: 图鉴 word of mouth × 人气
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelf: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {} });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, skills: {}, packsBy: {} });
 
   let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: (() => void)[] = [];
@@ -108,6 +122,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     try { const s = JSON.parse(store.getItem(SAVE_KEY)!); if (s && typeof s.cash === 'number') {
         const st = { ...fresh(), ...s };
         if (!s.shelf) { for (const [id, n] of Object.entries(st.stock as State['stock'])) if (n > 0) st.shelf[id] = { qty: n, pct: 1 }; st.stock = {}; } // pre-storefront saves: everything was on sale
+        if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         return st;
       } } catch {}
     return fresh();
@@ -151,9 +166,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     n = Math.min(n, state.stock[id] || 0);
     if (!n) return [];
     state.stock[id] -= n;
-    const packs = [], dex0 = dexBonusOf(id), had = dexCount(id);
+    const packs = [], dex0 = dexBonusOf(id), had = dexCount(id), m = luckMult(), key = S.rateKey(id, m);
     for (let i = 0; i < n; i++) {
-      const pack = S.openPack(id, random);
+      const pack = S.openPack(id, random, m);
       packs.push(pack);
       state.pulled += S.packValue(pack);
       for (const c of pack) {
@@ -167,7 +182,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     state.hits.sort((a, b) => b.price - a.price); state.hits.length = Math.min(state.hits.length, 24);
     state.costOpened += wholesale(id) * n;
-    state.opened[id] = (state.opened[id] || 0) + n; state.dexPacks += n;
+    state.opened[id] = (state.opened[id] || 0) + n; state.packsBy[key] = (state.packsBy[key] || 0) + n; state.dexPacks += n;
     luckCache = null;
     if (dexCount(id) > had) dexLog(id, dex0);
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
@@ -217,14 +232,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   // ---------- shop: customers, display case, trophy, upgrades ----------
-  function list(key: string) {
+  function toCase(key: string, pct = 1) { // one copy of a hit from singles into the case, no log or save
     const c = state.singles[key];
     if (!c || state.shown.length >= slots() || !S.HITS.includes(c.kind)) return false;
     if (!--c.count) delete state.singles[key];
     const { count, ...card } = c;
-    state.shown.push({ key, ...card, pct: 1 });
-    emit(); return true;
+    state.shown.push({ key, ...card, pct });
+    return true;
   }
+  function list(key: string) { if (!toCase(key)) return false; emit(); return true; }
   function unlist(i: number) {
     const c = state.shown.splice(i, 1)[0]; if (!c) return;
     const { key, pct, ...card } = c;
@@ -249,6 +265,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit();
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
+  const skillCost = (k: string) => skill(k) < SKILLS[k].max ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
+  const canLearn = (k: string) => k !== 'apprentice' || lvl('clerk') > 0;
+  function learn(k: string) {
+    const cost = skillCost(k);
+    if (cost == null || state.cash < cost || !canLearn(k)) return false;
+    state.cash -= cost; state.skills[k] = skill(k) + 1;
+    log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}），−$${cost}`);
+    emit(); return true;
+  }
   function upgrade(k: string) {
     const cost = upgradeCost(k);
     if (cost == null || state.cash < cost) return false;
@@ -264,7 +289,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const pickW = <T,>(items: T[], w: (it: T) => number) => { let x = random() * items.reduce((a, it) => a + w(it), 0); return items.find(it => (x -= w(it)) < 0) || items[0]; };
   const typeWeight = (t: string) => TYPES[t].w * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
   // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the trophy, plus personal spread.
-  const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
+  const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage') + SKILLS.talk.step * skill('talk')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
   const heatW = (id: string) => { const h = state.heat[id]; return h > 1 ? 2 : h < 1 ? 0.5 : 1; };
   const sellCard = (i: number, quiet: boolean, who: string) => {
     const c = state.shown.splice(i, 1)[0], gain = cardAsk(c);
@@ -324,8 +349,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   // The clerk (upgrade): tops up the shelf of every set with auto-restock on (buying straight onto it), and at level 2 sells the bulk to peers.
-  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number }) {
+  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }) {
     const L = lvl('clerk'); if (!L) return;
+    if (skill('apprentice')) { // 带徒弟: priciest hits first into the free case slots
+      const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
+      for (const [k] of hits) { while (toCase(k, SKILLS.apprentice.step)) acc.listed++; if (state.shown.length >= slots()) break; }
+    }
     for (const set of SETS) {
       const id = set.id, cap = capacity(), goal = L >= 2 ? cap : Math.ceil(cap / 2), have = shelfQty(id);
       if (!state.auto[id] || have >= goal / 2) continue;
@@ -343,10 +372,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up.
   function tick() {
-    const now = clock(), dt = Math.min((now - lastTick) / 1000, OFFLINE_CAP); lastTick = now;
+    const now = clock(), dt = Math.min((now - lastTick) / 1000, offlineCap()); lastTick = now;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
     let n = 0, revenue = 0, sales = 0, quiet = false;
     for (let left = dt; left > 0; left -= slice) {
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
@@ -356,13 +385,14 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     if (acc.packs) log(`店员进货 ${acc.packs} 包，−$${acc.spent.toFixed(2)}${acc.bulk ? `；散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}` : ''}`);
     else if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}`, 'gain');
+    if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
       log(`打烊期间卖出 ${sales} 件，+$${revenue.toFixed(2)}`, 'gain');
     }
     const rescued = bailout();
-    if (n || dt > 30 || acc.packs || acc.bulk || rescued) emit(); else save();
+    if (n || dt > 30 || acc.packs || acc.bulk || acc.listed || rescued) emit(); else save();
   }
   function setAuto(id: string, on: boolean) { state.auto[id] = !!on; emit(); }
   function ackOffline() { state.offline = null; emit(); }
@@ -377,20 +407,22 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function luck(): Luck {
     if (luckCache) return luckCache;
     const packs = Object.values(state.opened).reduce((a, b) => a + b, 0);
-    const expected = Object.entries(state.opened).reduce((s, [id, n]) => s + n * S.packEV(id), 0);
+    // Expected value and percentile use the odds each pack was actually opened at (state.packsBy), 手气 included.
+    const expected = Object.entries(state.packsBy).reduce((s, [key, n]) => s + n * S.packEV(key), 0);
     // Price basis: the simulated players are priced with today's data, so re-price every card ever pulled the same way
     // (state.pulled is the price at the moment of opening; prices move when data/ is refreshed). Saves from before
     // state.dex existed only have that snapshot.
     const live = state.dexPacks === packs;
     const value = live ? Object.entries(state.dex).reduce((s, [k, d]) => { const [set, n, kind] = k.split('|'); return s + d.c * (S.cardPrice(set, n, kind) ?? d.p); }, 0) : state.pulled;
-    const pct = packs ? S.luckPercentile(state.opened, value) : null;
+    const pct = packs ? S.luckPercentile(state.packsBy, value) : null;
     const title = pct == null ? '还没开包' : TITLES.find(([p]) => pct >= p)![1];
-    return (luckCache = { packs, pct, title, value, live, expected, cost: state.costOpened, listEV: Object.entries(state.opened).reduce((s, [id, n]) => s + n * setById(id).packPrice, 0) });
+    return (luckCache = { packs, pct, title, value, live, expected, cost: state.costOpened, listEV: Object.entries(state.opened).reduce((s, [id, n]) => s + n * setById(id).packPrice, 0),
+      boosted: Object.entries(state.packsBy).reduce((s, [key, n]) => s + (S.parseKey(key).m !== 1 ? n : 0), 0) });
   }
-  // Expected count of each hit rarity for the packs opened so far.
+  // Expected count of each hit rarity for the packs opened so far, at the odds each was opened with.
   function expectedTally() {
     const e: Record<string, number> = {};
-    for (const [id, n] of Object.entries(state.opened)) for (const [k, p] of Object.entries(setById(id).rates)) e[k] = (e[k] || 0) + n * p / 100;
+    for (const [key, n] of Object.entries(state.packsBy)) { const { id, m } = S.parseKey(key); for (const [k, p] of Object.entries(S.ratesFor(setById(id), m))) e[k] = (e[k] || 0) + n * p / 100; }
     return e;
   }
 
@@ -399,8 +431,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: () => void) => listeners.push(f),
     buy, shelve, unshelve, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline,
+    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
     demand, sealedPrice, ask, cardAsk, shelfQty, pctOf, cardPct, capacity, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, TYPES, DEMAND, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    UPGRADES, SKILLS, TYPES, DEMAND, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }

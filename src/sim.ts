@@ -50,8 +50,15 @@ export function cardPrice(setId: string, n: string, kind: string) {
   return card ? priceOf(card, kind) : null;
 }
 
-export function slotTables(set: SetConf) {
-  const t = set.rates, pick = (keys: string[]) => Object.fromEntries(keys.filter(k => t[k]).map(k => [k, t[k]]));
+// 手气 (a game bonus, bought in game.ts): every hit rarity's measured rate × m. m = 1 is the measured rates, untouched.
+// A pack opened at m is recorded under rateKey(set, m), so its luck is judged against packs opened at the same odds.
+export const roundM = (m: number) => Math.round(m * 100) / 100;
+export const rateKey = (setId: string, m = 1) => roundM(m) === 1 ? setId : `${setId}@${roundM(m)}`;
+export const parseKey = (key: string) => { const [id, m] = key.split('@'); return { id, m: m ? +m : 1 }; };
+export const ratesFor = (set: SetConf, m = 1) => m === 1 ? set.rates : Object.fromEntries(Object.entries(set.rates).map(([k, v]) => [k, HITS.includes(k) ? v * m : v]));
+
+export function slotTables(set: SetConf, m = 1) {
+  const t = ratesFor(set, m), pick = (keys: string[]) => Object.fromEntries(keys.filter(k => t[k]).map(k => [k, t[k]]));
   return { rare: pick(['UR', 'RR']), rev1: pick(['ACE', 'PB']), rev2: pick(['HR', 'SIR', 'IR', 'MB']) };
 }
 
@@ -61,9 +68,9 @@ function draw(r: Rng, setId: string, kind: string): Pull {
   return { set: setId, n: card.n, name: card.name, r: card.r, kind, price: priceOf(card, kind) };
 }
 
-// Returns the 11 cards of one booster (10 + basic Energy) in the order they sit in the pack (best last).
-export function openPack(setId: string, r: Rng): Pull[] {
-  const set = setOf(setId), t = slotTables(set), out: Pull[] = [];
+// Returns the 11 cards of one booster (10 + basic Energy) in the order they sit in the pack (best last). m = 手气 multiplier.
+export function openPack(setId: string, r: Rng, m = 1): Pull[] {
+  const set = setOf(setId), t = slotTables(set, m), out: Pull[] = [];
   for (let i = 0; i < 4; i++) out.push(draw(r, setId, 'C'));
   for (let i = 0; i < 3; i++) out.push(draw(r, setId, 'U'));
   out.push(draw(r, setId, roll(r, t.rev1, 'REV')));
@@ -77,9 +84,9 @@ export function openPack(setId: string, r: Rng): Pull[] {
 
 export const packValue = (cards: Pull[]) => cards.reduce((s, c) => s + c.price, 0);
 
-// Expected market value of one pack, computed exactly from pool averages × slot odds.
-export function packEV(setId: string) {
-  const set = setOf(setId), t = slotTables(set), P = poolsFor(setId);
+// Expected market value of one pack, computed exactly from pool averages × slot odds. key = set id or rateKey(set, m).
+export function packEV(key: string) {
+  const { id: setId, m } = parseKey(key), set = setOf(setId), t = slotTables(set, m), P = poolsFor(setId);
   const avg = (kind: string) => P[kind].reduce((s, c) => s + priceOf(c, kind), 0) / P[kind].length;
   const slot = (table: Record<string, number>, base: string) => { let rest = 100, v = 0; for (const k in table) { v += table[k] / 100 * avg(k); rest -= table[k]; } return v + rest / 100 * avg(base); };
   return 4 * avg('C') + 3 * avg('U') + slot(t.rev1, 'REV') + slot(t.rev2, 'REV') + slot(t.rare, 'R') + 0.01;
@@ -87,23 +94,24 @@ export function packEV(setId: string) {
 
 // Luck: where a player's total pulled value sits among simulated players who opened the same packs.
 // 60k packs per set (~250ms once per set): a 0.07%-per-pack SIR chase card gets ~40 samples, 20k gave ~14.
+// Keyed by rateKey: packs opened with 手气 are compared with packs opened at the same boosted odds.
 const SAMPLES = 60000, samples: Record<string, Float64Array> = {};
-function valueSamples(setId: string) {
-  if (samples[setId]) return samples[setId];
-  const r = rng(0xC0FFEE ^ setId.length), a = new Float64Array(SAMPLES);
-  for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(setId, r));
-  return (samples[setId] = a);
+function valueSamples(key: string) {
+  if (samples[key]) return samples[key];
+  const { id, m } = parseKey(key), r = rng(0xC0FFEE ^ id.length), a = new Float64Array(SAMPLES);
+  for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(id, r, m));
+  return (samples[key] = a);
 }
 // Where one pack's value ranks among simulated packs of the same set: share of packs worth less (ties count half).
 const sorted: Record<string, Float64Array> = {};
-export function packPercentile(setId: string, value: number) {
-  const a = sorted[setId] ||= Float64Array.from(valueSamples(setId)).sort();
+export function packPercentile(key: string, value: number) {
+  const a = sorted[key] ||= Float64Array.from(valueSamples(key)).sort();
   let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < value - 1e-9) lo = m + 1; else hi = m; }
   let up = lo; while (up < a.length && a[up] <= value + 1e-9) up++;
   return (lo + (up - lo) / 2) / a.length;
 }
 // Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
-export function luckPercentile(counts: Record<string, number>, value: number, trials?: number) { // counts: {setId: packs}
+export function luckPercentile(counts: Record<string, number>, value: number, trials?: number) { // counts: {rateKey: packs}
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   trials ||= Math.max(1000, Math.min(4000, Math.floor(2e6 / Math.max(total, 1))));
   const r = rng(7); let below = 0, ties = 0;
@@ -116,10 +124,10 @@ export function luckPercentile(counts: Record<string, number>, value: number, tr
 }
 
 // Exact chance of seeing `k` or more (k >= expected) / `k` or fewer (k < expected) hits of one rarity,
-// over packs opened in several sets (Poisson-binomial by DP, truncated at k+1 entries).
-export function hitTail(counts: Record<string, number>, kind: string, k: number) {
+// over packs opened in several sets at the odds each was opened with (Poisson-binomial by DP, truncated at k+1 entries).
+export function hitTail(counts: Record<string, number>, kind: string, k: number) { // counts: {rateKey: packs}
   const probs = []; let mean = 0;
-  for (const id in counts) { const p = (setOf(id).rates[kind] || 0) / 100; for (let i = 0; i < counts[id]; i++) probs.push(p); mean += p * counts[id]; }
+  for (const key in counts) { const { id, m } = parseKey(key), p = (ratesFor(setOf(id), m)[kind] || 0) / 100; for (let i = 0; i < counts[key]; i++) probs.push(p); mean += p * counts[key]; }
   const pmf = new Float64Array(k + 1); pmf[0] = 1; // P(X = j) for j <= k
   for (const p of probs) for (let j = k; j >= 0; j--) pmf[j] = pmf[j] * (1 - p) + (j ? pmf[j - 1] * p : 0);
   const le = pmf.reduce((a, b) => a + b, 0), lt = le - pmf[k];
