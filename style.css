@@ -1202,3 +1202,10 @@ div.rs-list { padding-top: 12px; }
 .wreck button { width: 100%; margin-top: 6px; }
 /* 成长: a buy that leaves less cash than the bill 九姐 collects next. Bold ink, no color: it asks you to act, it is not money. */
 .gt-bill { margin: 0; font-size: var(--fs-cap); font-weight: 700; color: var(--ink); }
+/* 闲钱 under 成长's 下一步: cash minus the next bill, the number the nav badge counts with. */
+.gg-spare { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; font-size: var(--fs-cap); color: var(--muted); }
+.gg-spare b { font-size: var(--fs-h); color: var(--ink); font-variant-numeric: tabular-nums; }
+/* 退回: this week's buy back at 90% while the bill can't be covered (pocket and 账本). */
+.gt-back { display: grid; justify-items: start; gap: 2px; margin: 0; }
+.gt-back small { font-size: var(--fs-cap); color: var(--muted); }
+.lg-back { display: grid; gap: 8px; margin-top: 10px; } .lg-back > p { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
