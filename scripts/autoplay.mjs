@@ -32,11 +32,11 @@ function watchDebt(G, clock) {
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
 // branch = this shop's revenue at which the player 开分店 (prestige; false = never; 'paid' = as soon as the debt is cleared), then spends all 名气: 老主顾 (traffic) first, then the cheapest perk.
 // reserve = in the last 5 minutes before a bill, keep this many times it in cash (0 = spend everything and let the bill fall on whatever is left);
-// repay = pay loans back once cash is above the reserve. away = [minutes on, minutes off]: the player closes the page for the
+// repay = pay loans back with what cash is above the reserve plus a float for stock (twice the next bill, at least $1,000). clerkFirst = hire the clerk before any other upgrade. away = [minutes on, minutes off]: the player closes the page for the
 // off minutes (one catch-up tick on return, credited up to the offline cap), then plays the on minutes, and so on.
 // off = minutes of every hour the player leaves the page open without doing anything (the shop runs on its own; a clerk, if hired, restocks).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, log = 600, hook } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), rows = []; let spent = 0, pot = 0, rev = 0, t = 0, nextRow = 0;
   const debt = watchDebt(G, () => t);
   const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
@@ -58,10 +58,12 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     if (G.state.overdue) { for (const k of Object.keys(G.state.singles)) G.sell(k); G.payBill(); } // short on a bill: sell every card to peers first
     for (const [k] of Object.entries(G.state.singles)) if (G.list(k)) G.state.shown[G.state.shown.length - 1].pct = cardPct;
     const bill = G.nextBill(), keep = reserve && bill && G.dueIn() < 300 ? bill.amount * reserve : 0, free = () => Math.max(0, G.state.cash - keep); // the last 5 minutes before a bill: cash kept back for it
-    if (repay && G.state.loan > 0 && free() > 0) G.repay(free());
+    const float = Math.max(1000, 2 * (bill?.amount || 0)); // working cash a repaying player keeps for stock
+    if (repay && G.state.loan > 0 && free() > float) G.repay(free() - float);
     let best = null; for (const k of Object.keys(G.UPGRADES)) { const c = G.upgradeCost(k); if (c != null && G.canUpgrade(k) && G.lvl(k) < (cap[k] ?? Infinity) && (!best || c < best[1])) best = [k, c]; }
     for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
     if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
+    if (clerkFirst && G.lvl('clerk') < 1) best = ['clerk', G.upgradeCost('clerk')]; // someone who leaves the page for hours hires a clerk before anything else
     if (best && free() >= best[1]) { spent += best[1]; if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
     const leaving = (off && (t + step) % 3600 >= (60 - off) * 60) || (away && (t + step) % ((away[0] + away[1]) * 60) >= away[0] * 60); // last visit before going away: fill the shelves, save later (unless a set is waiting for a shelf)
     const hold = best && (!leaving || best[0] === 'racks') && free() > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
@@ -130,16 +132,18 @@ export function noob({ hours = 5, seed = 1, log = 1800 } = {}) {
 // The four kinds of player in GAMEPLAY.md「难度」, each over `seeds` seeds for `hours` of real time.
 export const KINDS = {
   纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
+  普通: s => play({ hours: s.hours, seed: s.seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, log: 3600 }), // looks in every 90 s, prices at market
   爱开包: s => play({ hours: s.hours, seed: s.seed, openShare: 0.05, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
+  开包上头: s => play({ hours: s.hours, seed: s.seed, openShare: 0.12, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
   新手乱点: s => noob({ hours: s.hours, seed: s.seed }),
-  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], log: 3600 }), // 20 min in, 8 h away, again
+  挂机离线: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, away: [20, 480], clerkFirst: true, log: 3600 }), // 20 min in, 8 h away, again; hires the clerk first
 };
 export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } = {}) {
   return kinds.map(k => {
     const runs = Array.from({ length: seeds }, (_, i) => KINDS[k]({ hours, seed: i + 1 }).debt);
     const firstBroke = runs.map(d => d.broke[0]?.week ?? Infinity), q = w => firstBroke.filter(x => !(x <= w)).length / seeds;
     const cleared = runs.filter(d => d.cleared), med = a => a.length ? a.sort((x, y) => x - y)[Math.floor(a.length / 2)] : null;
-    return { kind: k, 'week 3': q(3), 'week 6': q(6), 'week 12': q(12), 'week 24': q(24), 'no 破产': q(Infinity), 'paid off': cleared.length / seeds,
+    return { kind: k, 'week 3': q(3), 'week 6': q(6), 'week 12': q(12), 'week 24': q(24), 'no 破产': firstBroke.filter(x => x === Infinity).length / seeds, 'paid off': cleared.length / seeds,
       'paid off @ h (median)': med(cleared.map(d => d.cleared.h)), 'loans/run': +(runs.reduce((a, d) => a + d.loans, 0) / seeds).toFixed(1), 'forced': +(runs.reduce((a, d) => a + d.forced, 0) / seeds).toFixed(1) };
   });
 }
@@ -147,10 +151,10 @@ export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } =
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
   if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
-  else if (mode === 'bills') {
-    const rows = play({ hours: 12, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 1200 }), G = rows.G;
-    console.table(rows.filter((r, i) => i && (i <= 6 || i % 3 === 0)).map(r => ({ week: r.min / 20, 'bill': Math.min(r.debt + Math.round(G.BILL0 * G.BILL_G ** (r.min / 20 - 1)), Math.round(G.BILL0 * G.BILL_G ** (r.min / 20 - 1))), 'profit/week': r.perMin * 20, 'bill/profit': +(G.BILL0 * G.BILL_G ** (r.min / 20 - 1) / (r.perMin * 20)).toFixed(2), debt: r.debt, rev: r.rev })));
-    console.log(rows.debt);
+  else if (mode === 'bills') { // one row per week until the debt is cleared: the bill against what the shop made that week before paying it
+    const rows = play({ hours: 12, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 1200 }), G = rows.G, bill = w => Math.round(G.BILL0 * G.BILL_G ** (w - 1));
+    const out = []; for (let i = 1; i < rows.length && rows[i - 1].debt > 0; i++) { const w = i, b = Math.min(bill(w), rows[i - 1].debt), gross = rows[i].perMin * 20 + b; out.push({ week: w, bill: b, 'made that week': gross, 'bill / made': +(b / gross).toFixed(2), 'debt after': rows[i].debt, loan: rows[i].loan }); }
+    console.table(out); console.log(rows.debt);
   } else {
     const [hours = 3, openShare = 0.15, pct = 1, masterShare = 0, racks = Infinity, depth = Infinity] = [mode, ...rest].map(Number);
     const rows = play({ hours, openShare, pct, masterShare, cap: { racks, depth }, log: 1800 });

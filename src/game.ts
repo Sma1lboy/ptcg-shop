@@ -29,7 +29,7 @@ export interface State {
   branch: Branch;
   // 债务 (GAMEPLAY.md): owe = what is left of the opening debt (paid in weekly installments, no interest), loan = what was
   // borrowed (compounds weekly), debt = owe + loan (the one number the story reads). week = the week whose bill comes next;
-  // shopT = seconds of shop time since this shop opened (the bill clock); overdue = a bill that fell due short of cash, with
+  // shopT = the bill clock, seconds since this shop opened (a closed stretch adds one week at most); overdue = a bill that fell due short of cash, with
   // the shop time its grace runs out; wreck = the 破产 statement, shown until acknowledged.
   debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
   overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
@@ -92,8 +92,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop time credited on return, with a clerk minding the shop (看店 adds more)
   const NOCLERK_CAP = 3600;               // without a clerk nobody minds the shop: at most an hour is credited (sales and the bill clock alike)
-  // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time: the time the shop is credited with, open
-  // or closed (see offlineCap), so bills never fall due in time the shop did not get. Shop n (0 = the first) owes
+  // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time while the page is open; a closed stretch
+  // (sales credited up to offlineCap) moves the bill clock one week at most: 九姐 calls once while you are away. Shop n (0 = the first) owes
   // DEBT0 × (1 + DEBT_STEP·n); week w's bill is BILL0 × (1 + DEBT_STEP·n) × BILL_G^(w−1), capped at what is left, plus whatever
   // the loan has grown past the credit line. A bill short of cash gets GRACE seconds; then it is borrowed, or the shop goes bankrupt.
   // Loans compound LOAN_RATE a week (+LOAN_MARK per past bankruptcy, up to 3); the credit line is LOAN_K × the shop's best
@@ -140,12 +140,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
 
-  // 开分店 (prestige), game setting: once this shop's revenue reaches BRANCH_AT you can start over in a new shop for
-  // 名气 = floor(sqrt(revenue / FAME_UNIT)) (100k → 3, 250k → 5, 1M → 10), spent on the permanent perks below. The new shop
-  // starts from zero (cash, stock, shelves, upgrades, skills, revenue, so the later sets lock again); the binder, 图鉴,
-  // achievements and the whole 欧气 record come along. Every perk has a max level, so the carry-over is bounded.
-  // Perk level L+1 costs base + L 名气.
-  const BRANCH_AT = 100000, FAME_UNIT = 2500;
+  // 开分店 (prestige), game setting: once this shop's debt is paid (九姐 has no claim left) you can start over in a new shop for
+  // 名气 = floor(sqrt(revenue / FAME_UNIT)) (500k → 6, 1M → 8, 2M → 12), spent on the permanent perks below. The new shop
+  // starts from zero (cash, stock, shelves, upgrades, skills, revenue, so the later sets lock again) and owes that shop's
+  // opening debt (DEBT_STEP above); the binder, 图鉴, achievements and the whole 欧气 record come along. Every perk has a max
+  // level, so the carry-over is bounded. Perk level L+1 costs base + L 名气.
+  const FAME_UNIT = 12500;
   const SEED_STEP = 1000, REG_STEP = 0.25, ACCESS_STEP = 0.15;
   const PERKS: Record<string, { name: string; group: string; desc: string; max: number; base: number; fx: (lv: number) => string }> = {
     seed: { name: '老本', group: '经营', desc: '每开一家新店，起步资金多一些（不算营业额）', max: 3, base: 1, fx: lv => `起步 $${(START_CASH + SEED_STEP * lv).toLocaleString('en-US')}` },
@@ -493,10 +493,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
   }
-  // Dead end guard: no cash for the cheapest pack, nothing on the shelf, nothing to sell. Game setting.
+  // Dead end guard: no cash for the cheapest pack and nothing on the shelves or in the back room. Game setting.
   function bailout() {
     const cheapest = Math.min(...SETS.filter(s => unlocked(s.id)).map(s => wholesale(s.id)));
-    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0) || Object.keys(state.singles).length || state.shown.length) return false;
+    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0)) return false; // cards in the binder don't count: a new player may not think of selling them
     if (credit() < BAILOUT) { bankrupt(); return true; }
     borrow(BAILOUT, true); log('货架空了、钱也花光了：九姐借你进货钱，记在账上', 'loss', BAILOUT); return true;
   }
@@ -513,7 +513,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       n += m;
       for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
       clerkWork(acc, now - (left - len) * 1000);
-      debtWork(len, away);
+      debtWork(away ? len * Math.min(1, WEEK / dt) : len, away); // a closed stretch moves the bill clock one week at most
     }
     if (away && state.overdue) state.overdue.until = Math.max(state.overdue.until, state.shopT + GRACE); // what could not be covered while away gets its grace from the return
     if (acc.packs) log(`店员进货 ${acc.packs} 包`, '', -acc.spent);
@@ -699,7 +699,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
-    branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, BRANCH_AT, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
+    branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
