@@ -474,18 +474,27 @@ button:disabled { cursor: not-allowed; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
-/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box.
-   It feeds out of the till's printer slot — a strip of the case trim (gen/plate.webp) that drops in first; the paper is never framed */
-.notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05);
-  position: fixed; z-index: 15; top: calc(var(--top-h) + 4px); right: 24px; width: 290px; padding-top: 12px; color: var(--ink); }
-.notice[hidden] { display: none; }
-/* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 340 = its
-   290 width + 24 inset + the slot's 10px overhang + a gap. Phones print it into the page above the view instead (below) */
-@media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(340px - max(0px, (100vw - 1680px) / 2))); } }
-.notice::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 18px; border: 4px solid var(--trim);
+/* 店里冒出来的东西 (DESIGN.md「弹出」): the closing receipt and the achievement label both feed out of ONE printer slot under the top
+   bar — a strip of the case trim (gen/plate.webp) that drops in when the first thing prints. What prints stacks under what is
+   already hanging (receipt first, then labels), so nothing needs an offset for anything else. Shown only while something is in it */
+.pops { position: fixed; z-index: 16; top: calc(var(--top-h) + 4px); right: 24px; width: 300px; padding-top: 22px; display: grid; gap: 10px; pointer-events: none; }
+.pops > * { pointer-events: auto; }
+/* desktop, labels only: top right is the rail's first 开 1 包 (a click meant for it would follow the label to 成就); the slot hangs
+   bottom right instead, where nothing is pressed right after a pack */
+@media (min-width: 780px) { .pops:not(:has(> #notice:not([hidden]))) { top: auto; bottom: 24px; } }
+.pops:not(:has(> :not([hidden]))) { display: none; }
+/* border-box by hand: `* { box-sizing }` doesn't reach pseudo-elements, and a content-box slot was 26 + 8px tall and covered
+   the first line of whatever it printed */
+.pops::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 26px; box-sizing: border-box; border: 4px solid var(--trim);
   border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
   animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
-.notice .paper { position: relative; margin: 0 0 28px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
+/* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
+.notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
+.notice[hidden] { display: none; }
+/* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 350 = the
+   tray's 300 width + 24 inset + the slot's 10px overhang + a gap. Phones reserve the stub's height above the view instead (below) */
+@media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
+.notice .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
   mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
@@ -963,14 +972,19 @@ button:disabled { cursor: not-allowed; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
-  /* phones: only the receipt's stub shows — one line (关店 N 小时 · the net) in the page above the view, scrolling away with it; as a
-     full sheet it covered the 货架 / 展示柜 tabs, and in the flow it pushed the 3D table 280px down. Tapping the stub prints the rest.
-     On 开包 the stub lies on the 3D table just under the mat's head row (「今天拆哪包？」and 音效, ~60px), over the display case where
-     nothing is pressed, and scrolls with the page: the table stays where it is */
-  .notice { position: relative; top: auto; right: auto; z-index: auto; width: auto; max-width: 340px; margin: 12px auto -4px; padding-inline: 12px; }
+  /* phones: the slot spans the screen under the top bar. The receipt shows only its stub — one line (关店 N 小时 · the net);
+     tapping it prints the rest */
+  .pops { left: 16px; right: 16px; width: auto; max-width: 400px; margin-inline: auto; }
   .notice:not(.unrolled) .paper { display: none; }
   .notice:not(.unrolled) .stub { display: flex; }
-  :root[data-page="open"] .notice { position: absolute; z-index: 9; top: calc(var(--top-h) + 72px); left: 16px; right: 16px; margin: 0 auto; }
+  /* while the receipt hangs the slot is part of the page: it scrolls away with it, and the page makes room for it (--notice-h,
+     notice.ts: the stub, or the whole receipt once unrolled) so the 货架 / 展示柜 tabs stay pressable. Labels alone hang fixed, to be
+     seen wherever the player has scrolled; they are brief and overlay */
+  .pops:has(> #notice:not([hidden])) { position: absolute; }
+  :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 36px + var(--notice-h, 44px)); }
+  /* 开包: the slot hangs under the mat's head row (「今天拆哪包？」and 音效, ~60px — it's mat.ts's markup, so the number lives here
+     once), over the display case where nothing is pressed, and scrolls with the page, so the table stays full-height */
+  :root[data-page="open"] .pops { position: absolute; top: calc(var(--top-h) + 72px); }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -1008,19 +1022,12 @@ button:disabled { cursor: not-allowed; }
 .gh-goal .gt-save { max-width: 260px; }
 .ach-note { margin: 0; font-size: var(--fs-cap); }
 
-/* the unlock pop: the grading label rises out of a slot in the counter's aluminium edge at the bottom right (the receipt prints
-   top right), then is pressed flat. The slot (gen/plate.webp) slides in once when the pop opens; queued labels rise out of it in turn */
-.ach-pop { position: fixed; z-index: 16; right: 24px; bottom: 24px; width: 360px; padding-bottom: 10px; }
-.ach-pop::after { content: ""; position: absolute; left: -12px; right: -12px; bottom: 0; height: 18px; border: 4px solid var(--trim);
-  border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 8px 18px rgba(4, 8, 14, .4);
-  animation: slot-up .3s cubic-bezier(.23, 1, .32, 1) backwards; }
-@keyframes slot-up { from { opacity: 0; transform: translateY(14px) scaleX(.85); } }
-@keyframes rise { from { clip-path: inset(100% 0 0 0); translate: 0 24px; } to { clip-path: inset(-20px 0 0 0); } }
+/* the unlock label prints out of the same slot as the receipt (.pops), under it if the receipt is hanging, then is pressed flat */
 .ach-pop[hidden] { display: none; }
 .ach-pop a { display: block; color: inherit; text-decoration: none; }
 .ach-pop ul { list-style: none; margin: 0; padding: 0; }
 .grade.pop { box-shadow: inset 0 0 0 5px var(--paper), inset 0 0 0 7px var(--ink), 0 14px 34px rgba(4, 8, 14, .32), 0 1px 2px rgba(0, 0, 0, .2);
-  animation: rise .5s .12s cubic-bezier(.23, 1, .32, 1) backwards, press .9s .57s cubic-bezier(.23, 1, .32, 1) backwards; }
+  animation: print .5s .12s steps(10, jump-end) backwards, press .9s .57s cubic-bezier(.23, 1, .32, 1) backwards; }
 .grade.pop .g-grade b { animation: ink .7s .5s cubic-bezier(.2, .9, .3, 1.2) backwards; }
 @keyframes press { 0% { transform: translateY(-3px) rotate(-.8deg); } 30% { transform: translateY(1px) rotate(0); } 100% { transform: none; } }
 @keyframes ink { from { opacity: 0; transform: scale(1.5); } }
@@ -1028,14 +1035,9 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 779px) {
   .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .sound { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); } /* above the docked nav */
-  /* phones: the label prints down out of a slot under the top bar. The bottom of a phone is where the taps are (the pack's summary
-     buttons, the guide's strip, the tabs): there it sat under the guide and over 「进 1 包马上开」. Only the name and the prize, two lines */
-  .ach-pop { left: 16px; right: 16px; top: calc(var(--top-h) + 4px); bottom: auto; width: auto; max-width: 400px; margin-inline: auto; padding: 18px 0 0; }
-  .ach-pop::after { top: 0; bottom: auto; animation-name: slot; }
-  .ach-pop .grade.pop { padding-block: 10px; animation-name: print, press; animation-duration: .5s, .9s; animation-timing-function: steps(10, jump-end), cubic-bezier(.23, 1, .32, 1); }
+  /* phones: only the name and the prize, two lines */
+  .ach-pop .grade.pop { padding-block: 10px; }
   .ach-pop .grade.pop .g-id > p:not(.g-k, .a-name) { display: none; }
-  :root[data-page="open"] .ach-pop { top: calc(var(--top-h) + 72px); } /* on 开包, under the mat's head row too (音效 stays pressable) */
-  :root[data-page="open"]:has(#notice:not([hidden])) .ach-pop { top: calc(var(--top-h) + 132px); } /* and under the receipt's stub */
   .nav a { padding: 0 2px; }
 }
 
