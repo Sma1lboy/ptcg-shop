@@ -32,7 +32,7 @@ function cardHTML(c: Pull, i: number, up: boolean, big?: boolean) {
 
 // Where one pack ranks among simulated packs of the same set, in words a player can quote.
 function rankText(setId: string, v: number) {
-  const p = S.packPercentile(setId, v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
+  const p = S.packPercentile(S.rateKey(setId, G.luckMult()), v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
   return { p, text: `比 ${pc}% 的${G.setById(setId).name}包值钱${p >= .9 ? `，约 ${Math.min(1000, Math.round(1 / (1 - p)))} 包才出一包这样的` : ''}` };
 }
 const shareBtn = () => '<button type="button" data-act="sharemat">分享这次开包</button>';

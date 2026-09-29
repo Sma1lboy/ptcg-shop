@@ -77,11 +77,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
   // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
   const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
-    luck: { name: '手气', group: '幸运', desc: '开包时每种闪卡（RR 及以上）的概率乘上一个系数；官方概率本身不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
-    talk: { name: '口才', group: '经营', desc: '顾客肯多付的上限再加（倒爷不吃这套）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
-    crowd: { name: '人气', group: '经营', desc: '进店人数（和图鉴口碑相乘）', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
+    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
+    talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
     watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
-    apprentice: { name: '带徒弟', group: '经营', desc: '店员把单卡库存里最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
 
   const setById = (id: string) => SETS.find(s => s.id === id)!;

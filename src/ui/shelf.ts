@@ -7,7 +7,7 @@ import { G, $, money, logoUrl } from './common.ts';
 export function renderShelf() {
   const s = G.state;
   render(SETS.map(set => {
-    const w = G.wholesale(set.id), ev = S.packEV(set.id), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
+    const w = G.wholesale(set.id), ev = S.packEV(S.rateKey(set.id, G.luckMult())), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
     const room = G.WAREHOUSE - stock, can = (n: number) => room > 0 && s.cash >= w * Math.min(n, room), shelfRoom = G.capacity() - onShelf, pct = G.pctOf(set.id);
     if (!G.unlocked(set.id)) return html`<article class="set locked"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
         <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
@@ -17,7 +17,7 @@ export function renderShelf() {
         <img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
         <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)} · <b title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${G.demand(set.id).tag}</b></span></div>
         <div class="set-price"><span class="sticker" title="货架标价">${money(G.ask(set.id))}</span>${heat ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销' : '滞销'}</span>` : ''}
-          <span>市价 ${money(mkt)}</span><span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 实测概率算出的单包期望">开出期望 ${money(ev)}</span></div>
+          <span>市价 ${money(mkt)}</span><span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 你现在开包的概率（实测概率，有手气时乘上加成）算出的单包期望">开出期望 ${money(ev)}</span></div>
         <div class="set-stock">仓库 <b>${stock}</b>/${G.WAREHOUSE} · 货架 <b>${onShelf}</b>/${G.capacity()} 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>
         <div class="btns">
           <button type="button" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1 包</button>
