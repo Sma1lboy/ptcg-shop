@@ -7,10 +7,10 @@ import type { Game, GameEvent } from './game.ts';
 export interface Bill { week: number; amount: number; dueAt?: number }
 // kind: what happened to the debt. key: stable id for "has this beat already played" (bill_due fires every tick inside its window)
 // 'last' = a bill was paid and the next one would clear the opening debt (nothing borrowed): the run's closing stretch
-export interface DebtBeat { kind: 'due' | 'paid' | 'last' | 'missed' | 'loan' | 'bankrupt' | 'story'; key: string; week?: number; amount?: number; id?: string }
+export interface DebtBeat { kind: 'due' | 'paid' | 'last' | 'missed' | 'loan' | 'bankrupt' | 'story'; key: string; week?: number; amount?: number; id?: string; set?: string }
 
 type Econ = { nextBill?: () => Partial<Bill> | null | undefined };
-type Ev = { type?: string; week?: number; amount?: number; id?: string };
+type Ev = { type?: string; week?: number; amount?: number; id?: string; set?: string };
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
 
 export function bill(G: Game): Bill | null {
@@ -30,9 +30,12 @@ export function debtBeat(ev: GameEvent | undefined, G: Game): DebtBeat | null {
   if (!kind) return null;
   // the bill that clears the debt emits due → paid → story in one go, all read after the debt is gone: only 还清 speaks
   if ((kind === 'due' || kind === 'paid') && !inDebt(G)) return null;
+  // a bill the till covered goes due → paid in the same tick: 九姐 only needs to speak once, so 「这周的账」 plays when it was not paid
+  // (missed, or piled onto one still overdue), and a covered week is just 「收到」
+  if (kind === 'due' && num(e.week) != null && (weekNow(G) ?? 0) > e.week! && (G.state as { overdue?: { week?: number } | null }).overdue?.week !== e.week) return null;
   const b = kind === 'due' ? bill(G) : null, week = num(e.week) ?? b?.week ?? weekNow(G), amount = num(e.amount) ?? b?.amount, r = run(G);
   if (kind === 'paid' && lastAhead(G)) return { kind: 'last', key: `last:${r}`, week, amount };
   // '' = may play every time; story ids are per shop (branch.n), so the second shop gets its own 还清 and 开张
-  const key = kind === 'story' ? `story:${e.id}:${r.split('.')[0]}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${r}:${week ?? amount ?? b?.dueAt ?? '?'}`;
-  return { kind, key, week, amount, id: e.id };
+  const key = kind === 'story' ? `story:${e.id}:${e.set ?? r.split('.')[0]}` : kind === 'loan' || kind === 'bankrupt' ? '' : `${kind}:${r}:${week ?? amount ?? b?.dueAt ?? '?'}`;
+  return { kind, key, week, amount, id: e.id, set: e.set };
 }
