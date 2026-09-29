@@ -621,14 +621,6 @@ button:disabled { cursor: not-allowed; }
   .mat { padding: 14px; }
   .stage { width: min(260px, 66vw); }
   .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
-  /* single-card rows: the card and its name on top, the buttons on a second line, so the name isn't squeezed to one word a line */
-  .singles li { grid-template-columns: 36px minmax(0, 1fr) auto; row-gap: 6px; }
-  .singles li > .cf { grid-row: span 2; align-self: start; }
-  .singles .s-btns { grid-column: 2 / -1; justify-content: flex-start; }
-  #casepanel .singles li { grid-template-columns: 36px auto auto minmax(0, 1fr); }
-  #casepanel .singles .s-name { grid-column: 2 / -1; }
-  #casepanel .singles .pricer { margin-left: 0; }
-  #casepanel .singles li > button { justify-self: end; }
   .g-grade b { font-size: 36px; }
   .g-grade b.long { font-size: 28px; }
   .g-bar { width: 64px; }
@@ -642,6 +634,18 @@ button:disabled { cursor: not-allowed; }
 .page .pricer button { width: 34px; padding: 0; border-image-width: 9px; }
 .margin { font-size: var(--fs-cap); } .margin.loss { font-weight: 700; } /* priced under wholesale: the one loss the player should act on */
 #casepanel .singles li { grid-template-columns: 36px minmax(0, 1fr) auto auto auto; }
+/* single-card rows in a narrow panel (phones, and the half-width column on tablets): the card and its name on top, the buttons on
+   a second line, so the name isn't squeezed to one character a line. The panel's width, not the viewport's */
+:is(#singles, #casepanel) { container-type: inline-size; }
+@container (max-width: 520px) {
+  .singles li { grid-template-columns: 36px minmax(0, 1fr) auto; row-gap: 6px; }
+  .singles li > .cf { grid-row: span 2; align-self: start; }
+  .singles .s-btns { grid-column: 2 / -1; justify-content: flex-start; }
+  #casepanel .singles li { grid-template-columns: 36px auto auto minmax(0, 1fr); }
+  #casepanel .singles .s-name { grid-column: 2 / -1; }
+  #casepanel .singles .pricer { margin-left: 0; }
+  #casepanel .singles li > button { justify-self: end; }
+}
 .cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
 .cust-bar span { border-radius: 2px; min-width: 0; }
 .c-sold { background: var(--gain); } .c-pricey { background: color-mix(in oklab, var(--ink) 50%, transparent); } .c-none { background: var(--line); }
