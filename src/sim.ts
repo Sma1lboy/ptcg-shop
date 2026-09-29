@@ -158,12 +158,16 @@ function simTotal(r: Rng, key: string, n: number) {
   }
   return v;
 }
-export function luckPercentile(counts: Record<string, number>, value: number, trials = LUCK_TRIALS) { // counts: {rateKey: packs}
-  const r = rng(7); let below = 0, ties = 0;
-  for (let t = 0; t < trials; t++) {
-    let v = 0; for (const key in counts) if (counts[key] > 0) v += simTotal(r, key, counts[key]);
-    if (v < value - 1e-9) below++; else if (Math.abs(v - value) <= 1e-9) ties++;
-  }
+// The simulated players' totals, sorted: the share image draws them, luckPercentile counts against them (same rng(7) draws, so the
+// picture and the printed percentile agree).
+export function luckSamples(counts: Record<string, number>, trials = LUCK_TRIALS) { // counts: {rateKey: packs}
+  const r = rng(7), out = new Float64Array(trials);
+  for (let t = 0; t < trials; t++) { let v = 0; for (const key in counts) if (counts[key] > 0) v += simTotal(r, key, counts[key]); out[t] = v; }
+  return out.sort();
+}
+export function luckPercentile(counts: Record<string, number>, value: number, trials = LUCK_TRIALS) {
+  let below = 0, ties = 0;
+  for (const v of luckSamples(counts, trials)) { if (v < value - 1e-9) below++; else if (Math.abs(v - value) <= 1e-9) ties++; }
   return (below + ties / 2) / trials;
 }
 

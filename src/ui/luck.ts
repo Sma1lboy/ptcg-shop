@@ -5,8 +5,6 @@ import { G, $, money, rarLabel } from './common.ts';
 import { mark } from './card.ts';
 import { grade, pctText, type Grade } from './share.ts';
 
-// 95% interval of the percentile from sampling LUCK_TRIALS players (the only error left; sim.ts has no pool to be biased by).
-const margin = (pct: number) => Math.max(0.1, 196 * Math.sqrt(pct / 100 * (1 - pct / 100) / S.LUCK_TRIALS)).toFixed(1);
 const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
 function barcode(b: number[]) {
   let x = 0;
@@ -43,7 +41,7 @@ export function renderLuck() {
       ${label(g)}
       ${pct == null ? '' : html`<p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>一块评级卡壳：这张标签 + 你开出过最贵的卡</small></p>`}
       <p class="verdict-sub">${pct == null ? `拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。`
-        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家（${S.LUCK_TRIALS} 个，各开同样这些包：同系列、同包数、同概率；只比了 ${S.LUCK_TRIALS} 个，所以这个数有 ±${margin(pct)} 个百分点的抽样误差，95% 置信）${L.packs < 300 ? '；包数少时总值主要看有没有开出一两张大卡' : ''}。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
+        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家（${S.LUCK_TRIALS} 个，各开同样这些包：同系列、同包数、同概率；只比了 ${S.LUCK_TRIALS} 个，所以这个数有 ±${g.err} 个百分点的抽样误差，95% 置信）。${g.best ? html`最贵的一张 ${g.best.name}（${money(g.bestNow)}）占开出总值的 <b>${g.share}%</b>${g.without! < pct - 0.5 ? `，没开出它只超过 ${pctText(g.without!)}%` : ''}${L.packs < 300 ? '：包数少时，总值主要看有没有开出一两张大卡' : ''}。` : ''}${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
         ${BANDS.map(([a, b, n]) => html`<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`)}
         ${pct == null ? '' : html`<i style="left:${pct}%"></i>`}

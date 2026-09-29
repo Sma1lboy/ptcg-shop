@@ -800,6 +800,8 @@ console.log('ok luck percentile');
   const t0 = performance.now(); S.luckPercentile(big, M); const ms = performance.now() - t0;
   const mid = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 1500], [S.rateKey(s.id, 1.25), 1500]])), t1 = performance.now(); S.luckPercentile(mid, 1e5); const ms2 = performance.now() - t1;
   assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
+  { const c = { sv08: 40, 'sv08@1.25': 5 }, xs = S.luckSamples(c, 500); assert.ok(xs.every((v, i) => !i || xs[i - 1] <= v), 'luckSamples sorted');
+    const v = xs[300]; assert.equal(S.luckPercentile(c, v, 500), (xs.filter(y => y < v - 1e-9).length + xs.filter(y => Math.abs(y - v) <= 1e-9).length / 2) / 500, 'the share image\'s spread and the printed percentile are the same draws'); }
   console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
 
