@@ -9,6 +9,7 @@ import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
 import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
 import { hold } from './mat.ts';
+import { point } from './shelf.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
@@ -96,7 +97,7 @@ function packs(rec: Visit[]) {
         [0.5, racked && mine.length >= 3 && !faint.length && low > pct + 0.05 ? `按现在的标价都会买，最低的一位也肯出 ${money(low * mkt)}` : '', ''],
         [0.1, !mine.length && !missed && shelf ? `${lately()}没有人专门来买${name}${(s.heat[id] || 1) < 1 ? '（滞销）' : ''}` : '', ''],
       ] as const).filter(([n, t]) => n && t).sort((a, b) => b[0] - a[0]).slice(0, 2);
-      return html`<li>
+      return html`<li @pointerenter=${() => point(id)} @pointerleave=${() => point(null)} @focusin=${() => point(id)} @focusout=${() => point(null)}>
           <div class="c-row"><b>${name}</b><span class="muted">${racked ? `货架 ${shelf} 包` : '没上架'}</span>
             <span class="c-n">${tally([['来买', mine.length + openers.filter(v => v.miss === id).length], ['买走', sold], ['嫌贵', dear.length + broke], ['没买到', missed], ['倒爷', swept.length]]) || '没人来'}</span></div>
           ${mine.length && racked ? priceRail(id, mine, flip) : ''}
