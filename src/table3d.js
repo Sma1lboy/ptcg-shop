@@ -467,9 +467,11 @@ const MOODS = {
   look: { hemi: .2, key: .75, cone: .5, glow: .2, bloom: .15, rays: 0, col: '--fx-silver' }, // the table steps back behind the card in hand
 };
 const moodNow = { hemi: .5, key: 1.6, cone: .5, glow: 0, bloom: .12, rays: 0 };
+let moodTok = 0; // the latest mood wins: a show's delayed fade to 'glow' must not keep running over the spread's 'base'
 function mood(name, ms = 500) {
-  const m = MOODS[name], a = { ...moodNow }, col = new T.Color(css(m.col)), c0 = L.glow.color.clone();
+  const m = MOODS[name], a = { ...moodNow }, col = new T.Color(css(m.col)), c0 = L.glow.color.clone(), tok = ++moodTok;
   return tween(ms, p => {
+    if (tok !== moodTok) return;
     for (const k in a) moodNow[k] = a[k] + (m[k] - a[k]) * p;
     L.glow.color.copy(c0).lerp(col, p); rays.material.uniforms.uCol.value.copy(L.glow.color);
   });
@@ -689,17 +691,27 @@ function spreadHalos(run) {
 function tags(run) {
   const box = host && host.querySelector('.s3-tags'); if (!box) return;
   box.innerHTML = run.data.map(c => `<span class="s3-tag">${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price
-  run.tagEls = [...box.children];
+  run.tagEls = [...box.children]; run.tagW = run.tagEls.map(e => e.offsetWidth); // measured once: placeTags runs every frame
 }
+// An overlapping fan shows only each card's left side: the price goes under that corner. A tag (mark + price) is wider than
+// that strip, so tags are stacked over up to three rows, the dearest card placed first; a tag with no free spot in any row
+// is left out (tap the card: lifted, it shows its price).
 function placeTags(run) {
-  const w = canvas.clientWidth, h = canvas.clientHeight;
-  const left = run.fan?.tight; // an overlapping fan shows only each card's left side: the price goes under that corner
-  run.cards.forEach((c, k) => {
-    const corner = left && run.look?.card !== c, el = run.tagEls[k], p = c.localToWorld(new V3(corner ? -CW / 2 + .2 : 0, -CH / 2 - .15, 0)).project(camera);
-    const dy = corner ? k % 3 * 22 : 0; // and stepped over three rows (a tag is mark + price, wider than the strip of card it sits under), so neighbours don't cover each other
-    el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px, ${((1 - p.y) / 2 * h + dy).toFixed(1)}px)${corner ? '' : ' translate(-50%, 0)'}`;
-    el.style.opacity = !run.look || run.look.card === c ? 1 : 0; // a lifted card keeps its price, the rest step back
+  const w = canvas.clientWidth, h = canvas.clientHeight, left = run.fan?.tight, rows = [[], [], []];
+  const at = run.cards.map((c, k) => {
+    const corner = left && run.look?.card !== c, p = c.localToWorld(new V3(corner ? -CW / 2 + .2 : 0, -CH / 2 - .15, 0)).project(camera);
+    return { k, corner, x: (p.x + 1) / 2 * w, y: (1 - p.y) / 2 * h, dy: 0, show: !run.look || run.look.card === c }; // a lifted card keeps its price, the rest step back
   });
+  if (left) for (let k = at.length - 1; k >= 0; k--) { // picks are cheapest first
+    const a = at[k]; if (!a.corner || !a.show) continue;
+    const x0 = a.x, x1 = a.x + run.tagW[k] + 4, r = rows.findIndex(row => row.every(([b0, b1]) => x1 <= b0 || x0 >= b1));
+    if (r < 0) a.show = false; else { rows[r].push([x0, x1]); a.dy = r * 22; }
+  }
+  for (const a of at) {
+    const el = run.tagEls[a.k];
+    el.style.transform = `translate(${a.x.toFixed(1)}px, ${(a.y + a.dy).toFixed(1)}px)${a.corner ? '' : ' translate(-50%, 0)'}`;
+    el.style.opacity = a.show ? 1 : 0;
+  }
 }
 // In the spread, tap a card to hold it up to the camera; tap again to put it back.
 async function look(run, card) {
@@ -1141,6 +1153,7 @@ function resize() {
 let relay = 0;
 function relayout() {
   relay = 0; const run = R; if (!run) return;
+  if (run.batch && run.stage === 'extract') { relay = now + 160; return; } // cards are in flight to the current fan: reframe once they've landed
   const ms = 380, go = (o, p, q) => { const p0 = o.position.clone(), q0 = o.quaternion.clone(); tween(ms, k => { o.position.lerpVectors(p0, p, k); if (q) o.quaternion.slerpQuaternions(q0, q, k); }); };
   const home = (card, p, q) => { if (run.look?.card === card) { run.look.p = p; run.look.q = q; if (!run.look.up) go(card, p, q); } else go(card, p, q); };
   if (run.shelf) {
@@ -1415,7 +1428,9 @@ function mountTable(el, o) {
   ro.observe(el); io.observe(el); el.prepend(canvas); resize();
   for (const k in moodNow) moodNow[k] = MOODS.base[k];
   const fresh = () => {
+    resize(); // mat.ts has just rewritten the header / dropped the summary: lay the new run out for the canvas as it is now, not as the ResizeObserver last saw it
     tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0()); canvas.style.cursor = '';
+    mood('base', 400); // tws = [] also dropped a show's fade back to base (a new pack started right after a gold pull kept its rays)
     if (R) clearRun(R, true);
   };
   const shut = () => {

@@ -675,7 +675,14 @@ button:disabled { cursor: not-allowed; }
 .s3-tag { position: absolute; left: 0; top: 0; background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
 .s3-tag .cf-cap { flex-wrap: nowrap; }
 .mat.m3d .summary { padding: 14px 18px 16px; }
-@media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; } }
+@media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
+  /* one row in every state: a head that wrapped as the running total grew (or 全部翻开 came and went) resized the scene
+     mid-reveal and the table reframed under the player's thumb. 全部翻开 floats over the scene's top-right corner instead. */
+  .mat.m3d .mat-head { flex-wrap: nowrap; align-items: center; }
+  .mat.m3d .mat-head h2 { flex: none; }
+  .mat.m3d .mat-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mat.m3d .mat-head .snd { flex: none; }
+  .mat.m3d .mat-head [data-act="flipall"] { position: absolute; top: calc(100% + 8px); right: 14px; } }
 
 /* idle 3D table (今天拆哪包？): table3d.js places each label under its set's stack; the stack itself is the thing to tap */
 .s3-hint:empty { display: none; }
