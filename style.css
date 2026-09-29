@@ -284,3 +284,11 @@ button:disabled { opacity: .4; cursor: not-allowed; }
   .stats dd { font-size: 14px; line-height: 1.3; }
   .top .ghost { margin-left: auto; }
 }
+
+/* price-basis footer + luck notes */
+.basis { margin-top: 8px; }
+.basis summary { cursor: pointer; color: var(--ink); }
+.basis table { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+.basis th, .basis td { text-align: left; padding: 2px 16px 2px 0; }
+.basis-note { font-size: 12px; margin: 8px 0; }
+.dd-note { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }

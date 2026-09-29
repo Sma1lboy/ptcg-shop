@@ -52,6 +52,14 @@ console.log('ok luck percentile');
   assert.ok(Math.abs(S.hitTail({ sv08: 100 }, 'UR', 7) - 0.5) < 0.35);
   console.log('ok luck statistics');
 }
+// cardPrice must agree with what openPack stamped on each card, or repricing an old save shifts the luck baseline.
+{
+  const r = S.rng(5);
+  for (const set of PTCG_SETS) for (let i = 0; i < 300; i++) for (const c of S.openPack(set.id, r))
+    assert.equal(S.cardPrice(set.id, c.n, c.kind), c.price, `${set.id} ${c.n} ${c.kind}`);
+  assert.equal(S.cardPrice('sv08', '999', 'RR'), null);
+  console.log('ok cardPrice repricing');
+}
 // ---------- economy (src/game.js) ----------
 {
   let T = 1_700_000_000_000;
@@ -105,5 +113,17 @@ console.log('ok luck percentile');
   st().singles.b = { ...hit, price: 1e7, count: 1 }; G.setTrophy('b');
   assert.ok(G.trophyBonus() < 0.5, 'trophy bonus is bounded');
   const rate0 = G.rate(); G.clearTrophy(); assert.ok(G.rate() < rate0 && st().singles.b.count === 1, 'trophy returns to stock');
+
+  // 5. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
+  {
+    G.reset(); st().cash = 1e6; G.buy('sv08', 20); G.open('sv08', 20);
+    const v0 = G.luck().value; assert.ok(G.luck().live && Math.abs(v0 - st().pulled) < 1e-6, 'fresh save: repriced value equals snapshot');
+    for (const c of gctx.window.PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] *= 2; // prices double after a data refresh
+    G.buy('sv08', 1); G.open('sv08', 1); // clears the luck cache
+    const L = G.luck(); assert.ok(L.value > (v0 + 0) * 1.5, 'value follows current prices');
+    st().dexPacks = 0; // pre-dex save: falls back to the snapshot
+    G.open('sv08', 0); G.buy('sv08', 1); G.open('sv08', 1);
+    assert.equal(G.luck().live, false, 'old saves are flagged');
+  }
   console.log('ok economy');
 }
