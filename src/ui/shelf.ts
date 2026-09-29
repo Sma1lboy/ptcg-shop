@@ -16,7 +16,9 @@ const FACES = 5; // pack faces per board; each face stands for DEPTH_STEP / FACE
 const MIN = G.MISS_WINDOW / 60;
 
 function rack(r: Shelf, i: number, boards: number, deep: number) {
-  const s = G.state, id = r.id, per = G.DEPTH_STEP / FACES, filled = Math.ceil(r.qty / per), miss = id ? G.missed(id) : 0;
+  // flippers who swept this set in the 顾客 window (the same one the 没买到 count uses): the player sees the packs gone and why
+  const s = G.state, id = r.id, since = Date.now() - G.MISS_WINDOW * 1000, swept = id ? s.recent.filter(v => v.at > since && v.t === 'flipper' && v.r === 'sold' && v.set === id && v.n) : [];
+  const per = G.DEPTH_STEP / FACES, filled = Math.ceil(r.qty / per), miss = id ? G.missed(id) : 0;
   const others = SETS.filter(x => G.unlocked(x.id) && x.id !== id), clerk = G.lvl('clerk') > 0; // with a clerk, a shelf can wait for the next round's buying
   const opt = (x: typeof SETS[number]) => { const st = s.stock[x.id] || 0, m = G.missed(x.id);
     return html`<option value="${x.id}" .selected=${live(false)} ?disabled=${!st && !clerk}>${id ? '换成' : '摆'}${x.name}（${st ? `仓库 ${st}` : clerk ? '仓库没货，店员进货' : '仓库没货'}${m ? ` · ${m} 位没找到` : ''}）</option>`; };
@@ -29,6 +31,7 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
         html`<i class="${(boards - 1 - b) * FACES + f < filled ? 'pk' : ''}"></i>`)}</div>`)}</div>
       <p class="r-edge">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>卖空了</b>`}</span>` : html`<span class="muted">放 ${deep} 包</span>`}</p>
+      ${swept.length ? html`<p class="r-miss" title="倒爷只收便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就整架收走，按标价付钱；收过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再收这个系列">倒爷整架收走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
       ${miss ? html`<p class="r-miss" title="最近 ${MIN} 分钟，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${MIN} 分钟里 <b>${miss}</b> 位没买到</p>` : nothing}
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
           ${id ? html`<option value="${id}" .selected=${live(true)}>${G.setById(id).name}</option>` : html`<option value="-" .selected=${live(true)} disabled>摆上…</option>`}
@@ -87,7 +90,7 @@ export function renderShelf() {
         <div class="verb" role="group" aria-label="${set.name} 开包">
           <span class="v-k">开包</span><span class="v-n">${s.opened[set.id] ? `已开 ${s.opened[set.id]}` : ''}</span>
           <span class="v-btns"><button type="button" class="${p('open')}" data-act="open1" data-id="${set.id}" ?disabled=${!stock}>开 1 包</button>
-            <button type="button" data-act="open10" data-id="${set.id}" ?disabled=${!stock}>开 ${Math.min(10, stock) || 10} 包</button></span>
+            ${stock === 1 ? nothing : html`<button type="button" data-act="open10" data-id="${set.id}" ?disabled=${!stock}>开 ${Math.min(10, stock) || 10} 包</button>`}</span>
         </div>
       </article>`;
   })}`, $('shelf'));
