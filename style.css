@@ -1560,11 +1560,15 @@ button:disabled { cursor: not-allowed; }
 .st-text { margin: 0; font: 400 var(--fs-lg)/1.6 var(--font-pixel); text-shadow: 2px 2px 0 var(--ink-shadow); text-wrap: pretty; }
 .st-box.narr .st-text { color: var(--muted); }
 .st-rest { visibility: hidden; } /* the untyped rest keeps its place, so the box never grows while typing */
-.story .st-next { position: absolute; right: 12px; bottom: 8px; min-height: 0; padding: 2px 8px; border: 0; background: none; border-image: none;
-  color: var(--muted); font-size: var(--fs-cap); text-shadow: none; opacity: 0; transition: opacity .2s; }
+/* the advance is BW's ▼: a solid triangle in the box's bottom-right corner, bobbing once the line is typed out. Only the last line
+   says where it goes (回店里…) beside the arrow; the other lines are just the arrow (its name is in aria-label) */
+.story .st-next { position: absolute; right: 14px; bottom: 10px; display: flex; align-items: center; gap: 8px; min-height: 0; padding: 4px 6px; border: 0; background: none; box-shadow: none;
+  color: var(--ink); font: 400 var(--fs-cap)/1 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow); opacity: 0; transition: opacity .2s; }
+.story .st-next:is(:hover, :active) { box-shadow: none; transform: none; padding: 4px 6px; }
 .story .st-next.ready { opacity: 1; }
-.story .st-next::after { content: " ▼"; display: inline-block; animation: nudge 1s ease-in-out infinite; }
+.story .st-next::after { content: ""; width: 14px; height: 10px; background: var(--ink); clip-path: polygon(0 0, 100% 0, 50% 100%); animation: nudge .8s steps(2, jump-none) infinite; }
 @keyframes nudge { 50% { transform: translateY(3px); } }
+@media (prefers-reduced-motion: reduce) { .story .st-next::after { animation: none; } }
 .story .st-skip { position: absolute; top: 16px; right: 16px; }
 @media (max-width: 700px) {
   .st-who { height: 58vh; } .st-who:not(.on) { display: none; } /* one portrait fits beside the box on a phone */

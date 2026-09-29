@@ -49,7 +49,7 @@ function type() {
   if (!cur) return;
   const sc = SCENES[cur.id][cur.scene]; // a new line: src/ui/sound.ts plays its scene's bed and the cues in its text
   if (sc.seal && cur.line === 0 && !cur.typed) FX.seal(sc.seal === 'gold'); // the cover shutting and the stamp, in time with the CSS
-  document.dispatchEvent(new CustomEvent('ptcg:line', { detail: { id: cur.id, scene: cur.scene, bg: sc.bg, who: sc.lines[cur.line].who, text: text(cur) } }));
+  document.dispatchEvent(new CustomEvent('ptcg:line', { detail: { id: cur.id, scene: cur.scene, line: cur.line, bg: sc.bg, who: sc.lines[cur.line].who, text: text(cur) } }));
   const full = text(cur).length;
   if (still()) { cur.typed = full; draw(); return; }
   timer = setInterval(() => { if (!cur) return clearInterval(timer); cur.typed = Math.min(full, cur.typed + 1); draw(); if (cur.typed >= full) clearInterval(timer); }, 32);
@@ -76,7 +76,7 @@ function draw() {
     <div class="st-box ${line.who ? '' : 'narr'}">
       ${line.who ? html`<p class="st-name ${SIDE[line.who] ?? ''}">${NAMES[line.who]}</p>` : nothing}
       <p class="st-text" aria-label=${full}><span aria-hidden="true">${full.slice(0, cur.typed)}</span><span class="st-rest" aria-hidden="true">${full.slice(cur.typed)}</span></p>
-      <button type="button" class="st-next ${done ? 'ready' : ''}" autofocus @click=${(e: Event) => { e.stopPropagation(); next(); }}>${last && done ? END[cur.id] ?? '回店里' : '继续'}</button>
+      <button type="button" class="st-next ${done ? 'ready' : ''}" autofocus aria-label=${last && done ? END[cur.id] ?? '回店里' : '继续'} @click=${(e: Event) => { e.stopPropagation(); next(); }}>${last && done ? END[cur.id] ?? '回店里' : nothing}</button>
     </div>`, dlg());
 }
 

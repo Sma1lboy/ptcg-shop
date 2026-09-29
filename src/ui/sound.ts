@@ -15,7 +15,7 @@ const last: Record<string, number> = {};
 const gate = (k: string, ms: number) => { const t = performance.now(); if (t - (last[k] ?? -1e9) < ms) return false; last[k] = t; return true; };
 const play = (k: keyof typeof GAP, f: () => void) => { if (gate(k, GAP[k])) f(); };
 // minimum gap per sound, ms. The rare dramatic ones are long so the event and the story line about it don't both play it.
-const GAP = { press: 50, tab: 120, chime: 10000, till: 5000, sweep: 10000, knock: 20000, calc: 20000, hammer: 20000, shutter: 20000, stamp: 3000, heels: 1500, sack: 3000, flicker: 20000, count: 20000 };
+const GAP = { ok: 50, cursor: 120, page: 60, chime: 10000, till: 5000, sweep: 10000, knock: 20000, calc: 20000, hammer: 20000, shutter: 20000, stamp: 3000, heels: 1500, sack: 3000, flicker: 20000, count: 20000 };
 
 // ---------- the shop: customers through state.recent (newest first), the debt through debt.ts ----------
 let seenAt = 0;
@@ -44,10 +44,11 @@ const CUES: [RegExp, keyof typeof GAP, () => void][] = [
   [/灯管/, 'flicker', FX.flicker], [/麻袋/, 'sack', FX.sack], [/钞票/, 'count', FX.count], [/收银机叮|叮了一声/, 'till', FX.till], [/敲了/, 'knock', FX.knock],
 ];
 let walked = ''; // the scene 九姐 last walked into
-interface Line { id: string; scene: number; bg: FX.Scene; who: string; text: string }
+interface Line { id: string; scene: number; line: number; bg: FX.Scene; who: string; text: string }
 function onLine(e: Event) {
   const l = (e as CustomEvent<Line>).detail;
   FX.setScene(l.bg);
+  if (l.scene || l.line) play('page', FX.page); // the text box turning to its next line (the first line of a story is the story opening)
   const at = `${l.id}.${l.scene}`;
   if (l.who === 'jiu' && walked !== at) { walked = at; play('heels', () => FX.heels(3)); }
   for (const [re, k, f] of CUES) if (re.test(l.text)) play(k, f);
@@ -68,12 +69,12 @@ export function initSound() {
   const wake = () => FX.unlock();
   document.addEventListener('pointerdown', wake, true); document.addEventListener('keydown', wake, true);
   document.addEventListener('visibilitychange', () => FX.pause(document.hidden));
-  // an enamel key: every button outside the mat (its own sounds) and the story (its advance is a line, not a key)
+  // the A button: every button outside the mat (its own sounds) and the story (its advance is the text box's page blip)
   document.addEventListener('pointerdown', e => {
     const b = (e.target as Element).closest('button, summary'); if (!b || (b as HTMLButtonElement).disabled || b.closest('#mat, #story')) return;
-    play('press', FX.press);
+    play('ok', FX.ok);
   });
-  addEventListener('hashchange', () => play('tab', FX.tab));
+  addEventListener('hashchange', () => play('cursor', FX.cursor));
   seenAt = G.state.recent[0]?.at ?? 0; // after the boot tick: the time the shop was closed plays nothing
   G.on(onEmit);
   document.addEventListener('ptcg:line', onLine);
