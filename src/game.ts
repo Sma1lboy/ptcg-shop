@@ -66,7 +66,6 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
   const BIG_CARD = 12;                    // collectors only look at case cards worth at least this much
-  const RECENT = 600;                     // walk-ins kept for the 顾客 panel: the last MISS_WINDOW, at most this many
   const SIGN_STEP = 0.04;                 // signage: customers pay +4% more per level, and more seekers/collectors come
   // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
   // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
@@ -83,8 +82,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
-  const MISS_WINDOW = 600, MISS_KEEP = 60; // 货柜 page: pack buyers who found their set missing, over the last 10 minutes (at most 60 kept per set)
+  const MISS_WINDOW = 600;                // 货柜 page: walk-ins (state.recent) and pack buyers who found their set missing (state.miss) are both kept for exactly this long, by time, so the two counts cover the same customers
   const CLERK_ROUND = 300;                // the clerk goes round the shelves every 5 minutes: a shelf has to last until the next round (why 加层 pays late)
+  // 客流上限: the walk-in multiplier (图鉴口碑 × 人气 × 新系列) counts in full up to CROWD_KNEE, and past it with diminishing
+  // returns toward CROWD_KNEE + room(), room = CROWD_ROOM + ROOM_STEP per 店面扩建 level. Game setting, so the late shop keeps
+  // growing without traffic running away; 店面扩建 is the open-ended place late cash goes (cost ×1.6 a level, the gain shrinks).
+  const CROWD_KNEE = 2, CROWD_ROOM = 1, ROOM_STEP = 0.5;
   const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
@@ -92,6 +95,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640] },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
+    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}：加成叠到 ×${CROWD_KNEE} 以上时才用得上`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100) },
     clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
   };
   // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
@@ -100,7 +104,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
     luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
     talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
-    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
     watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
     apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
@@ -135,7 +139,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
   const lineup = () => SETS.reduce((a, s) => a + (unlocked(s.id) ? DEMAND[s.id]?.crowd || 0 : 0), 0);
-  const rate = () => ARRIVAL * (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')) * (1 + lineup()); // walk-ins per second: 图鉴 word of mouth × 人气 × new sets
+  const crowdRaw = () => (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')) * (1 + lineup()); // 图鉴 word of mouth × 人气 × new sets, before the cap
+  const room = () => CROWD_ROOM + ROOM_STEP * lvl('expand');
+  const crowdCap = () => CROWD_KNEE + room();
+  const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
+  const rate = () => ARRIVAL * crowdMult(); // walk-ins per second
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {} });
 
@@ -313,7 +321,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const { count, ...card } = c;
     state.trophy = { key, ...card };
     if (old) { const { key: k, ...o } = old; (state.singles[k] ||= { ...o, count: 0 }).count++; }
-    log(`镇店之宝：${card.name}，客流 +${Math.round(trophyBonus() * 100)}%`);
+    log(`镇店之宝：${card.name}，来的收藏党 +${Math.round(trophyBonus() * 300)}%`);
     emit(); return true;
   }
   function clearTrophy() {
@@ -332,9 +340,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}）`, '', -cost);
     emit(); return true;
   }
+  const canUpgrade = (k: string) => k !== 'expand' || crowdRaw() > CROWD_KNEE; // 扩建 only lifts a cap the shop has reached
   function upgrade(k: string) {
     const cost = upgradeCost(k);
-    if (cost == null || state.cash < cost) return false;
+    if (cost == null || state.cash < cost || !canUpgrade(k)) return false;
     state.cash -= cost; state.up[k] = lvl(k) + 1;
     if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelves().some(o => o.id === s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
     log(`升级：${UPGRADES[k].name} Lv${lvl(k)}`, '', -cost);
@@ -369,7 +378,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (type === 'opener') {
       const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
       let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
-      if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); if (m.length > MISS_KEEP) m.shift(); } // the set they came for, before any settling
+      if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); while (m[0] < vnow - MISS_WINDOW * 1000) m.shift(); } // the set they came for, before any settling
       if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, facings); } // settles for another set, more likely one on several shelves
       v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
@@ -404,7 +413,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       else if (big.length) balk(v, big[0][0], tol);
     }
     const c = state.cust; c.visits++; if (v.r === 'sold') { c.sold++; state.customers++; } else if (v.r === 'pricey') c.pricey++; else { c.none++; state.lost++; }
-    state.recent.unshift(v); while (state.recent.length > RECENT || state.recent.at(-1)!.at < vnow - MISS_WINDOW * 1000) state.recent.pop();
+    state.recent.unshift(v); while (state.recent.at(-1)!.at < vnow - MISS_WINDOW * 1000) state.recent.pop(); // bounded by rate() × MISS_WINDOW, and rate() is capped
     return v.gain || 0;
   }
 
@@ -496,8 +505,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: () => void) => listeners.push(f),
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
-    demand, lineup, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, MISS_KEEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
+    demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }

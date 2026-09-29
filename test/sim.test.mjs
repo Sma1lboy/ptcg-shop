@@ -242,7 +242,7 @@ console.log('ok luck percentile');
   G.reset(); st().cash = 1e6; T += 1; G.buy('sv08', 200); G.shelve('sv08', 999);
   for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) G.shelve('sv08', 999); }
   assert.ok(G.missed('sv10') > 0 && G.missed('sv08') === 0, `the set left off the shelves is the one missed (${G.missed('sv10')} / ${G.missed('sv08')})`);
-  assert.ok(st().miss.sv10.length <= G.MISS_KEEP); T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
+  T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
   // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
   const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
@@ -359,10 +359,51 @@ console.log('ok luck percentile');
   assert.ok(lucky[3].net < shop[3].net, `still a fun expense with 手气 maxed from the start ($${lucky[3].net} vs $${shop[3].net})`);
   console.log(`ok growth: net after 1h/3h = $${shop[1].net}/$${shop[3].net}; the same shop that opens 5% of its packs: $${opener[3].net}`);
   // Long game: a player who puts 10% of revenue into master sets has a next goal for hours, and it pays for itself.
-  const plain = play({ hours: 10, openShare: 0, pct: 1, log: 3600 }), chase = play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.1, log: 3600 });
+  const plain = play({ hours: 20, openShare: 0, pct: 1, log: 3600 }), chase = play({ hours: 20, openShare: 0, pct: 1, masterShare: 0.1, log: 3600 });
   const masters = h => chase[h].dex.split('/').filter(x => x === '★').length;
   assert.ok(masters(3) >= 1, `first master set within 3h (${chase[3].dex})`);
   assert.ok(masters(6) < 4 && masters(10) > masters(3), `still chasing after 6h, and progress keeps coming (${chase[6].dex} → ${chase[10].dex})`);
   assert.ok(chase[10].net > plain[10].net, `the binder pays for itself by hour 10 (net $${chase[10].net} vs $${plain[10].net} for a shop that never collects)`);
-  console.log(`ok long game: master sets at 3h/6h/10h = ${masters(3)}/${masters(6)}/${masters(10)}; walk-ins ${plain[10].rate} → ${chase[10].rate}/min; net at 10h $${chase[10].net} vs $${plain[10].net}`);
+  // 客流上限: every master set, 人气 maxed and all sets out would be ×7 walk-ins; late traffic stays under the capped ceiling
+  // (with however many 店面扩建 levels were bought) yet keeps rising, and income keeps growing without running away.
+  const G0 = createGame({ storage: { getItem: () => null, setItem() {} } }), cap = lv => G0.ARRIVAL * 60 * (G0.CROWD_KNEE + G0.CROWD_ROOM + G0.ROOM_STEP * lv);
+  assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 50, `late walk-ins are capped (${chase[20].rate}/min)`);
+  assert.ok(chase[20].rate > chase[10].rate && chase[20].rate > plain[20].rate * 1.5, `still growing late (${chase[10].rate} → ${chase[20].rate}/min)`);
+  assert.ok(chase[20].perMin > chase[10].perMin && chase[20].perMin < chase[10].perMin * 2.5, `income grows, not a money machine ($${chase[10].perMin} → $${chase[20].perMin}/min)`);
+  console.log(`ok long game: master sets at 3h/6h/10h = ${masters(3)}/${masters(6)}/${masters(10)}; walk-ins ${plain[10].rate} → ${chase[10].rate}/min (${chase[20].rate} at 20h); net at 10h $${chase[10].net} vs $${plain[10].net}`);
+}
+
+// 客流上限 and 店面扩建: below the knee nothing changes; above it the multiplier bends toward knee + room and never passes the
+// raw product; each 扩建 level pays back slower than the one before (cost ×1.6, fewer extra walk-ins), so it is a sink, not a printer.
+{
+  const G = createGame({ storage: { getItem: () => null, setItem() {} } }), K = G.CROWD_KNEE, n = G.UPGRADES.expand.costs.length;
+  for (const raw of [1, 1.3, K]) assert.equal(G.crowdMult(raw), raw, `under ×${K} the bonus counts in full`);
+  let prev = K;
+  for (const raw of [2.5, 4, 7.14, 100]) { const m = G.crowdMult(raw); assert.ok(m < raw && m < G.crowdCap() && m > prev, `×${raw} → ×${m}`); prev = m; }
+  assert.ok(!G.canUpgrade('expand') && !G.upgrade('expand'), 'nothing to expand while the bonus is under the knee');
+  const G2 = createGame({ storage: { getItem: () => null, setItem() {} } }), st = G2.state; st.cash = 1e9; st.skills.crowd = G2.SKILLS.crowd.max; st.earned.sealed = 1e9; // a fresh game: dex counts are cached on first read
+  for (const s of PTCG_SETS) for (const c of PTCG_DATA[s.id].cards) st.dexSeen[`${s.id}|${c.n}`] = 1;
+  assert.ok(G2.crowdRaw() > 7 && G2.canUpgrade('expand'), `everything maxed: ×${G2.crowdRaw().toFixed(2)} raw`);
+  let pay = 0;
+  for (let lv = 0; lv < n; lv++) {
+    const before = G2.rate(), cost = G2.upgradeCost('expand'); assert.ok(G2.upgrade('expand'));
+    const p = cost / (G2.rate() - before); assert.ok(G2.rate() > before && p > pay, `扩建 Lv${lv + 1}: $${cost} per extra walk-in/s, slower than the last`); pay = p;
+    assert.ok(G2.rate() < G2.ARRIVAL * G2.crowdCap() && G2.rate() < G2.ARRIVAL * G2.crowdRaw());
+  }
+  console.log(`ok 客流上限: all maxed ×${G2.crowdRaw().toFixed(2)} raw → ×${(G2.rate() / G2.ARRIVAL).toFixed(2)} with ${n} 扩建 levels (×${G2.crowdMult(G2.crowdRaw()).toFixed(2)})`);
+}
+// The 顾客 panel and the shelf wall count the same 10 minutes: with more misses than the old cap (60 a set),
+// every opener who found their set missing is both in G.missed and in state.recent, and nothing older than the window is kept.
+{
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(7), storage: { getItem: () => null, setItem() {} } }), st = G.state;
+  st.skills.crowd = G.SKILLS.crowd.max; for (const s of PTCG_SETS) for (const c of PTCG_DATA[s.id].cards) st.dexSeen[`${s.id}|${c.n}`] = 1; // traffic at the cap, only the first two sets unlocked, nothing on sale
+  for (let i = 0; i < 90; i++) { T += 20_000; G.tick(); }
+  const since = T - G.MISS_WINDOW * 1000, rec = st.recent;
+  assert.ok(rec.at(-1).at >= since - 20_000 && rec.at(-1).at < since + 10_000, `recent spans the window by time (${rec.length} walk-ins)`);
+  for (const id of ['sv08', 'sv10']) {
+    const want = rec.filter(v => v.t === 'opener' && v.at > since && (v.miss === id || (v.set === id && v.r === 'none'))).length;
+    assert.ok(want > 60 && G.missed(id) === want, `${id}: 没买到 ${G.missed(id)} = ${want} openers in 顾客`);
+    assert.ok(st.miss[id].every(t => t >= since - 20_000), 'old misses are dropped');
+  }
+  console.log(`ok 顾客 window: ${rec.length} walk-ins, 没买到 ${G.missed('sv08')}/${G.missed('sv10')} over the same ${G.MISS_WINDOW / 60} minutes`);
 }
