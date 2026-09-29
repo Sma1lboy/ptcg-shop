@@ -886,3 +886,25 @@ console.log('ok luck percentile');
   assert.ok(evs.some(e => e.type === 'bill_missed') && evs.some(e => e.type === 'loan_taken' && e.forced), '90-s ticks are not an absence');
   console.log('ok 离开: a background tab is one absence (1 week, offlineCap of sales), grace waits for the return and for a reveal, short absences print nothing');
 }
+
+// 凑钱 (ui/ledger.ts): the cards sold to cover an overdue bill are the cheapest ones, just enough of them; selling them in the game
+// brings in what the plan says, and the bill is then payable on the spot.
+{
+  const cards = [{ key: 'a', price: 100, count: 1 }, { key: 'b', price: 2, count: 5 }, { key: 'c', price: 10, count: 2 }, { key: 'z', price: 0, count: 9 }];
+  let p = D.sellPlan(cards, 15, 0.7); // 5 × 1.40 = 7, then 2 × 7 = 14 → 21 ≥ 15; the $100 card stays
+  assert.deepEqual(p.pick.map(x => [x.c.key, x.n]), [['b', 5], ['c', 2]]); assert.ok(Math.abs(p.got - 21) < 1e-9);
+  p = D.sellPlan(cards, 8, 0.7); assert.deepEqual(p.pick.map(x => [x.c.key, x.n]), [['b', 5], ['c', 1]], 'only as many of the last card as needed');
+  p = D.sellPlan(cards, 1e4, 0.7); assert.ok(Math.abs(p.got - 0.7 * 130) < 1e-9 && p.pick.length === 3, 'not enough: everything with a price, and got says so');
+  assert.deepEqual(D.sellPlan(cards, 0, 0.7).pick, [], 'nothing short: nothing sold');
+  let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(11), storage: null }), st = () => G.state;
+  st().cash = 1e5; st().earned.sealed = 1; G.buy('sv08', 80); G.open('sv08', 60); G.shelve('sv08', 20); // sv08.5 is locked in a new game
+  st().shelves.forEach(s => { s.qty = 0; }); for (let i = 0; i < G.WEEK; i += 20) { T += 20e3; G.tick(); } // week 1 paid out of the big till
+  st().shelves.forEach(s => { s.qty = 0; }); st().cash = 0; st().stock.sv08 = 5; for (let i = 0; T < 1_700_000_000_000 + 2 * G.WEEK * 1e3 + 5e3; i++) { T += 20e3; G.tick(); }
+  const o = st().overdue; assert.ok(o, 'week 2 is overdue with an empty till');
+  const hits = Object.entries(st().singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, price: c.price, count: c.count }));
+  assert.ok(hits.length > 5, 'sixty packs left hits to sell'); st().cash = o.amount - 5; const plan = D.sellPlan(hits, o.amount - st().cash, G.BUYLIST), before = st().cash;
+  for (const x of plan.pick) G.sell(x.c.key, x.n);
+  assert.ok(Math.abs(st().cash - before - plan.got) < 1e-6, `selling the plan brings what it said (${plan.got.toFixed(2)})`);
+  assert.ok(plan.got >= 5 && G.payBill() && !st().overdue, 'and the bill is paid on the spot');
+  console.log(`ok 凑钱: cheapest cards first, just enough; ${plan.pick.length} kinds sold for $${plan.got.toFixed(2)} against a $${o.amount} bill`);
+}

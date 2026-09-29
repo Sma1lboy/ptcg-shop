@@ -207,30 +207,30 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
    lacquer, primary label-yellow (one per group), danger oxide (清空存档 only). States are CSS on the same base: hover lifts it
    under the lamp, pressed sinks 1px and darkens, disabled is the bare dark socket. Without the images the same colours draw it
    (border + fill), so pen / file:// still read as buttons */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
   --face: url(gen/btn-secondary.webp);
   min-height: 34px; padding: 6px 16px 7px; border: 2px solid var(--trim); border-radius: 5px;
   border-image: var(--face) 34 44 38 44 fill / 9px 12px 10px 12px / 0 stretch; background: var(--btn-face) padding-box; color: var(--btn-ink);
   font-size: var(--fs-body); font-weight: 600; line-height: 1.4; letter-spacing: .02em; text-decoration: none; text-shadow: 0 1px 0 rgba(4, 8, 14, .45);
   transition: filter .15s, transform .08s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
 /* pressed: its own base (gen/btn-*-dn.webp) — the key pushed flush into the rim, lower lip gone, the rim's shadow on the face.
    The 1px sink stays underneath, and without the images the darker face alone says "down" */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   --face: url(gen/btn-secondary-dn.webp); border-image-slice: 34 44 34 44 fill; border-image-width: 9px 12px;
   background-color: color-mix(in oklab, var(--btn-face) 82%, black); transform: translateY(1px); filter: none; }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary:not(:disabled):active {
   --face: url(gen/btn-primary-dn.webp); background-color: color-mix(in oklab, var(--sticker) 90%, black); }
 #reset:active { --face: url(gen/btn-danger-dn.webp); background-color: color-mix(in oklab, var(--danger-face) 85%, black); }
 /* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
   --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
 /* danger: the one irreversible button, oxide enamel so it can't pass for a normal key */
 #reset { --face: url(gen/btn-danger.webp); background-color: var(--danger-face); color: var(--danger-ink); }
 /* disabled: the empty socket — no enamel, just the trim, dim print. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
   filter: grayscale(1) brightness(.78) contrast(.9); opacity: .85; color: var(--btn-ink); font-weight: 500; text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
 
@@ -507,6 +507,8 @@ button:disabled { cursor: not-allowed; }
 :is(.notice, .slip) dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
 :is(.notice, .slip) dt { color: var(--muted); } :is(.notice, .slip) dd { margin: 0; text-align: right; font-weight: 600; }
 .notice button { width: 100%; }
+.notice .nt-btns { display: flex; gap: 8px; } .notice .nt-btns button { flex: 1; }
+.notice .due-note { margin: -4px 0 12px; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
 /* the weekly bill's receipt (notice.ts): the same paper, shorter — 九姐's scribble at the foot instead of a button; tap to put it away */
 .slip { cursor: pointer; }
 .slip .paper { padding-bottom: 20px; }
@@ -1007,7 +1009,7 @@ button:disabled { cursor: not-allowed; }
      once), over the display case where nothing is pressed; with a receipt it scrolls with the page like anywhere else (above), and
      the table isn't pushed down */
   :root[data-page="open"] .pops { top: calc(var(--top-h) + 72px); }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
@@ -1143,6 +1145,42 @@ button:disabled { cursor: not-allowed; }
   .lg { grid-template-columns: minmax(0, 1fr); }
   .lg > div + div { border-left: 0; padding-left: 0; margin-left: 0; border-top: 1px solid var(--line); padding-top: 16px; }
   .lg-big { font-size: 34px; }
+}
+
+/* 凑钱 (ui/ledger.ts renderRaise): a compartment of the case hanging under the red chip while a bill is overdue — not a dialog, the
+   shop stays usable around it. One row per way to raise the money: what it is, what it costs, what it brings (tag numerals), one key;
+   the cheapest route that covers the bill is the group's one yellow key. Phones: a sheet above the tab bar. */
+.raise { position: fixed; inset: auto; top: calc(var(--top-h) + 6px); left: var(--x, 50%); margin: 0; width: min(440px, calc(100vw - 16px));
+  max-height: calc(100dvh - var(--top-h) - 20px); overflow: auto; padding: 0 16px 14px; border: 10px solid var(--trim); border-image: url(gen/frame.webp) 48 / 14px / 0 stretch;
+  background: var(--panel) padding-box; color: var(--ink); box-shadow: 0 16px 40px rgba(4, 8, 14, .38); font-size: var(--fs-body); line-height: 1.5; }
+.raise > h2 { --ink: var(--hud-ink); --muted: var(--hud-muted); position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 10px; margin: 0 -16px 12px; padding: 7px 8px 8px 16px; color: var(--ink);
+  font: 900 var(--fs-h)/1.3 var(--font-display); letter-spacing: .06em; border: 4px solid transparent; border-image: url(gen/plate.webp) 22 34 fill / 8px 12px / 0 stretch; background: linear-gradient(#22355F, #14223F) padding-box; }
+.raise > h2 small { flex: 1; font: 400 var(--fs-cap)/1.3 var(--font-body); letter-spacing: 0; color: var(--muted); }
+.raise .rs-x { min-height: 28px; padding: 0 10px 2px; font-size: var(--fs-h); }
+.raise p { margin: 0; text-wrap: pretty; }
+.rs-head { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 0 12px; padding-bottom: 12px; border-bottom: 1px solid var(--line-strong); }
+.rs-short { font-size: var(--fs-h); } .rs-short b { font: 700 var(--fs-lg)/1 var(--font-tag); margin-left: 4px; }
+.rs-clock { display: flex; align-items: baseline; gap: 6px; } .rs-clock b { font: 700 var(--fs-lg)/1 var(--font-tag); }
+.rs-head .gh-bar { grid-column: 1 / -1; margin-top: 10px; }
+.rs-note { grid-column: 1 / -1; margin-top: 6px !important; font-size: var(--fs-cap); color: var(--muted); }
+.rs-k { font-size: var(--fs-cap); color: var(--muted); }
+.rs-list { list-style: none; margin: 0; padding: 0; }
+.rs-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 4px 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rs-list li .rs-k { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
+.rs-cost { font-size: var(--fs-cap); color: var(--muted); }
+.rs-get { font: 700 var(--fs-h)/1 var(--font-tag); color: var(--gain); white-space: nowrap; }
+.rs-get.lent { color: var(--ink); }
+.rs-list button { white-space: nowrap; }
+div.rs-list { padding-top: 12px; }
+.rs-foot { padding-top: 10px; font-size: var(--fs-cap); color: var(--muted); }
+.rs-foot b { color: var(--ink); }
+@media (max-width: 779px) {
+  .raise { top: auto; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 6px); width: auto; max-height: 62dvh; }
+  .rs-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .rs-list li { align-items: start; row-gap: 8px; }
+  .rs-t { grid-row: span 2; }
+  .rs-list li button { grid-column: 2; justify-self: end; }
+  .rs-get { grid-row: 1; grid-column: 2; justify-self: end; padding-top: 2px; }
 }
 
 /* 破产结算: a case door like the share dialog, the shop dark behind it. Plain list of what went; no paper, no red (it is not money coming in) */

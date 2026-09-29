@@ -1,4 +1,4 @@
-// The "while you were closed" report after an absence, laid out as the register's end-of-day receipt, and the weekly bill's
+// The "while you were away" report after an absence (another tab, a locked screen, a closed page), laid out as a register receipt, and the weekly bill's
 // receipt (below). Both print out of the shared slot (#pops, style.css) above any achievement labels.
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
@@ -21,14 +21,17 @@ export function renderNotice() {
   const h = o.secs >= 3600 ? `${(o.secs / 3600).toFixed(1)} 小时` : `${Math.round(o.secs / 60)} 分钟`;
   el.hidden = false;
   el.classList.toggle('unrolled', unrolled);
-  const net = o.revenue - (o.bills || 0);
-  render(html`<button type="button" class="stub" aria-label="展开打烊小票" @click=${() => { unrolled = true; renderNotice(); }}>
-      <b>打烊小票</b><span>关店 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
-    <div class="paper"><h2>打烊小票</h2>
-      <dl><dt>关店</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
+  const net = o.revenue - (o.bills || 0), due = G.state.overdue, short = due ? Math.max(0, due.amount - G.state.cash) : 0;
+  // a bill that fell due while away and is still unpaid: its grace only starts now (game.ts), the red chip counts it; 去凑钱 = the chip
+  render(html`<button type="button" class="stub" aria-label="展开离店小票" @click=${() => { unrolled = true; renderNotice(); }}>
+      <b>离店小票</b><span>离开 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
+    <div class="paper"><h2>离店小票</h2>
+      <dl><dt>离开</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
         ${o.lost ? html`<dt>货架空了，错过</dt><dd>${o.lost} 位顾客</dd>` : ''}
-        ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}</dl>
-      <button type="button" data-act="ack">收起小票</button></div>`, el);
+        ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}
+        ${due ? html`<dt>第 ${due.week} 周的账还没付</dt><dd>${money(due.amount)}</dd>${short ? html`<dt>还差</dt><dd>${money(short)}</dd>` : ''}` : ''}</dl>
+      ${due ? html`<p class="due-note">不在店里时宽限不走，从现在接着算（离开时才到期的给满 ${G.GRACE / 60} 分钟），看顶栏的红牌子。</p>` : ''}
+      <div class="nt-btns">${due && short ? html`<button type="button" @click=${() => $('due').click()}>去凑钱</button>` : ''}<button type="button" data-act="ack">收起小票</button></div></div>`, el);
 }
 
 // ---------- 收据: a bill the till covered (every week after the first, ui/story.ts decides) prints a small receipt out of the
