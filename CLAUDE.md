@@ -42,7 +42,8 @@
 | `src/sim.ts` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
 | `src/game.ts` | `createGame()`：存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
 | `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
-| `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
+| `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度名字 |
+| `src/ui/card.ts` | 卡面：全站唯一的 2D 卡（`face` 卡图 + 闪面 + 加载失败的白卡纸、`cap` 卡下的记号和价、`mark` 印刷的稀有度记号 SVG、`back` / `energy` 卡背和能量卡的 SVG 图，分享图也用）。规格在 DESIGN.md「卡面」；开包台拼字符串的地方用 `toHTML()` |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客（货柜页）/图鉴含补卡（欧气页）/店员（货柜页），`upgrades` + `skills` 是成长页（店铺等级、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
 | `src/table3d.js` | 开包台的 three.js 3D 场景：柜台（层压台面、铝包边、胶垫印刷、后面的玻璃展示柜/卡册/硬卡膜）、铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的包和卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onPick, onLost, onHold, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, flip, flipAll, resize, dispose }`；`showShelf(items)` 是闲置时的「今天拆哪包？」（每个系列一叠仓库里的包，`{ set, n, off }` 由 mat.ts 的 `shelfItems()` 算，标签按钮也是 mat.ts 的），点包回调 `onPick(k)`，从这里开的包从那叠上拿起来进手里；`ready` 是 three 加载完的 promise；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
