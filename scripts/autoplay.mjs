@@ -3,6 +3,7 @@
 // or per set { sv08: 0.95, … }); masterShare = share of revenue put into finishing 图鉴 master sets (open packs for C/U/R, buy the hits);
 // racks / depth = the highest 货架 / 加层 level this player buys (to measure what those upgrades are worth).
 // node scripts/autoplay.mjs survive [hours=10] [seeds=20]: the 债务 survival table of GAMEPLAY.md (six kinds of player; 12 h × 10 seeds ≈ 25 s).
+// node scripts/autoplay.mjs pace [hours=16] [纯经营 普通 收图鉴]: the 成长节奏 table of GAMEPLAY.md §12.1 (longest wait between buys per 2 h).
 // node scripts/autoplay.mjs bills: the bill schedule next to the pure manager's weekly profit (GAMEPLAY.md「账单曲线」).
 import { createGame } from '../src/game.ts';
 import * as S from '../src/sim.ts';
@@ -32,7 +33,7 @@ function watchDebt(G, clock) {
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
 // branch = this shop's revenue at which the player 开分店 (prestige; false = never; 'paid' = as soon as the debt is cleared), then spends all 名气: 老主顾 (traffic) first, then the cheapest perk.
 // reserve = in the last 5 minutes before a bill, keep this many times it in cash (0 = spend everything and let the bill fall on whatever is left);
-// repay = pay loans back with what cash is above the reserve plus a float for stock (twice the next bill, at least $1,000). clerkFirst = hire the clerk before any other upgrade. away = [minutes on, minutes off]: the player closes the page for the
+// repay = pay loans back with what cash is above the reserve plus a float for stock (twice the next bill, at least $1,000), and buy no upgrade (but a shelf a set waits for) while a loan is out. clerkFirst = hire the clerk before any other upgrade. away = [minutes on, minutes off]: the player closes the page for the
 // off minutes (one catch-up tick on return, credited up to the offline cap), then plays the on minutes, and so on.
 // off = minutes of every hour the player leaves the page open without doing anything (the shop runs on its own; a clerk, if hired, restocks).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
@@ -64,6 +65,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
     if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
     if (clerkFirst && G.lvl('clerk') < 1) best = ['clerk', G.upgradeCost('clerk')]; // someone who leaves the page for hours hires a clerk before anything else
+    if (repay && G.state.loan > 0 && best?.[0] !== 'racks') best = null; // a repaying player clears a 10%-a-week loan before buying growth (else upgrades cheaper than the float always come first and the loan compounds)
     if (best && free() >= best[1]) { spent += best[1]; buys.push({ min: +(t / 60).toFixed(1), k: best[0], lv: (best[0].startsWith('skill:') ? G.skill(best[0].slice(6)) : G.lvl(best[0])) + 1, cost: best[1], rate0: +(G.rate() * 60).toFixed(1) }); if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
     const leaving = (off && (t + step) % 3600 >= (60 - off) * 60) || (away && (t + step) % ((away[0] + away[1]) * 60) >= away[0] * 60); // last visit before going away: fill the shelves, save later (unless a set is waiting for a shelf)
     const hold = best && (!leaving || best[0] === 'racks') && free() > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
@@ -148,9 +150,23 @@ export function survive({ hours = 10, seeds = 20, kinds = Object.keys(KINDS) } =
   });
 }
 
+// 成长节奏 (GAMEPLAY.md §12.1): for each `win`-hour stretch, how many upgrades/skills this player bought and the longest wait
+// between two buys (counted from the last buy before the stretch), with walk-ins and net income at its end.
+export function pace(opts, { hours = 16, win = 2 } = {}) {
+  const rows = play({ hours, log: 3600, ...opts }), b = rows.buys, out = [];
+  for (let h = 0; h < hours; h += win) {
+    const inW = b.filter(x => x.min >= h * 60 && x.min < (h + win) * 60), next = b.find(x => x.min >= (h + win) * 60)?.min ?? Infinity;
+    const pts = [b.filter(x => x.min < h * 60).at(-1)?.min ?? 0, ...inW.map(x => x.min), Math.min(next, (h + win) * 60)];
+    const end = rows[Math.min(h + win, rows.length - 1)];
+    out.push({ h: `${h}–${h + win}`, buys: inW.length, 'longest wait (min)': Math.round(Math.max(...pts.slice(1).map((x, i) => x - pts[i]))), 'walk-ins/min': end.rate, 'net $/min': end.perMin, debt: end.debt, bought: inW.map(x => x.k.replace('skill:', '') + x.lv).join(' ') });
+  }
+  return out;
+}
+
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
-  if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
+  if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
+  else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
   else if (mode === 'bills') { // one row per week until the debt is cleared: the bill against what the shop made that week before paying it
     const rows = play({ hours: 12, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 1200 }), G = rows.G, bill = w => Math.round(G.BILL0 * G.BILL_G ** (w - 1));
     const out = []; for (let i = 1; i < rows.length && rows[i - 1].debt > 0; i++) { const w = i, b = Math.min(bill(w), rows[i - 1].debt), gross = rows[i].perMin * 20 + b; out.push({ week: w, bill: b, 'made that week': gross, 'bill / made': +(b / gross).toFixed(2), 'debt after': rows[i].debt, loan: rows[i].loan }); }

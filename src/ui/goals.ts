@@ -189,9 +189,9 @@ function clerk() {
 function renderGoals() {
   if (hold) return;
   render(customers(), $('customers'));
-  // 回头客 is the nominal sum; past CROWD_KNEE the whole walk-in multiplier (图鉴 × 人气 × 新系列) is damped, so say what it adds up to
+  // 回头客 is the nominal sum; past CROWD_KNEE the word-of-mouth multiplier (图鉴 × 新系列) is damped, so say what it adds up to
   const capped = G.crowdRaw() > G.CROWD_KNEE;
-  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="客流加成（图鉴 × 人气 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${G.crowdCap()}；成长页的店面扩建能抬上限">（全店客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2><ul class="dex">${dex()}</ul>${handSum()}`, $('dex'));
+  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2><ul class="dex">${dex()}</ul>${handSum()}`, $('dex'));
   render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
 }
 
