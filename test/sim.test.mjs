@@ -902,9 +902,9 @@ console.log('ok luck percentile');
   st().shelves.forEach(s => { s.qty = 0; }); st().cash = 0; st().stock.sv08 = 5; for (let i = 0; T < 1_700_000_000_000 + 2 * G.WEEK * 1e3 + 5e3; i++) { T += 20e3; G.tick(); }
   const o = st().overdue; assert.ok(o, 'week 2 is overdue with an empty till');
   const hits = Object.entries(st().singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, price: c.price, count: c.count }));
-  assert.ok(hits.length > 5, 'sixty packs left hits to sell'); const plan = D.sellPlan(hits, o.amount - st().cash, G.BUYLIST), before = st().cash;
+  assert.ok(hits.length > 5, 'sixty packs left hits to sell'); st().cash = o.amount - 5; const plan = D.sellPlan(hits, o.amount - st().cash, G.BUYLIST), before = st().cash;
   for (const x of plan.pick) G.sell(x.c.key, x.n);
   assert.ok(Math.abs(st().cash - before - plan.got) < 1e-6, `selling the plan brings what it said (${plan.got.toFixed(2)})`);
-  if (plan.got >= o.amount) { assert.ok(G.payBill() && !st().overdue, 'and pays the bill'); }
+  assert.ok(plan.got >= 5 && G.payBill() && !st().overdue, 'and the bill is paid on the spot');
   console.log(`ok 凑钱: cheapest cards first, just enough; ${plan.pick.length} kinds sold for $${plan.got.toFixed(2)} against a $${o.amount} bill`);
 }

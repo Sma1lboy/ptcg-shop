@@ -86,7 +86,14 @@ export function renderLedger() {
 // dialog: the player keeps shelving and selling around it. It opens by itself once per overdue week (after 九姐's scene), the red chip
 // reopens it, and it hides while a pack is being revealed (the cards are already in 单卡库存 before they are flipped) or a scene plays.
 // Nothing here is a new number: BUYLIST, the loan rate and the grace are the economy's (game.ts). ----------
-let shutWeek = -1; // the week whose sheet the player closed; the chip opens it again
+const warm = new Set<string>(); // sets whose one-pack odds are ready
+let shutWeek = -1, loanArmed = 0; // the week whose sheet the player closed (the chip opens it again); when 借 was first clicked
+// Borrowing here also takes two clicks, but armed by time, not amount: customers keep buying, so what is short moves between the two
+// clicks. The second one borrows what is short at that moment (takeLoan caps it at the credit left and pays the bill if it covers it).
+function raiseLoan() {
+  if (Date.now() - loanArmed > 4000) { loanArmed = Date.now(); renderRaise(); setTimeout(renderRaise, 4100); return; }
+  loanArmed = 0; const o = G.state.overdue; if (o) G.takeLoan(Math.ceil(o.amount - G.state.cash));
+}
 export function openRaise() { shutWeek = -1; renderRaise(); }
 // after a sale or a loan the bill is paid on the spot, not on the next second's tick
 const act = (f: () => unknown) => () => { f(); const o = G.state.overdue; if (o && G.state.cash >= o.amount) G.payBill(); };
@@ -98,7 +105,7 @@ export function renderRaise() {
   const el = $('raise'), s = G.state, o = s.overdue;
   if (!o || hold || storyOpen() || shutWeek === o.week) { if (el.matches(':popover-open')) el.hidePopover(); return; }
   const rate = G.BUYLIST, cash = s.cash, short = Math.max(0, o.amount - cash), left = o.until - s.shopT, r = G.loanRate(), credit = G.credit();
-  const loanN = Math.ceil(short), canLoan = loanN > 0 && loanN <= credit;
+  const loanN = Math.ceil(short), canLoan = loanN > 0 && loanN <= credit, part = Math.floor(Math.min(loanN, credit)), armedL = Date.now() - loanArmed <= 4000;
   // each route on its own, for the whole of what is short now
   const bulk = G.bulkValue();
   const hits = sellPlan(Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, name: c.name, price: c.price, count: c.count })), short, rate);
@@ -107,16 +114,20 @@ export function renderRaise() {
   const stock = Object.entries(s.stock).filter(([, n]) => n > 0), back = stock.reduce((a, [, n]) => a + n, 0);
   const room = G.shelves().some(x => !x.id || x.qty < G.depth()), take5 = recentTake(300), onPace = take5 / 300 * Math.max(0, left);
   // opening: the back-room set whose one pack is likeliest to cover it all when its cards go to peers
-  const odds = stock.map(([id]) => { const key = S.rateKey(id, G.luckMult()); return { id, ev: S.packEV(key) * rate, ask: G.ask(id), p: short ? 1 - S.packPercentile(key, short / rate) : 1 }; }).sort((a, b) => b.p - a.p)[0];
+  // (packPercentile builds a 60k-pack pool per set the first time, ~60 ms: one new set per render, so opening the sheet doesn't stall)
+  let fresh = false;
+  const odds = stock.map(([id]) => S.rateKey(id, G.luckMult())).filter(key => warm.has(key) || (!fresh && (fresh = true, warm.add(key), true)))
+    .map(key => { const id = S.parseKey(key).id; return { id, ev: S.packEV(key) * rate, ask: G.ask(id), p: short ? 1 - S.packPercentile(key, short / rate) : 1 }; }).sort((a, b) => b.p - a.p)[0];
   // what a route gives up: sold cards the gap to what the case would ask; a loan a week's interest
-  const lose = { hits: hits.pick.reduce((a, p) => a + p.n * p.c.price * (G.casePct() - rate), 0), case: caseP.pick.reduce((a, p) => a + p.c.ask - p.c.price * rate, 0), loan: loanN * r };
+  const lose = { hits: Math.max(0, hits.pick.reduce((a, p) => a + p.n * p.c.price * (G.casePct() - rate), 0)), case: Math.max(0, caseP.pick.reduce((a, p) => a + p.c.ask - p.c.price * rate, 0)), loan: part * r };
   // the yellow key, by what each dollar costs: 散卡 nothing, a loan a week's interest (10%), a card sold to peers what the case would
   // have paid on top (~57% of what it brings) — so bulk first, then borrow what is left, and only without credit sell the most you can
   const sells = ([['hits', hits.got], ['case', caseP.got], ['trophy', tGet]] as const).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-  const best = !short ? undefined : bulk.v >= 1 ? 'bulk' : canLoan ? 'loan' : sells[0]?.[0];
+  const best = !short ? undefined : bulk.v >= 1 ? 'bulk' : part >= 1 ? 'loan' : sells[0]?.[0];
   const cls = (k: string) => (k === best ? 'primary' : '');
-  const row = (k: string, what: unknown, cost: unknown, get: number | null, btn: unknown) => html`<li><div class="rs-t"><p class="rs-k">${k}</p><p>${what}</p><p class="rs-cost">${cost}</p></div>
-    <b class="rs-get">${get == null ? '' : `+${money(get)}`}</b>${btn}</li>`;
+  // get: cash it brings (进账 red); a loan's is plain ink — borrowed money is not income (game.ts logs it as 'loss')
+  const row = (k: string, what: unknown, cost: unknown, get: number | null, btn: unknown, lent = false) => html`<li><div class="rs-t"><p class="rs-k">${k}</p><p>${what}</p><p class="rs-cost">${cost}</p></div>
+    <b class="rs-get ${lent ? 'lent' : ''}">${get == null ? '' : `+${money(get)}`}</b>${btn}</li>`;
   // the cheapest route that covers it all comes first (on a phone the sheet shows three rows before it scrolls)
   const rows: [string, unknown][] = [
     ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡本来就只能卖给同行', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
@@ -132,9 +143,10 @@ export function renderRaise() {
     ['open', odds ? row(`开包赌一把 · ${G.setById(odds.id).name}`, html`一包就开出够数的机会 <b>${odds.p < 0.001 ? '不到 0.1%' : `${(odds.p * 100).toFixed(1)}%`}</b>`,
         `开出的卡卖给同行平均 ${money(odds.ev)} 一包，这包放货架能卖 ${money(odds.ask)}`, null,
         html`<button type="button" @click=${() => { location.hash = 'open'; }}>去开包</button>`) : nothing],
-    ['loan', row(`借 ${money(loanN)}`, canLoan ? `每周利息 ${money(lose.loan)}` : html`额度只剩 <b>${money(credit)}</b>，借不够`,
-        canLoan ? `周息 ${Math.round(r * 100)}%，3 周不还滚到 ${money(loanN * (1 + r) ** 3)} · 额度 ${money(credit)}` : '先卖掉能卖的，差的再借', canLoan ? loanN : null,
-        canLoan ? html`<button type="button" class=${cls('loan')} @click=${act(() => loanClick(loanN))}>${isArmed(loanN) ? '再点一次借' : `借 ${money(loanN)}`}</button>` : nothing)],
+    ['loan', part >= 1 ? row(canLoan ? `借 ${money(loanN)}` : `借满额度 ${money(part)}`, `每周利息 ${money(lose.loan)}${canLoan ? '' : `，差的 ${money(loanN - part)} 还得卖`}`,
+        `周息 ${Math.round(r * 100)}%，3 周不还滚到 ${money(part * (1 + r) ** 3)}${canLoan ? ` · 额度 ${money(credit)}` : ''}`, part,
+        html`<button type="button" class=${cls('loan')} @click=${act(raiseLoan)}>${armedL ? `再点一次：借 ${money(Math.min(loanN, part))}` : canLoan ? `借 ${money(loanN)}` : '借满'}</button>`, true)
+      : row('借', html`额度用完了`, '先还掉一些借款，额度才回来', null, nothing)],
   ];
   rows.sort((x, y) => +(y[0] === best) - +(x[0] === best));
   render(html`<h2>凑钱 <small>第 ${o.week} 周的账 ${money(o.amount)}</small><button type="button" class="rs-x" aria-label="收起" @click=${() => { shutWeek = o.week; renderRaise(); }}>×</button></h2>
@@ -147,7 +159,7 @@ export function renderRaise() {
     ${short ? html`<ul class="rs-list">
       ${rows.map(x => x[1])}
     </ul>
-    <p class="rs-foot">${canLoan ? `什么都不做：宽限到了，九姐替你借 ${money(loanN)}，周息 ${Math.round(r * 100)}%。` : html`<b>宽限到了还差的超过额度，店就收走。</b>`}</p>`
+    <p class="rs-foot">${canLoan ? `什么都不做：宽限到了，九姐替你借 ${money(loanN)}，周息 ${Math.round(r * 100)}%。` : html`<b>宽限到了还差的超过额度（${money(credit)}），店就收走。</b>${part >= 1 ? `再凑 ${money(loanN - part)}，差的就在额度里，到点九姐替你借上。` : ''}`}</p>`
     : html`<div class="rs-list"><button type="button" class="primary" @click=${() => G.payBill()}>付账 ${money(o.amount)}</button></div>`}`, el);
   if (!el.matches(':popover-open')) el.showPopover();
   const due = $('due').getBoundingClientRect(); // under the chip on wide screens (phones: a sheet above the tab bar, style.css)

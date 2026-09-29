@@ -1169,6 +1169,7 @@ button:disabled { cursor: not-allowed; }
 .rs-list li .rs-k { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
 .rs-cost { font-size: var(--fs-cap); color: var(--muted); }
 .rs-get { font: 700 var(--fs-h)/1 var(--font-tag); color: var(--gain); white-space: nowrap; }
+.rs-get.lent { color: var(--ink); }
 .rs-list button { white-space: nowrap; }
 div.rs-list { padding-top: 12px; }
 .rs-foot { padding-top: 10px; font-size: var(--fs-cap); color: var(--muted); }
