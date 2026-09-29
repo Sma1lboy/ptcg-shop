@@ -6,7 +6,7 @@ import { G, $, money } from './common.ts';
 let lastCash: number | null = null, delta = 0, stamp = 0;
 
 export function renderStats() {
-  const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = Object.values(s.shelf).reduce((a, o) => a + o.qty, 0);
+  const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = G.shelves().reduce((a, o) => a + o.qty, 0);
   const held = Object.values(s.singles).reduce((a, c) => a + c.price * c.count, 0);
   if (lastCash != null && Math.abs(s.cash - lastCash) >= .005) { delta = s.cash - lastCash; stamp++; }
   lastCash = s.cash;
