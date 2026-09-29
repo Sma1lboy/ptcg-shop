@@ -1,0 +1,230 @@
+// 开包台: tear, flip, reveal. Deliberately NOT lit-html: #mat (and the #stage inside it) is rebuilt only on player actions and
+// then driven by direct DOM work (cloneNode slide-outs, class toggles, timed flips) that would corrupt lit's markers.
+// The 3D table mounts here too, behind the same functions.
+import type { Pull } from '../sim.ts';
+import * as S from '../sim.ts';
+import * as FX from '../fx.ts';
+import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
+import { showPack } from './share.ts';
+
+const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+
+interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean }
+let mat = { mode: 'idle' } as Mat;
+
+const capHTML = (c: Pull) => { const r = rar(c); return `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>`; };
+// big = the enlarged card on the stage (hi-res, tap to advance); otherwise a tray/grid thumbnail (tap to inspect once face-up).
+function cardHTML(c: Pull, i: number, up: boolean, big?: boolean) {
+  const r = rar(c);
+  const face = c.r === 'E'
+    ? `<span class="energy"><b>${c.name.slice(2, 3)}</b>${esc(c.name)}</span>`
+    : `<img src="${imgUrl(c, big ? 'high' : 'low')}" crossorigin="anonymous" alt="${esc(c.name)}" loading="eager" decoding="async">`;
+  const act = big ? 'advance' : up ? 'peek' : '';
+  return `<figure class="slot">
+      <button type="button" class="card t${r.t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
+        <span class="card-in"><span class="back"></span><span class="face">${face}</span></span>
+      </button>
+      <figcaption>${capHTML(c)}</figcaption>
+    </figure>`;
+}
+
+// Where one pack ranks among simulated packs of the same set, in words a player can quote.
+function rankText(setId: string, v: number) {
+  const p = S.packPercentile(setId, v), pc = p >= .995 ? '99.5+' : (p * 100).toFixed(0);
+  return { p, text: `比 ${pc}% 的${G.setById(setId).name}包值钱${p >= .9 ? `，约 ${Math.min(1000, Math.round(1 / (1 - p)))} 包才出一包这样的` : ''}` };
+}
+const shareBtn = () => '<button type="button" data-act="sharemat">分享这次开包</button>';
+function shareSpec() {
+  const set = G.setById(mat.set), packs = mat.mode === 'batch' ? mat.packs : [mat.cards];
+  const vals = packs.map(S.packValue), bi = vals.indexOf(Math.max(...vals)), cards = packs.flat();
+  const best = cards.reduce((a, b) => (b.price > a.price ? b : a)), rk = rankText(set.id, vals[bi]);
+  return { set: set.name, en: set.en, n: packs.length, value: vals.reduce((a, b) => a + b, 0), cost: G.wholesale(set.id) * packs.length,
+    bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high') };
+}
+export type ShareSpec = ReturnType<typeof shareSpec>;
+
+function packSummary(cards: Pull[], set: { id: string }) {
+  const v = S.packValue(cards), cost = G.wholesale(set.id), d = v - cost;
+  const best = cards.reduce((a, b) => (b.price > a.price ? b : a));
+  const stock = G.state.stock[set.id] || 0;
+  return `<div class="summary">
+      <p>这包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。最值钱：${esc(best.name)}。</p>
+      <p class="rank">${rankText(set.id, v).text}。</p>
+      <div class="btns">
+        ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>` : ''}
+        ${shareBtn()}
+        ${G.state.cash >= cost ? `<button type="button" data-act="buyopen" data-id="${set.id}">进 1 包马上开</button>` : ''}
+      </div></div>`;
+}
+
+export function renderMat() {
+  const el = $('mat');
+  if (mat.mode === 'idle') {
+    el.innerHTML = `<div class="mat-empty"><p class="mat-big">开包台</p><p>左边货架先进货，再点「开 1 包」。<br>单包可以一张张翻，按空格翻下一张。</p></div>`;
+    return;
+  }
+  const set = G.setById(mat.set);
+  if (mat.mode === 'pack') {
+    el.innerHTML = `<div class="mat-pack"><button type="button" class="pack" data-act="tear" aria-label="撕开这包${set.name}">
+        <span class="pack-crimp"></span><img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span><span class="pack-hint">点击撕开</span><span class="pack-crimp bottom"></span></button>${sndBtn()}</div>`;
+    return;
+  }
+  if (mat.mode === 'cards') {
+    const done = mat.up.size === mat.cards.length;
+    el.innerHTML = `<div class="mat-head"><h2>${set.name}</h2><span id="mat-prog">${prog()}</span>${sndBtn()}
+        ${done ? '' : '<button type="button" class="ghost" data-act="flipall">全部翻开</button>'}</div>
+        <div class="deck"><div class="stage" id="stage">${cardHTML(mat.cards[mat.cur], mat.cur, mat.up.has(mat.cur), true)}</div>
+        <div class="spread tray">${mat.cards.map((c, i) => cardHTML(c, i, mat.up.has(i))).join('')}</div></div>
+        ${done ? packSummary(mat.cards, set) : ''}`;
+    const st = $('stage').firstElementChild!; if (!mat.up.size) st.classList.add('deal');
+    return;
+  }
+  // batch
+  const cards = mat.packs.flat(), hits = batchHits();
+  const v = S.packValue(cards), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost;
+  el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span>开出 ${money(v)} · 进货 ${money(cost)} ·
+      <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
+      ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
+        : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
+      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
+}
+
+// ---------- reveal ----------
+// While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
+export let hold = false;
+const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const batchHits = () => mat.packs.flat().filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price);
+const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
+const prog = () => `已翻 ${mat.up.size}/${mat.cards.length} · ${money(mat.cards.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
+const ready = (img: HTMLImageElement | null) => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
+const armThumb = (btn: HTMLElement, c: Pull, peek?: boolean) => { btn.classList.add('up'); btn.setAttribute('aria-label', c.name); if (peek) { btn.dataset.act = 'peek'; btn.removeAttribute('tabindex'); } };
+
+// main.ts re-renders every panel on this event (then goals.ts, which listens after it).
+function release() { if (hold) { hold = false; document.dispatchEvent(new Event('ptcg:release')); } }
+
+// Flip time by rarity tier: bulk cards fly past, chase cards slow down. The last (rare) slot is always at least 1.2 s so a miss and a hit look the same until the flip lands.
+const FLIP_MS = [140, 380, 600, 900, 1300, 1300];
+// The card just seen slides off to the left as the next one comes up, like moving the top card to the back of the stack.
+function slideAway(stage: HTMLElement) {
+  const old = stage.firstElementChild; if (!old || reduced()) return;
+  const g = old.cloneNode(true) as HTMLElement; g.classList.add('away'); g.querySelectorAll('[data-act]').forEach(n => n.removeAttribute('data-act'));
+  g.addEventListener('animationend', () => g.remove()); stage.append(g);
+}
+
+// One tap = next card slides out of the pack and flips. The last card (the rare slot) flips slowly for every pack, hit or not.
+export function advance() {
+  if (mat.mode !== 'cards' || mat.busy || mat.up.size >= mat.cards.length) return false;
+  const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i, bulk = rar(mat.cards[i]).t === 0;
+  mat.busy = true;
+  if (fresh) {
+    slideAway(stage);
+    mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild!.classList.add('deal');
+    if (bulk) stage.firstElementChild!.classList.add('quick');
+  }
+  const btn = stage.querySelector<HTMLElement>('.card')!;
+  ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? (bulk ? 60 : 240) : 0));
+  return true;
+}
+
+function reveal(tok: Mat, i: number, btn: HTMLElement) {
+  const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : Math.max(FLIP_MS[t], last ? 1200 : 0);
+  btn.style.setProperty('--flip', ms + 'ms');
+  btn.style.setProperty('--ease', last ? 'cubic-bezier(.55, 0, .25, 1)' : 'cubic-bezier(.2, .7, .2, 1)');
+  tok.up.add(i); btn.classList.add('up'); btn.setAttribute('aria-label', c.name);
+  const th = document.querySelector<HTMLElement>(`.tray .card[data-i="${i}"]`); if (th) armThumb(th, c, true);
+  const pg = document.getElementById('mat-prog'); if (pg) pg.textContent = prog();
+  if (last) FX.swell(ms);
+  if (t >= 4 && !reduced()) spotlight(ms + 1800);
+  setTimeout(() => { FX.flip(t); FX.burst($('stage'), t); }, ms / 2); // the face turns toward the player halfway through
+  setTimeout(() => { tok.busy = false; if (mat === tok && tok.up.size === tok.cards.length) finish(); }, ms + 80);
+}
+
+// UR-and-up pulls: dim the rest of the mat so the card stands alone.
+let spotTimer = 0;
+function spotlight(ms: number) { const m = $('mat'); m.classList.add('spot'); clearTimeout(spotTimer); spotTimer = setTimeout(() => m.classList.remove('spot'), ms); }
+
+function finish() {
+  if (mat.finished) return; mat.finished = true; release();
+  const el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
+  if (!el.querySelector('.summary')) el.insertAdjacentHTML('beforeend', packSummary(mat.cards, G.setById(mat.set)));
+}
+
+// Ten packs at once: the hits flip one after another, cheapest first, best last.
+function revealBatch(tok: Mat) {
+  const hits = batchHits(), n = hits.length;
+  if (!n) { FX.miss(); release(); return; }
+  const btns = [...document.querySelectorAll<HTMLElement>('.mat .spread .card')], step = reduced() ? 0 : Math.min(240, 2400 / n);
+  for (let k = 0; k < n; k++) {
+    const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
+    setTimeout(() => {
+      if (mat !== tok) return;
+      const t = rar(hits[i]).t; if (t >= 4 && k === n - 1 && !reduced()) spotlight(2200); armThumb(btns[i], hits[i]); FX.flip(t); FX.burst(btns[i].closest('.slot'), t);
+    }, delay);
+  }
+  setTimeout(() => { if (mat === tok) release(); }, (reduced() ? 0 : 350 + n * step + 1200));
+}
+
+// ---------- actions (called from events.ts) ----------
+export function startPack(id: string) {
+  hold = true;
+  const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
+  const warm = (u: string) => { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = u; };
+  cards.forEach(c => { if (c.r !== 'E') { warm(imgUrl(c)); warm(imgUrl(c, 'high')); } }); // warm the cache before the flips (CORS mode, so the share poster can reuse it)
+  mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0 } as Mat;
+  renderMat();
+}
+export function openBatch(id: string) { hold = true; const packs = G.open(id, 10); if (packs.length) { mat = { mode: 'batch', set: id, packs } as Mat; renderMat(); revealBatch(mat); } else release(); }
+export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }
+export function peek(i: number) { if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } }
+export function flipAll() { mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
+export function toggleMute() { FX.setMuted(!FX.muted()); document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; }); }
+export function shareMat() { showPack(shareSpec()); }
+export function resetMat() { hold = false; G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
+
+// ---------- input ----------
+export function bindMatInput() {
+  // Swipe the card on the stage sideways to send it to the back (same as a tap). Taps right after a swipe are ignored.
+  let swipe: { x: number; y: number } | null = null, swiped = 0;
+  document.addEventListener('pointerdown', e => { swipe = (e.target as Element).closest('.stage .card') ? { x: e.clientX, y: e.clientY } : null; });
+  document.addEventListener('pointerup', e => {
+    if (!swipe) return; const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y; swipe = null;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > 2 * Math.abs(dy)) { swiped = Date.now(); FX.unlock(); advance(); }
+  });
+  document.addEventListener('click', e => { if (Date.now() - swiped < 120) e.stopPropagation(); }, true);
+
+  // Drag the top of the sealed pack to the right to rip it; a plain tap or Space still works.
+  const TEAR_PX = 150; let rip: { p: HTMLElement; x: number } | null = null, ripMoved = false;
+  document.addEventListener('pointerdown', e => {
+    const p = (e.target as Element).closest<HTMLElement>('.pack'); if (!p || p.classList.contains('torn')) return;
+    rip = { p, x: e.clientX }; ripMoved = false; p.setPointerCapture?.(e.pointerId); p.classList.add('dragging');
+  });
+  document.addEventListener('pointermove', e => {
+    if (!rip) return; const d = Math.max(0, e.clientX - rip.x);
+    if (d > 6) ripMoved = true;
+    rip.p.style.setProperty('--tear', Math.min(1, d / TEAR_PX).toFixed(2));
+  });
+  document.addEventListener('pointerup', e => {
+    if (!rip) return; const { p } = rip, done = e.clientX - rip.x >= TEAR_PX * .7; rip = null;
+    p.classList.remove('dragging'); if (!done) { p.style.removeProperty('--tear'); return; }
+    p.style.removeProperty('--tear'); ripMoved = true; ripGo = true; p.click();
+  });
+  // A drag ends in a native click on the pack; swallow it (ripGo lets our own click through once).
+  let ripGo = false;
+  document.addEventListener('click', e => { if (!ripMoved || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
+
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space' || (e.target as Element).closest('input, textarea')) return;
+    FX.unlock();
+    if (mat.mode === 'pack') { e.preventDefault(); document.querySelector<HTMLElement>('.pack')?.click(); }
+    else if (mat.mode === 'cards' && mat.up.size < mat.cards.length) { e.preventDefault(); advance(); }
+  });
+}
+
+// Phones stack the shelf above the mat: bring the mat into view when a pack opens. Registered after events.ts's click handler, as before.
+export function bindMatScroll() {
+  document.addEventListener('click', e => {
+    const b = (e.target as Element).closest<HTMLElement>('[data-act]');
+    if (b && /^(open1|open10|buyopen)$/.test(b.dataset.act!) && matchMedia('(max-width: 779px)').matches)
+      $('mat').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+}
