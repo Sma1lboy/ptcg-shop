@@ -496,6 +496,14 @@ button:disabled { cursor: not-allowed; }
 .notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
 .notice dt { color: var(--muted); } .notice dd { margin: 0; text-align: right; font-weight: 600; }
 .notice button { width: 100%; }
+/* the tear-off stub (phones only, see the phone block): the receipt's first line on the same thermal paper, a button */
+.notice .stub { display: none; position: relative; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 0;
+  background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12)); }
+.notice .stub b { letter-spacing: .12em; }
+.notice .stub span:first-of-type { flex: 1; color: var(--muted); }
+.notice .stub span:last-child { font-weight: 600; }
+.notice .stub::after { content: ""; align-self: center; border-top: 6px solid var(--muted); border-inline: 4px solid transparent; }
+.notice .stub:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 .u-lv { display: inline-flex; gap: 3px; } /* level pips (common.ts pips) */
 .u-lv i { width: 8px; height: 8px; border: 1px solid var(--line-strong); border-radius: 1px; }
 .u-lv i.on { background: var(--ink); border-color: var(--ink); }
@@ -954,9 +962,14 @@ button:disabled { cursor: not-allowed; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
-  /* phones: the receipt prints into the page above the view, not over it — as a fixed sheet it covered the 货架 / 展示柜 tabs and
-     half the screen until 收起. It scrolls away with the page; the sticky top bar stays over it */
+  /* phones: only the receipt's stub shows — one line (关店 N 小时 · the net) in the page above the view, scrolling away with it; as a
+     full sheet it covered the 货架 / 展示柜 tabs, and in the flow it pushed the 3D table 280px down. Tapping the stub prints the rest.
+     On 开包 the stub lies on the 3D table just under the mat's head row (「今天拆哪包？」and 音效, ~60px), over the display case where
+     nothing is pressed, and scrolls with the page: the table stays where it is */
   .notice { position: relative; top: auto; right: auto; z-index: auto; width: auto; max-width: 340px; margin: 12px auto -4px; padding-inline: 12px; }
+  .notice:not(.unrolled) .paper { display: none; }
+  .notice:not(.unrolled) .stub { display: flex; }
+  :root[data-page="open"] .notice { position: absolute; z-index: 9; top: calc(var(--top-h) + 72px); left: 16px; right: 16px; margin: 0 auto; }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -1014,7 +1027,14 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 779px) {
   .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .sound { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); } /* above the docked nav */
-  .ach-pop { left: 16px; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); width: auto; max-width: 400px; margin-inline: auto; }
+  /* phones: the label prints down out of a slot under the top bar. The bottom of a phone is where the taps are (the pack's summary
+     buttons, the guide's strip, the tabs): there it sat under the guide and over 「进 1 包马上开」. Only the name and the prize, two lines */
+  .ach-pop { left: 16px; right: 16px; top: calc(var(--top-h) + 4px); bottom: auto; width: auto; max-width: 400px; margin-inline: auto; padding: 18px 0 0; }
+  .ach-pop::after { top: 0; bottom: auto; animation-name: slot; }
+  .ach-pop .grade.pop { padding-block: 10px; animation-name: print, press; animation-duration: .5s, .9s; animation-timing-function: steps(10, jump-end), cubic-bezier(.23, 1, .32, 1); }
+  .ach-pop .grade.pop .g-id > p:not(.g-k, .a-name) { display: none; }
+  :root[data-page="open"] .ach-pop { top: calc(var(--top-h) + 72px); } /* on 开包, under the mat's head row too (音效 stays pressable) */
+  :root[data-page="open"]:has(#notice:not([hidden])) .ach-pop { top: calc(var(--top-h) + 132px); } /* and under the receipt's stub */
   .nav a { padding: 0 2px; }
 }
 
