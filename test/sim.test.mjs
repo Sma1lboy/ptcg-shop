@@ -571,6 +571,7 @@ console.log('ok luck percentile');
   const L1 = G.luck(); assert.deepEqual([L1.packs, L1.value, L1.pct, Object.keys(st().dexSeen).length, st().ach.x, st().branch.fame, st().branch.n], [L0.packs, L0.value, L0.pct, dex0, 1, 3, 0], 'what you learned stays');
   assert.deepEqual([st().branch.broke, G.loanRate()], [1, G.LOAN_RATE + G.LOAN_MARK]); assert.ok(!G.canBranch(), 'a bankrupt shop cannot branch');
   G.ackWreck(); assert.equal(st().wreck, null);
+  assert.equal(D.debtBeat({ type: 'bill_due', week: 1 }, G).key, 'due:0.1:1', 'after a bankruptcy week 1 is a new run for the story');
   // Closed shop: however long, one stretch moves the bill clock one week at most (and without a clerk only an hour is credited).
   st().cash = 1e6; T += 8 * 3600e3; G.tick(); assert.equal(st().week, 2, 'eight hours closed = one visit from 九姐');
   // Soft-lock guard with no credit left is a bankruptcy, not a free top-up.
@@ -593,7 +594,7 @@ console.log('ok luck percentile');
 {
   for (const [id, scenes] of Object.entries(ST.SCENES)) for (const sc of scenes) {
     assert.ok(sc.lines.length, `story ${id}: empty scene`);
-    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', week: 2, card: 'X', price: '$1', set: 'Y' }]) {
+    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', week: 2, card: 'X', price: '$1', set: 'Y', bills: 25, fame: 6, debt: '$60,000', shop: 2 }]) {
       const t = typeof l.t === 'string' ? l.t : l.t(c); assert.ok(t && !t.includes('undefined'), `story ${id}: "${t}"`);
     }
   }
@@ -602,13 +603,26 @@ console.log('ok luck percentile');
   assert.equal(D.debtBeat(undefined, g), null); assert.equal(D.debtBeat({ open: [] }, g), null);
   const fake = Object.assign(Object.create(g), { nextBill: () => ({ week: 3, amount: 120, dueAt: 9 }) });
   const due = D.debtBeat({ type: 'bill_due' }, fake);
-  assert.deepEqual([due.kind, due.key, due.week, due.amount], ['due', 'due:3', 3, 120]);
-  assert.equal(ST.sceneFor(due, {}), 'due'); assert.equal(ST.sceneFor(due, { 'due:3': 1 }), null);
+  assert.deepEqual([due.kind, due.key, due.week, due.amount], ['due', 'due:0.0:3', 3, 120]);
+  assert.equal(ST.sceneFor(due, {}), 'due'); assert.equal(ST.sceneFor(due, { [due.key]: 1 }), null);
   const paid = w => D.debtBeat({ type: 'bill_paid', week: w }, fake);
   assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(['paid', 'paid2'].includes(ST.sceneFor(paid(2), { paid1: 1 })));
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'bankrupt' }, fake), { bankrupt: 1 }), 'bankrupt'); // a bankruptcy always plays
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'nope' }, fake), {}), null);
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'loan' }, fake), {}), 'loan');
-  for (const k of ['due', 'paid1', 'paid', 'paid2', 'missed', 'loan', 'bankrupt']) assert.ok(ST.SCENES[k], `no scene ${k}`);
-  console.log('ok story beats');
+  for (const k of ['due', 'paid1', 'paid', 'paid2', 'last', 'missed', 'loan', 'bankrupt', 'debt_cleared', 'branch']) assert.ok(ST.SCENES[k], `no scene ${k}`);
+  // The end of a run, played as the ui plays it (a beat's key marks it seen): the bill before the last says so; the bill that
+  // clears the debt emits due → paid → 还清 in one tick, and only 还清 speaks; the next shop starts at week 1 again and still
+  // gets its weekly beats and, later, its own 还清.
+  let T = 1_700_000_000_000; const E = createGame({ now: () => T, random: S.rng(3), storage: { getItem: () => null, setItem() {} } }), seen = {}, played = [];
+  E.on(ev => { const b = D.debtBeat(ev, E), id = ST.sceneFor(b, seen); if (id) { played.push(id); if (b.key) seen[b.key] = 1; } });
+  const week = () => { for (let i = 0; i < E.WEEK; i += 20) { T += 20e3; E.tick(); } };
+  const owe = n => { E.state.owe = E.state.debt = [0, 1].reduce((a, i) => a + Math.round(E.BILL0 * (1 + E.DEBT_STEP * E.state.branch.n) * E.BILL_G ** (E.state.week - 1 + i)), 0) - n; };
+  E.state.cash = 1e6; E.state.earned.sealed = 1; owe(0);
+  week(); assert.deepEqual(played, ['due', 'last'], 'the bill before the last one');
+  week(); assert.deepEqual(played, ['due', 'last', 'debt_cleared'], 'the clearing bill: no 「下周见」 before 还清');
+  assert.ok(E.branch()); assert.equal(played.at(-1), 'branch'); E.state.cash = 1e6;
+  played.length = 0; week(); assert.equal(played[0], 'due', "shop 2's week 1 is not shop 1's week 1");
+  E.state.cash = 1e6; owe(0); week(); week(); assert.deepEqual(played.slice(-2), ['last', 'debt_cleared'], 'shop 2 gets its own 还清');
+  console.log('ok story beats, and the end of a run: last → 还清 → 开张, per shop');
 }
