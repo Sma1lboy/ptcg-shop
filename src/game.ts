@@ -8,12 +8,18 @@ import type { Pull } from './sim.ts';
 export interface Single extends Pull { count: number }
 export interface Shown extends Pull { key: string; pct: number }
 export interface Trophy extends Pull { key: string }
+// One walk-in customer, as the 顾客 panel and 店内动态 show them. t = TYPES key, r = 'sold' | 'pricey' | 'none'; set = the set they
+// looked at (openers, flippers) or asked for (seekers; absent = any set); miss = the set an opener came for that was not on the shelf;
+// tier = seeker's SEEK row; card = the case card bought or balked at; price = that pack's or card's market price then; pct = its
+// asking price and max = the most this customer would pay, both as shares of that market price; why = 'budget' (fine price, not
+// enough money on them) | 'cool' (flipper still holding that set).
+export interface Visit { at: number; t: string; r: string; set?: string; miss?: string; tier?: number; card?: string; n?: number; price?: number; pct?: number; max?: number; gain?: number; why?: string }
 export interface Shelf { id: string | null; qty: number } // one set per shelf; id stays after it sells out (the clerk refills it), null = empty
 export interface State {
   cash: number; stock: Record<string, number>; singles: Record<string, Single>; opened: Record<string, number>; tally: Record<string, number>;
   pulled: number; costOpened: number; hits: (Pull & { t: number })[]; earned: { sealed: number; singles: number }; customers: number;
-  log: { t: number; text: string; tone: string }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
-  cust: { visits: number; sold: number; pricey: number; none: number }; recent: { t: string; r: string; text: string }[];
+  log: { t: number; text: string; tone: string; amt?: number }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
+  cust: { visits: number; sold: number; pricey: number; none: number }; recent: Visit[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
   shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
@@ -59,6 +65,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
+  const BIG_CARD = 12;                    // collectors only look at case cards worth at least this much
+  const RECENT = 600;                     // walk-ins kept for the 顾客 panel: the last MISS_WINDOW, at most this many
   const SIGN_STEP = 0.04;                 // signage: customers pay +4% more per level, and more seekers/collectors come
   // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
   // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
@@ -144,6 +152,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
           unify(st, old);
         }
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
+        st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
         return st;
       } } catch {}
     return fresh();
@@ -160,7 +169,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     delete st.shelf;
   }
   function save() { state.savedAt = clock(); try { store.setItem(SAVE_KEY, JSON.stringify(state)); } catch {} }
-  function log(text: string, tone = '') { state.log.unshift({ t: clock(), text, tone }); state.log.length = Math.min(state.log.length, 40); }
+  function log(text: string, tone = '', amt?: number) { state.log.unshift({ t: clock(), text, tone, amt }); state.log.length = Math.min(state.log.length, 40); }
 
   // Moves cash into stock (back room, or straight onto a shelf for the clerk) without logging or saving; returns the cost.
   function stockUp(id: string, n: number, shelf?: Shelf) {
@@ -175,7 +184,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function buy(id: string, n: number) {
     const before = state.stock[id] || 0, cost = stockUp(id, n);
     if (!cost) return false;
-    log(`进货 ${setById(id).name} ×${state.stock[id] - before}，−$${cost.toFixed(2)}`);
+    log(`进货 ${setById(id).name} ×${state.stock[id] - before}`, '', -cost);
     emit(); return true;
   }
   // Shelves: only packs on a shelf are sold to customers. Moves up to n packs between the back room and the set's shelves; no save.
@@ -252,7 +261,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (!unlocked(id) || !buy.length || state.cash < cost) return false;
     const before = dexBonusOf(id);
     state.cash -= cost; for (const c of buy) state.dexSeen[`${id}|${c.n}`] = 1; dexN = null;
-    log(`图鉴补卡：${buy.length > 1 ? `${setById(id).name}闪卡 ${buy.length} 张` : buy[0].name}，−$${cost.toFixed(2)}`);
+    log(`图鉴补卡：${buy.length > 1 ? `${setById(id).name}闪卡 ${buy.length} 张` : buy[0].name}`, '', -cost);
     dexLog(id, before);
     emit(); return true;
   }
@@ -262,7 +271,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const k = Math.min(count, s.count), gain = s.price * BUYLIST * k;
     s.count -= k; if (!s.count) delete state.singles[key];
     state.cash += gain; state.earned.singles += gain;
-    log(`卖出 ${s.name} ×${k}，+$${gain.toFixed(2)}`, 'gain');
+    log(`${s.name} ×${k} 卖给同行`, 'gain', gain);
     emit(); return gain;
   }
 
@@ -276,7 +285,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   function sellBulk() {
     const { n, v } = dumpBulk(); if (!n) return 0;
-    log(`散卡 ${n} 张打包卖给同行，+$${v.toFixed(2)}`, 'gain');
+    log(`散卡 ${n} 张打包卖给同行`, 'gain', v);
     emit(); return v;
   }
 
@@ -320,7 +329,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const cost = skillCost(k);
     if (cost == null || state.cash < cost || !canLearn(k)) return false;
     state.cash -= cost; state.skills[k] = skill(k) + 1;
-    log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}），−$${cost}`);
+    log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}）`, '', -cost);
     emit(); return true;
   }
   function upgrade(k: string) {
@@ -328,7 +337,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (cost == null || state.cash < cost) return false;
     state.cash -= cost; state.up[k] = lvl(k) + 1;
     if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelves().some(o => o.id === s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
-    log(`升级：${UPGRADES[k].name} Lv${lvl(k)}，−$${cost}`);
+    log(`升级：${UPGRADES[k].name} Lv${lvl(k)}`, '', -cost);
     emit(); return true;
   }
 
@@ -340,63 +349,63 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the trophy, plus personal spread.
   const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage') + SKILLS.talk.step * skill('talk')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
   const heatW = (id: string) => { const h = state.heat[id]; return h > 1 ? 2 : h < 1 ? 0.5 : 1; };
-  const sellCard = (i: number, quiet: boolean, who: string) => {
-    const c = state.shown.splice(i, 1)[0], gain = cardAsk(c);
-    state.cash += gain; state.earned.singles += gain;
-    return { gain, text: `${who}买走 ${c.name}，+$${gain.toFixed(2)}` };
+  // Both record the sale on the visit (what went, at what asking price, for how much) and take the money.
+  const sellCard = (i: number, v: Visit) => {
+    const c = state.shown.splice(i, 1)[0];
+    v.r = 'sold'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); v.gain = cardAsk(c); state.cash += v.gain; state.earned.singles += v.gain;
   };
-  const sellPacks = (id: string, n: number, who: string) => {
-    const gain = ask(id) * n; state.cash += gain; state.earned.sealed += gain;
+  const sellPacks = (id: string, n: number, v: Visit) => {
+    v.r = 'sold'; v.set = id; v.n = n; v.price = sealedPrice(id); v.pct = pctOf(id); v.gain = ask(id) * n; state.cash += v.gain; state.earned.sealed += v.gain;
     let left = n; for (const s of shelves()) if (s.id === id) { const k = Math.min(left, s.qty); s.qty -= k; left -= k; }
-    return { gain, text: `${who}买走 ${n} 包${setById(id).name}，+$${gain.toFixed(2)}` };
   };
+  const balk = (v: Visit, c: Shown, max: number) => { v.r = 'pricey'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); if (v.pct <= max) v.why = 'budget'; };
 
-  // One walk-in customer: picks an errand, looks at what is on the shelf/in the case at what price, buys or leaves.
-  // Returns cash taken in. res: 'sold' | 'pricey' (something matched but too dear) | 'none' (nothing they wanted was for sale).
-  function visit(quiet: boolean) {
-    const type = pickW(Object.keys(TYPES), typeWeight), who = TYPES[type].name, tol = tolOf(type), hits = state.shown;
-    const onShelf = SETS.filter(s => shelfQty(s.id) > 0).map(s => s.id);
-    let res = 'none', out: { gain: number; text: string } | null = null, why = '';
+  // One walk-in customer: picks an errand, looks at what is on the shelf/in the case at what price, buys or leaves, and is
+  // kept in state.recent (see Visit). Returns cash taken in. r: 'sold' | 'pricey' (something matched but too dear, or they
+  // were short of money) | 'none' (nothing they wanted was for sale).
+  function visit() {
+    const type = pickW(Object.keys(TYPES), typeWeight), tol = tolOf(type), hits = state.shown;
+    const onShelf = SETS.filter(s => shelfQty(s.id) > 0).map(s => s.id), v: Visit = { at: vnow, t: type, r: 'none', max: tol };
     if (type === 'opener') {
       const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
       let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
       if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); if (m.length > MISS_KEEP) m.shift(); } // the set they came for, before any settling
-      if (!shelfQty(id) && onShelf.length && random() < 0.5) id = pickW(onShelf, facings); // settles for another set, more likely one on several shelves
+      if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, facings); } // settles for another set, more likely one on several shelves
+      v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
         const n = Math.min(want, shelfQty(id), Math.floor(lognorm(25 * demand(id).budget, 0.6) / ask(id)));
-        if (n >= 1 && pctOf(id) <= tol + demand(id).tol) { res = 'sold'; out = sellPacks(id, n, who); } else { res = 'pricey'; why = `${setById(id).name}标价 ${Math.round(pctOf(id) * 100)}%，嫌贵走了`; }
-      } else why = `想拆 ${setById(id).name}，货架没有`;
+        if (n >= 1 && pctOf(id) <= v.max) sellPacks(id, n, v); else { v.r = 'pricey'; v.price = sealedPrice(id); v.pct = pctOf(id); if (v.pct <= v.max) v.why = 'budget'; }
+      }
     } else if (type === 'flipper') {
       const under = onShelf.filter(id => pctOf(id) <= tol), cheap = under.filter(id => !(state.flipT[id] > vnow)).sort((a, b) => pctOf(a) - pctOf(b))[0];
       const budget = lognorm(300, 0.5);
       if (cheap) { // a low price empties the shelf: they take up to 4–15 packs, then that set is off their list until resold
         const n = Math.min(shelfQty(cheap), Math.floor(budget / ask(cheap)), 4 + Math.floor(random() * 12));
-        if (n >= 1) { res = 'sold'; out = sellPacks(cheap, n, who); state.flipT[cheap] = vnow + FLIP_COOLDOWN * 1000; }
+        if (n >= 1) { sellPacks(cheap, n, v); state.flipT[cheap] = vnow + FLIP_COOLDOWN * 1000; }
       }
-      if (res !== 'sold') {
+      if (v.r !== 'sold') {
         const i = hits.findIndex(c => cardPct(c) <= tol && cardAsk(c) <= budget);
-        if (i >= 0) { res = 'sold'; out = sellCard(i, quiet, who); }
-        else if (under.length) { res = 'pricey'; why = `${setById(under[0]).name}刚收过一批还没出手，这次不收`; }
-        else if (onShelf.length || hits.length) { res = 'pricey'; why = '没有低于市价的货，空手走了'; }
+        if (i >= 0) sellCard(i, v);
+        else if (under.length) { v.r = 'pricey'; v.why = 'cool'; v.set = under[0]; }
+        else if (onShelf.length || hits.length) v.r = 'pricey';
       }
     } else if (type === 'seeker') {
       const tier = pickW([0, 1, 2], i => SEEK_W[i]), any = random() < 0.4, sid = pickW(SETS.filter(s => unlocked(s.id)), () => 1).id;
       const fits = hits.map((c, i) => [c, i] as const).filter(([c]) => SEEK[tier].includes(c.kind) && (any || c.set === sid)).sort((a, b) => cardAsk(a[0]) - cardAsk(b[0]));
       const budget = lognorm(60, 0.7);
-      if (!fits.length) why = `想找一张 ${SEEK[tier].join('/')}，柜里没有`;
-      else if (cardPct(fits[0][0]) <= tol && cardAsk(fits[0][0]) <= budget) { res = 'sold'; out = sellCard(fits[0][1], quiet, who); }
-      else { res = 'pricey'; why = `${fits[0][0].name} 标价 ${Math.round(cardPct(fits[0][0]) * 100)}%，嫌贵`; }
+      v.tier = tier; if (!any) v.set = sid;
+      if (!fits.length) { /* nothing of that rarity in the case */ }
+      else if (cardPct(fits[0][0]) <= tol && cardAsk(fits[0][0]) <= budget) sellCard(fits[0][1], v);
+      else balk(v, fits[0][0], tol);
     } else { // collector
-      const budget = lognorm(150, 0.8), big = hits.map((c, i) => [c, i] as const).filter(([c]) => c.price >= 12).sort((a, b) => b[0].price - a[0].price);
+      const budget = lognorm(150, 0.8), big = hits.map((c, i) => [c, i] as const).filter(([c]) => c.price >= BIG_CARD).sort((a, b) => b[0].price - a[0].price);
       const ok = big.find(([c]) => cardPct(c) <= tol && cardAsk(c) <= budget);
-      if (ok) { res = 'sold'; out = sellCard(ok[1], quiet, who); }
-      else if (big.length) { res = 'pricey'; why = `${big[0][0].name} 标价 ${Math.round(cardPct(big[0][0]) * 100)}%，嫌贵`; }
-      else why = '想看点值钱的卡，柜里没有';
+      if (ok) sellCard(ok[1], v);
+      else if (big.length) balk(v, big[0][0], tol);
     }
-    const c = state.cust; c.visits++; if (res === 'sold') { c.sold++; state.customers++; } else if (res === 'pricey') c.pricey++; else { c.none++; state.lost++; }
-    state.recent.unshift({ t: type, r: res, text: out ? out.text : `${who}：${why}` }); state.recent.length = Math.min(state.recent.length, 40);
-    if (out && !quiet) log(out.text, 'gain');
-    return out ? out.gain : 0;
+    const c = state.cust; c.visits++; if (v.r === 'sold') { c.sold++; state.customers++; } else if (v.r === 'pricey') c.pricey++; else { c.none++; state.lost++; }
+    state.recent.unshift(v); while (state.recent.length > RECENT || state.recent.at(-1)!.at < vnow - MISS_WINDOW * 1000) state.recent.pop();
+    return v.gain || 0;
   }
 
   // The clerk (upgrade): once a round, tops up every shelf whose set has auto-restock on (buying straight onto it; half full at
@@ -422,7 +431,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function bailout() {
     const cheapest = Math.min(...SETS.filter(s => unlocked(s.id)).map(s => wholesale(s.id)));
     if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0) || Object.keys(state.singles).length || state.shown.length) return false;
-    state.cash += BAILOUT; log(`货架空了、钱也花光了，亲戚周济了 $${BAILOUT}`, 'gain'); return true;
+    state.cash += BAILOUT; log('货架空了、钱也花光了，亲戚周济', 'gain', BAILOUT); return true;
   }
 
   // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up.
@@ -431,20 +440,20 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
     const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
-    let n = 0, revenue = 0, sales = 0, quiet = false;
+    let n = 0, revenue = 0, sales = 0;
     for (let left = dt; left > 0; left -= slice) {
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
-      quiet = quiet || m > 3; n += m;
-      for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(quiet); revenue += got; if (got) sales++; } // spread over the slice
+      n += m;
+      for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
       clerkWork(acc, now - (left - len) * 1000);
     }
-    if (acc.packs) log(`店员进货 ${acc.packs} 包，−$${acc.spent.toFixed(2)}${acc.bulk ? `；散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}` : ''}`);
-    else if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}`, 'gain');
+    if (acc.packs) log(`店员进货 ${acc.packs} 包`, '', -acc.spent);
+    if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
     if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
-      log(`打烊期间卖出 ${sales} 件，+$${revenue.toFixed(2)}`, 'gain');
+      log(`打烊期间卖出 ${sales} 件`, 'gain', revenue);
     }
     const rescued = bailout();
     if (n || dt > 30 || acc.packs || acc.bulk || acc.listed || rescued) emit(); else save();
@@ -489,6 +498,6 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
     demand, lineup, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, MISS_KEEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, MISS_KEEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }
