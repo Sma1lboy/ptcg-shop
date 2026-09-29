@@ -129,7 +129,7 @@
       c.fillStyle = m; c.fillRect(0, 0, W, ah);
       x.drawImage(t, 0, 360);
     }
-    if (logo) { const lw = W * .8, lh = lw * logo.height / logo.width; x.save(); x.shadowColor = 'rgba(0,0,0,.4)'; x.shadowBlur = 20; x.shadowOffsetY = 6; x.drawImage(logo, (W - lw) / 2, cr + 64, lw, lh); x.restore(); }
+    if (logo) { const lh = Math.min(W * .8 * logo.height / logo.width, 250), lw = lh * logo.width / logo.height; x.save(); x.shadowColor = 'rgba(0,0,0,.4)'; x.shadowBlur = 20; x.shadowOffsetY = 6; x.drawImage(logo, (W - lw) / 2, cr + 64, lw, lh); x.restore(); } // tall logos (151) are capped so the art still shows
     gr = x.createLinearGradient(0, H - cr - 360, 0, H - cr); gr.addColorStop(0, rgba(c2, 0)); gr.addColorStop(.55, rgba(c2, .85)); gr.addColorStop(1, c2);
     x.fillStyle = gr; x.fillRect(0, H - cr - 360, W, 360);
     x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `400 108px ${DISP()}`;
@@ -146,7 +146,7 @@
     x.fillStyle = gr; x.fillRect(0, 0, W, H);
     x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(W / 2 - 24, 0, 48, H); // the glued seam down the back
     x.fillStyle = 'rgba(255,255,255,.14)'; x.fillRect(W / 2 - 24, 0, 3, H); x.fillRect(W / 2 + 21, 0, 3, H);
-    if (logo) { const lw = W * .5, lh = lw * logo.height / logo.width; x.drawImage(logo, (W - lw) / 2, cr + 70, lw, lh); }
+    if (logo) { const lh = Math.min(W * .5 * logo.height / logo.width, 200), lw = lh * logo.width / logo.height; x.drawImage(logo, (W - lw) / 2, cr + 70, lw, lh); }
     x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `400 70px ${DISP()}`; x.fillText('欧气卡铺', 70, 560);
     x.font = `400 28px ${BODY()}`; x.fillStyle = 'rgba(255,255,255,.78)';
     [`${set.name} · 补充包`, '每包 11 张卡：', '1 张能量 · 4 张普通 · 3 张非普通', '2 张反闪位 · 1 张稀有位', '', '开包概率：TCGplayer 实开统计', '单卡价格：TCGplayer 市价'].forEach((l, i) => x.fillText(l, 70, 630 + i * 44));
