@@ -2,7 +2,7 @@
 import { card } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money } from './common.ts';
+import { G, $, money, rarLabel } from './common.ts';
 import { back, stock } from './card.ts';
 import type { ShareSpec } from './mat.ts';
 
@@ -172,17 +172,33 @@ async function drawCard() {
 async function drawPack(d: ShareSpec) {
   // bottom half reads from the bottom: a 5th-percentile pack is 后 5%, not a boastful 前 95%
   const top = d.pct >= .995 ? '前 0.5%' : d.pct >= .5 ? `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%` : `后 ${Math.max(1, Math.round(d.pct * 100))}%`;
-  await fonts(top + d.set + d.best.name);
-  const art = await loadArt(d.best), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
+  // A batch with more than one hit lays out what the table shows after it (table3d.js): the dearest in the slab, the next few RR-and-up
+  // cards in a row under it, each on a plate with name, rarity and price, and the rest as one line 「另 N 张 · 合计 $x」.
+  const row = d.n > 1 ? d.front.slice(1, 5) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
+  await fonts(top + d.set + d.best.name + row.map(c => c.name + rarLabel(c.kind)).join('') + '另张合计');
+  const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body'), tag = css('--font-tag');
   mat(x, W, H);
-  const y = slab(x, W, 48, 580, art, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
+  let y = slab(x, W, row.length ? 36 : 48, row.length ? 360 : 580, art, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
     best: d.best.name, price: money(d.best.price), ...cert(`${d.set}|${d.n}|${Math.round(d.value * 100)}|${d.best.n}`), grade: top, gradeF: css('--font-tag'), sub: d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里' });
+  if (row.length) {
+    const cw = 160, gap = 28, rw = row.length * cw + (row.length - 1) * gap, ry = y + 32;
+    row.forEach((cd, i) => {
+      const cx = (W - rw) / 2 + i * (cw + gap), ch = drawArt(x, arts[i], cx, ry, cw), py = ry + ch + 10;
+      roundRect(x, cx - 6, py, cw + 12, 96, 6); x.fillStyle = 'rgba(0,0,0,.34)'; x.fill(); x.strokeStyle = 'rgba(255,255,255,.14)'; x.lineWidth = 1.5; x.stroke();
+      x.textAlign = 'center'; x.fillStyle = mi; x.font = `600 21px ${body}`; x.fillText(fit(x, cd.name, cw), cx + cw / 2, py + 28);
+      x.fillStyle = mm; x.font = `17px ${body}`; x.fillText(fit(x, rarLabel(cd.kind), cw), cx + cw / 2, py + 54);
+      x.fillStyle = mi; x.font = `600 26px ${tag}`; x.fillText(money(cd.price), cx + cw / 2, py + 84);
+    });
+    y = ry + cw * 88 / 63 + 106;
+    x.textAlign = 'center'; x.fillStyle = mm; x.font = `24px ${body}`; x.fillText(`另 ${rest} 张 · 合计 ${money(restV)}`, W / 2, y + 36);
+    y += 26;
+  }
   const diff = d.value - d.cost;
   x.textAlign = 'center';
-  x.font = `30px ${body}`; x.fillStyle = mi; x.fillText(d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank, W / 2, y + 76);
+  x.font = `30px ${body}`; x.fillStyle = mi; x.fillText(d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank, W / 2, y + (row.length ? 56 : 76));
   x.font = `28px ${body}`; x.fillStyle = diff >= 0 ? css('--mat-gain') : css('--mat-loss');
-  x.fillText(`${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, W / 2, y + 130);
+  x.fillText(`${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, W / 2, y + (row.length ? 102 : 130));
   x.font = `22px ${body}`; x.fillStyle = mm; x.fillText('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 30);
   return c.toDataURL('image/png');
 }
