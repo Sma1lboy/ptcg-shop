@@ -199,7 +199,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const dexShare = (id: string) => dexCount(id) / dexTotal(id);
   const master = (id: string) => dexCount(id) >= dexTotal(id);
   // distinct card numbers of each set in state.dex (keys set|n|kind; energy is not a card of the set), cleared when a new key appears
-  const handCount = (id: string) => (handN ||= Object.keys(state.dex).reduce((a, k) => { const [s, n] = k.split('|'); if (n !== 'E') (a[s] ||= new Set()).add(n); return a; }, {} as Record<string, Set<string>>))[id]?.size || 0;
+  const hand = (id: string) => (handN ||= Object.keys(state.dex).reduce((a, k) => { const [s, n] = k.split('|'); if (n !== 'E') (a[s] ||= new Set()).add(n); return a; }, {} as Record<string, Set<string>>))[id];
+  const handCount = (id: string) => hand(id)?.size || 0;
   const handDone = (id: string) => handCount(id) >= dexTotal(id);
   // Chance that one pack at 手气 m holds card n in any printing: per slot, the chance its rarity roll lands on a pool holding n, over that pool's size.
   const odds = new Map<string, number>(); // pure in (set, card, m): memoised, the 图鉴 panel asks for every missing card on each render
@@ -211,8 +212,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     odds.set(k, 1 - miss); return 1 - miss;
   }
   // Cards of a set not yet pulled by hand, rarest first, with the packs one takes on average at today's 手气.
-  const handMissing = (id: string) => { const have = new Set(Object.keys(state.dex).filter(k => k.split('|')[0] === id).map(k => k.split('|')[1]));
-    return DATA[id].cards.filter(c => !have.has(c.n)).map(c => ({ n: c.n, name: c.name, r: c.r, packs: 1 / cardOdds(id, c.n) })).sort((a, b) => b.packs - a.packs); };
+  const handMissing = (id: string) => { const have = hand(id);
+    return DATA[id].cards.filter(c => !have?.has(c.n)).map(c => ({ n: c.n, name: c.name, r: c.r, packs: 1 / cardOdds(id, c.n) })).sort((a, b) => b.packs - a.packs); };
   const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
