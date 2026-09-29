@@ -47,7 +47,8 @@ function shareSpec() {
   const vals = packs.map(S.packValue), bi = vals.indexOf(Math.max(...vals)), cards = packs.flat();
   const best = cards.reduce((a, b) => (b.price > a.price ? b : a)), rk = rankText(set.id, vals[bi]);
   return { set: set.name, en: set.en, n: packs.length, value: vals.reduce((a, b) => a + b, 0), cost: G.wholesale(set.id) * packs.length,
-    bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high') };
+    bestPack: vals[bi], rank: rk.text, pct: rk.p, best, hits: cards.filter(c => S.HITS.includes(c.kind)).length, img: imgUrl(best, 'high'),
+    count: cards.length, front: cards.filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price).slice(0, 5) }; // the table's front row (RR and up, dearest first): the pack poster lays out the same
 }
 export type ShareSpec = ReturnType<typeof shareSpec>;
 

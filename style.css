@@ -422,7 +422,6 @@ button:disabled { cursor: not-allowed; }
 .mat .btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
 
-/* luck detector: the verdict is one word in the card-name 黑体; the meter is a neutral ramp (colour belongs to money and rarity, not to rank) */
 /* 欧气鉴定 (luck.ts label()): the verdict printed as the label of a graded-card slab: white label stock with the card-back navy
    print and an inset navy frame, paper in both themes like the receipt. Left what was graded and the cert barcode, right the grade.
    share.ts prints the same fields on the slab in the share image */
@@ -447,17 +446,25 @@ button:disabled { cursor: not-allowed; }
 .g-act { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: -4px 0 16px; } .g-act small { color: var(--muted); }
 .verdict-sub { margin: 0 0 16px; color: var(--muted); }
 .verdict-sub b { color: var(--ink); }
-.meter { position: relative; display: flex; height: 10px; gap: 2px; }
-.meter span { height: 100%; }
-.meter span:nth-child(1) { background: color-mix(in oklab, var(--ink) 10%, transparent); border-radius: 2px 0 0 2px; }
-.meter span:nth-child(2) { background: color-mix(in oklab, var(--ink) 18%, transparent); }
-.meter span:nth-child(3) { background: color-mix(in oklab, var(--ink) 28%, transparent); }
-.meter span:nth-child(4) { background: color-mix(in oklab, var(--ink) 44%, transparent); }
-.meter span:nth-child(5) { background: color-mix(in oklab, var(--ink) 64%, transparent); }
-.meter span:nth-child(6) { background: var(--ink); border-radius: 0 2px 2px 0; }
-.meter i { position: absolute; top: -6px; width: 4px; height: 22px; margin-left: -2px; background: var(--ink); border-radius: 1px; box-shadow: 0 0 0 2px var(--bg); transition: left .6s cubic-bezier(.23, 1, .32, 1); }
-.meter-labels { display: flex; font-size: var(--fs-cap); color: var(--muted); margin-top: 6px; }
-.meter-labels span { text-align: center; white-space: nowrap; }
+/* 分布 (luck.ts dist()): the simulated players' totals on a log money axis, the same chart as the share image's. Ink for the
+   players you beat, the rest faint, no colour (colour belongs to money and rarity, not to rank). 你 is a pin with its amount above,
+   期望 a tick with its amount below; both keep inside the box at the ends (.l / .r). */
+.dist-head { margin: 0 0 34px; font-weight: 600; }
+.dist { margin: 0; }
+.dist-plot { position: relative; height: 84px; border-bottom: 2px solid var(--muted); }
+.dist-plot svg { display: block; width: 100%; height: 100%; }
+.dist-plot rect { fill: var(--muted); opacity: .38; } .dist-plot rect.on { fill: var(--ink); opacity: .8; }
+.dist-you { position: absolute; bottom: -2px; height: calc(100% + 14px); width: 3px; margin-left: -1.5px; background: var(--ink); box-shadow: 0 0 0 2px var(--panel); }
+.dist-you b, .dist-exp { position: absolute; transform: translateX(-50%); white-space: nowrap; font: 600 var(--fs-body)/1 var(--font-tag); }
+.dist-you b { bottom: calc(100% + 6px); left: 50%; }
+.dist-axis { position: relative; height: 26px; margin: 0; }
+.dist-exp { top: 0; padding-top: 10px; font: 400 var(--fs-cap)/1 var(--font-body); color: var(--muted); }
+.dist-exp::before { content: ''; position: absolute; top: 0; left: 50%; width: 2px; height: 8px; margin-left: -1px; background: var(--muted); }
+:is(.dist-you b, .dist-exp).l, .dist-you.l b { transform: none; } :is(.dist-you b, .dist-exp).r, .dist-you.r b { transform: translateX(-100%); }
+.dist-you.l b { left: 0; } .dist-exp.l { margin-left: -4px; } .dist-exp.l::before { left: 4px; } .dist-exp.r::before { left: auto; right: 3px; }
+.dist-note { margin: 2px 0 10px; font-size: var(--fs-cap); color: var(--muted); }
+.dist-best { margin: 0 0 4px; }
+.dist-best small { display: block; margin-top: 2px; font-size: var(--fs-cap); color: var(--muted); }
 .kv { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 20px 0 12px; }
 .kv dt { font-size: var(--fs-cap); color: var(--muted); } .kv dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 .tally { width: 100%; border-collapse: collapse; font-size: var(--fs-cap); }
@@ -659,8 +666,6 @@ button:disabled { cursor: not-allowed; }
 .mat .gain, .mat .summary .gain, .mat-head b.gain { color: var(--mat-gain); }
 .mat .loss, .mat .summary .loss, .mat-head b.loss { color: var(--mat-loss); }
 .singles li.muted, .singles li:only-child.muted { display: block; }
-.meter-labels span:nth-last-child(-n+2) { flex: 0 0 auto; padding-left: 8px; }
-.meter-labels span:nth-last-child(3) { text-align: left; }
 .tally th:nth-child(4), .tally td:nth-child(4) { width: auto; white-space: nowrap; }
 .tally td:first-child { padding-right: 6px; }
 @media (max-width: 779px) {

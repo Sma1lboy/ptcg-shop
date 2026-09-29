@@ -813,11 +813,21 @@ console.log('ok luck percentile');
   const r = S.rng(4242), vs = Array.from({ length: 800 }, () => { let v = 0; for (let i = 0; i < 1000; i++) v += S.packValue(S.openPack('sv08.5', r)); return v; }).sort((x, y) => x - y);
   for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile({ 'sv08.5': 1000 }, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.05, `1000 packs at true q=${q} came out ${got}`); }
   // Cost doesn't grow with packs: 90k packs, and the slow middle (20 keys of ~1,500 packs: counts land in inversion and card-by-card picks).
-  const t0 = performance.now(); S.luckPercentile(big, M); const ms = performance.now() - t0;
+  // reordered keys: luckSamples keeps the last draw, so `big` itself would come back instantly
+  const cold = Object.fromEntries(Object.entries(big).reverse()), t0 = performance.now(); S.luckPercentile(cold, M); const ms = performance.now() - t0;
   const mid = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 1500], [S.rateKey(s.id, 1.25), 1500]])), t1 = performance.now(); S.luckPercentile(mid, 1e5); const ms2 = performance.now() - t1;
   assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
   { const c = { sv08: 40, 'sv08@1.25': 5 }, xs = S.luckSamples(c, 500); assert.ok(xs.every((v, i) => !i || xs[i - 1] <= v), 'luckSamples sorted');
     const v = xs[300]; assert.equal(S.luckPercentile(c, v, 500), (xs.filter(y => y < v - 1e-9).length + xs.filter(y => Math.abs(y - v) <= 1e-9).length / 2) / 500, 'the share image\'s spread and the printed percentile are the same draws'); }
+  // luckBins (the 欧气 page's chart and the share image's): every player lands in a bin, and the bins drawn as beaten hold no more
+  // players than the printed percentile counts, the rest (you and above) no fewer: the picture can't disagree with the number.
+  for (const c of [{ sv08: 1 }, { sv08: 40, 'sv08@1.25': 5 }, { sv08: 300, 'sv08.5': 200, sv09: 50 }]) {
+    const xs = S.luckSamples(c), v = xs[Math.floor(xs.length * .37)], B = S.luckBins(xs, v, 1), p = S.luckPercentile(c, v) * xs.length;
+    assert.equal(B.bins.reduce((a, b) => a + b, 0), xs.length, 'luckBins drops no player');
+    const beat = B.bins.reduce((a, b, i) => a + (B.beat(i) ? b : 0), 0), upTo = beat + (B.bins[B.bins.findIndex((_, i) => !B.beat(i))] || 0);
+    assert.ok(beat <= p && p <= upTo, `bins beaten ${beat}..${upTo} vs percentile ${p}`);
+  }
+  { const c = { sv08: 7 }; assert.equal(S.luckSamples(c), S.luckSamples({ sv08: 7 }), 'luckSamples keeps the last draw'); }
   console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
 
