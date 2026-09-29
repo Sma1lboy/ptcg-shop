@@ -121,13 +121,23 @@ console.log('ok luck percentile');
   T += 3600e3; G.tick();
   assert.equal(st().earned.sealed, 0, 'unshelved packs never sell');
   assert.equal(st().stock.sv08, G.WAREHOUSE);
-  G.shelve('sv08', 999); assert.equal(G.shelfQty('sv08'), G.SHELF_BASE, 'shelf capacity');
-  assert.equal(st().stock.sv08, G.WAREHOUSE - G.SHELF_BASE);
-  G.unshelve('sv08', 5); assert.equal(G.shelfQty('sv08'), G.SHELF_BASE - 5);
+  // 统一货架: RACK_BASE shelves of DEPTH_BASE packs, one set per shelf. A set with no shelf takes the first empty one and fills only that.
+  assert.equal(G.shelves().length, G.RACK_BASE);
+  G.shelve('sv08', 999); assert.equal(G.shelfQty('sv08'), G.DEPTH_BASE, 'one shelf deep');
+  assert.deepEqual(G.shelves().map(s => s.id), ['sv08', ...Array(G.RACK_BASE - 1).fill(null)], 'a set only takes one empty shelf by itself');
+  assert.equal(st().stock.sv08, G.WAREHOUSE - G.DEPTH_BASE);
+  G.unshelve('sv08', 5); assert.equal(G.shelfQty('sv08'), G.DEPTH_BASE - 5); assert.equal(G.shelves()[0].id, 'sv08', 'a shelf keeps its set when emptied');
+  assert.ok(G.place(1, 'sv08')); assert.equal(G.facings('sv08'), 2, 'the same set can take a second shelf');
+  G.shelve('sv08', 999); assert.equal(G.shelfQty('sv08'), 2 * G.DEPTH_BASE, 'shelve fills every shelf of the set');
+  assert.equal(G.place(1, 'sv08.5'), false, 'locked set cannot be placed');
+  const back = st().stock.sv08; st().stock.sv08 = G.WAREHOUSE;
+  assert.equal(G.place(1, null), false, 'a shelf is not cleared into a full back room'); assert.equal(G.shelfQty('sv08'), 2 * G.DEPTH_BASE);
+  st().stock.sv08 = back; G.buy('sv10', 3); assert.ok(G.place(1, 'sv10'));
+  assert.deepEqual([G.shelfQty('sv08'), st().stock.sv08, G.shelfQty('sv10'), st().stock.sv10], [G.DEPTH_BASE, back + G.DEPTH_BASE, 3, 0], 'switching a shelf sends its packs back and fills it with the new set');
   G.setPrice('sv08', 9); assert.equal(G.pctOf('sv08'), G.MAX_PCT, 'price clamps'); G.setPrice('sv08', 0); assert.equal(G.pctOf('sv08'), G.MIN_PCT);
   G.setPrice('sv08', 1.02); assert.ok(Math.abs(G.pctOf('sv08') - 1) < 1e-9 && Math.abs(G.ask('sv08') - G.sealedPrice('sv08')) < 1e-9, 'price snaps to steps');
-  const cash0 = st().cash; assert.ok(G.upgrade('shelf')); assert.equal(st().cash, cash0 - G.UPGRADES.shelf.costs[0]);
-  assert.equal(G.capacity(), G.SHELF_BASE + 20);
+  const cash0 = st().cash; assert.ok(G.upgrade('racks')); assert.equal(st().cash, cash0 - G.UPGRADES.racks.costs[0]);
+  assert.equal(G.shelves().length, G.RACK_BASE + 1); assert.ok(G.upgrade('depth')); assert.equal(G.depth(), G.DEPTH_BASE + G.DEPTH_STEP);
   st().earned.sealed = 400; assert.ok(G.unlocked('sv08.5'));
 
   // 3. Customers respond to price. Same shop, same hour, three asking prices: cheap sells the most units, dear the fewest.
@@ -161,10 +171,28 @@ console.log('ok luck percentile');
   assert.ok(G.trophyBonus() < 0.5, 'trophy bonus is bounded');
   const rate0 = G.rate(); G.clearTrophy(); assert.equal(G.rate(), rate0, 'trophy does not change walk-in rate'); assert.equal(st().singles.b.count, 1);
 
-  // 6. Old saves: packs that used to be "on sale" land on the shelf.
+  // 6. Old saves. Pre-storefront: packs that used to be "on sale" land on a shelf.
   store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, stock: { sv08: 7 }, singles: {} });
   const G2 = createGame(env); // a page reload: a second game over the same storage
   assert.equal(G2.shelfQty('sv08'), 7); assert.equal(G2.state.stock.sv08 || 0, 0);
+  // Pre-统一货架: one shelf per set and a 货架 level that deepened them all. Every set that was on sale gets a shelf of its own,
+  // the old level becomes 加层 (same depth as the old per-set shelf), prices carry over, and every pack survives: sv10 is over
+  // its old cap on purpose, the extra goes to the back room even past the back room's cap.
+  {
+    const old = { cash: 10, earned: { sealed: 1e4, singles: 0 }, up: { shelf: 2, signage: 1 }, stock: { sv08: 3, sv10: G.WAREHOUSE },
+      shelf: { sv08: { qty: 60, pct: 0.9 }, sv10: { qty: 70, pct: 1.1 }, 'sv08.5': { qty: 0, pct: 1.3 }, 'sv03.5': { qty: 5, pct: 1 } } };
+    store['ptcg-shop-v1'] = JSON.stringify(old);
+    const G3 = createGame(env), s3 = G3.state;
+    for (const [id, o] of Object.entries(old.shelf)) {
+      assert.equal(G3.shelfQty(id) + (s3.stock[id] || 0), o.qty + (old.stock[id] || 0), `${id}: no pack lost`);
+      assert.equal(G3.pctOf(id), o.pct, `${id}: price kept`); assert.equal(G3.facings(id), o.qty ? 1 : 0, `${id}: one shelf if it was on sale`);
+    }
+    assert.equal(s3.up.shelf, undefined); assert.equal(G3.lvl('signage'), 1); assert.equal(G3.lvl('depth'), 2); assert.equal(G3.racks(), 3);
+    assert.equal(G3.shelves().length, G3.racks()); assert.equal(G3.shelfQty('sv08'), 60); assert.equal(G3.depth(), 60, 'old 货架 Lv2 held 60 per set; 加层 Lv2 holds 60 per shelf');
+    assert.ok(s3.stock.sv10 > G.WAREHOUSE); assert.equal(G3.buy('sv10', 1), false, 'over-full back room just refuses more');
+    G3.setPrice('sv10', 1.1); const G4 = createGame(env); // saved in the new format: loads unchanged
+    assert.deepEqual([G4.state.shelves, G4.state.stock, G4.state.price, G4.state.up], [s3.shelves, s3.stock, s3.price, s3.up]);
+  }
   delete store['ptcg-shop-v1'];
 
   // 7. Soft-lock guard, 图鉴 and the clerk.
@@ -178,6 +206,12 @@ console.log('ok luck percentile');
   assert.ok(st().auto.sv08, 'first clerk level turns auto-restock on for sets already in use');
   T += 3 * 3600e3; G.tick(); assert.ok(G.shelfQty('sv08') > 0 || st().earned.sealed > 1e6, 'clerk keeps the shelf stocked while the shop is closed');
   assert.ok(st().offline.sales > 20, `a clerk lets a closed shop keep selling past one shelf (${st().offline.sales} sales)`);
+  // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
+  G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
+  const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
+  G.shelves()[0].qty = 0; T += 60e3; G.tick(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
+  T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
+  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills it');
 
   // 8. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
   {
@@ -198,7 +232,7 @@ console.log('ok luck percentile');
   {
     const PCTS = [0.85, 0.9, 1, 1.1];
     const profitAt = (id, pct) => {
-      G.reset(); st().cash = 1e9; st().earned.sealed = 1e6; st().up.shelf = 4; T += 1;
+      G.reset(); st().cash = 1e9; st().earned.sealed = 1e6; st().up.racks = G.UPGRADES.racks.costs.length; st().up.depth = G.UPGRADES.depth.costs.length; T += 1;
       for (const x of PTCG_SETS) G.setPrice(x.id, x.id === id ? pct : 1);
       let p = 0;
       for (let i = 0; i < 720; i++) {
