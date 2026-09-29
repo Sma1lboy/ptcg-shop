@@ -776,13 +776,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const inst = installment(state.week), grown = state.loan * (1 + loanRate()), hard = Math.max(0, Math.round(grown - creditLimit()));
     return { week: state.week, amount: inst + hard, inst, loanPay: Math.max(0, Math.round(loanDue(grown) - hard)), dueAt: clock() + dueIn() * 1000 };
   }
-  const loanFloat = () => Math.max(LOAN_FLOAT, clerkBudget());
+  // What 顺手还 leaves in the till: a clerk round's restock money (at least LOAN_FLOAT) plus the installment of the week after the
+  // bill being paid (w; before it falls due that is state.week + 1). Without the installment 普通 borrowed a fifth more (§4.5).
+  const loanFloat = (w = state.week + 1) => Math.max(LOAN_FLOAT, clerkBudget()) + installment(w);
   const loanDue = (L: number) => Math.min(L, Math.max(L * LOAN_PAY, LOAN_MIN * debtScale())); // this week's 顺手还 of a loan grown to L, hard part included
   // Weeks until the loan is gone if every 顺手还 is taken in full and nothing more is borrowed (账本 prints it).
   function loanWeeks() { let L = state.loan, w = 0; for (; L >= 1 && w < 99; w++) { const g = L * (1 + loanRate()); L = g - Math.max(loanDue(g), g - creditLimit()); } return w; }
   // 顺手还: after the week's bill is paid, up to `due` of the loan from cash above the float (no event: it is a repayment, not a bill).
   function payDown(due: number) {
-    const pay = cents(Math.min(due, state.loan, state.cash - loanFloat()));
+    const pay = cents(Math.min(due, state.loan, state.cash - loanFloat(state.week)));
     if (!(pay >= 1)) return;
     state.cash -= pay; state.loan -= pay; setDebt();
     log(`九姐顺手收回借款 $${Math.round(pay).toLocaleString('en-US')}`, 'loss', -pay);

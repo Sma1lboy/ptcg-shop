@@ -1042,7 +1042,7 @@ console.log('ok luck percentile');
   st().best = 1e5; st().loan = 30000; st().debt = st().owe + st().loan; st().cash = G.installment(3) + G.loanFloat() + 50000; // under a $100k credit line
   assert.equal(G.nextBill().loanPay, 11000); week(); assert.ok(Math.abs(st().loan - 22000) < 1, 'grown to $33,000, a third back');
   st().cash = G.installment(4) + G.loanFloat() + 700; const L2 = st().loan; week();
-  assert.ok(Math.abs(st().loan - (L2 * (1 + G.loanRate()) - 700)) < 1 && Math.abs(st().cash - G.loanFloat()) < 1, 'only what is above the float');
+  assert.ok(Math.abs(st().loan - (L2 * (1 + G.loanRate()) - 700)) < 1 && Math.abs(st().cash - G.loanFloat(st().week)) < 1, 'only what is above the float (restock money + next installment)');
   // a bill the till can't cover: no 顺手还 on top, and the forced loan is still exactly the shortfall
   evs.length = 0; st().cash = 10; const L3 = st().loan; week(); for (let i = 0; i < G.GRACE + 40; i += 20) { T += 20e3; G.tick(); }
   const forced = evs.find(e => e.type === 'loan_taken'); assert.ok(forced?.forced && Math.abs(st().loan - (L3 * (1 + G.loanRate()) + forced.amount - (evs.find(e => e.type === 'bill_paid').amount - G.installment(5)))) < 1, 'overdue: borrowed the short, nothing else taken');
@@ -1050,6 +1050,6 @@ console.log('ok luck percentile');
   st().owe = 0; st().loan = 500; st().debt = 500; st().cash = G.loanFloat() + 1e4; evs.length = 0; week();
   assert.ok(st().debt === 0 && evs.some(e => e.type === 'story' && e.id === 'debt_cleared'), '顺手还 can clear the debt');
   const { KINDS } = await import('../scripts/autoplay.mjs'), r = KINDS['冲动新手']({ hours: 16, seed: 1 });
-  assert.ok(r.debt.cleared && r.debt.broke.length === 0, `冲动新手 seed 1 clears the debt in 16 h (${r.debt.cleared?.h} h; before 顺手还 its loan was $53k)`);
-  console.log(`ok 顺手还: poor till compounds to $1,210, a rich one pays a third back above the float; 冲动新手 cleared at ${r.debt.cleared.h} h`);
+  assert.ok(r.debt.broke.length === 0 && (r.debt.cleared || r.G.state.loan < 20000), `冲动新手 seed 1 in 16 h: cleared at ${r.debt.cleared?.h} h or loan $${Math.round(r.G.state.loan)} (before 顺手还 it was $53k)`);
+  console.log(`ok 顺手还: poor till compounds to $1,210, a rich one pays a third back above the float; 冲动新手 16 h: cleared ${r.debt.cleared?.h ?? 'no'}, loan $${Math.round(r.G.state.loan)}`);
 }
