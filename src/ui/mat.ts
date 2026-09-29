@@ -116,7 +116,12 @@ export const refreshIdle = () => { if (mat.mode === 'idle') { if (table) shelf3D
 // The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
 let table: ReturnType<typeof mountTable> = null;
 const touch = () => matchMedia('(pointer: coarse)').matches;
-const HINT = { shelf: () => '', pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
+// The idle table only lays out sets that can be opened; the locked ones are this one line (the next unlock and how far off it is).
+const nextUnlock = () => {
+  const locked = SETS.filter(x => !G.unlocked(x.id)).sort((a, b) => G.unlockAt(a.id) - G.unlockAt(b.id));
+  return locked.length ? `下一个解锁：${locked[0].name} · 营收 ${money(G.revenue())} / $${G.unlockAt(locked[0].id).toLocaleString('en-US')}` : '';
+};
+const HINT = { shelf: nextUnlock, pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
   cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看',
   batch: () => touch() ? '点一下全部撕开，或按住从左往右划过这排包' : '点一下或按空格全部撕开，也可以按住从左往右划过这排包',
   batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张' };
@@ -170,16 +175,19 @@ function mat3D(el: HTMLElement) {
 // one and opens it). The stock / price / unlock reads for it all live in shelfItems().
 function shelfItems() {
   const s = G.state;
-  return SETS.map(x => {
-    const n = s.stock[x.id] || 0, w = G.wholesale(x.id), locked = !G.unlocked(x.id), poor = !n && s.cash < w;
-    return { set: x.id, n, off: locked || poor, name: x.name, note: locked ? `营收 ${money(G.unlockAt(x.id))} 解锁` : n ? `仓库 ${n} 包` : poor ? '现金不够进货' : '进 1 包就开', price: locked || n ? '' : money(w) };
+  const narrow = matchMedia('(max-width: 779px)').matches; // phones: four stacks a row, a label gets two lines (name + one short line) or it covers the pack behind it
+  return SETS.filter(x => G.unlocked(x.id)).map(x => {
+    const n = s.stock[x.id] || 0, w = G.wholesale(x.id), poor = !n && s.cash < w;
+    return { set: x.id, n, off: poor, name: x.name, note: n ? `仓库 ${n} 包` : poor ? (narrow ? '钱不够' : '现金不够进货') : narrow ? '' : '进 1 包就开', price: n || (poor && narrow) ? '' : money(w) };
   });
 }
 // Imperative like the rest of #scene3d (CLAUDE.md): the buttons are made once, then only their text / action / disabled change.
 function shelf3D() {
   let box = document.getElementById('s3-shelf');
-  if (!box) { box = document.createElement('div'); box.className = 's3-shelf'; box.id = 's3-shelf'; $('scene3d').append(box); head3D(); hint3D('shelf'); }
-  const items = shelfItems();
+  if (!box) { box = document.createElement('div'); box.className = 's3-shelf'; box.id = 's3-shelf'; $('scene3d').append(box); head3D(); }
+  const items = shelfItems(), ids = items.map(i => i.set).join();
+  if (box.dataset.ids !== ids) { box.dataset.ids = ids; box.replaceChildren(); } // a set unlocked: the buttons' hover indexes are per position
+  hint3D('shelf');
   items.forEach((it, k) => {
     let b = box.children[k] as HTMLButtonElement | undefined;
     if (!b) {
