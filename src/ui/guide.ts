@@ -64,7 +64,8 @@ function place() {
   // 「测欧气：到「欧气」页」: the full text over the bottom tabs covered what the player was reading (成长's 借款额度)
   if (phone() && (onMat || tab)) pop.dataset.strip = onMat ? 'mat' : 'tab'; else delete pop.dataset.strip;
   if (onMat && !phone()) pop.dataset.side = 'right';
-  const a = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, gap = 12, vw = innerWidth, vh = floor();
+  const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
+  let w = pop.offsetWidth, h = pop.offsetHeight;
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
   // a new step's button off screen, or a strip with no room under its button: scroll, once. Kept pending for a moment, because
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
@@ -87,6 +88,7 @@ function place() {
       pop.style.setProperty('--ay', `${clamp(a.top + a.height / 2 - y, 16, h - 16)}px`);
       return;
     }
+    pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
   }
   // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
