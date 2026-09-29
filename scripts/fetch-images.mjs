@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 
 const CDN = 'https://assets.tcgdex.net/en'; // + /<series>/<set>/…: the series is the set id's letter prefix (sv08 → sv, me01 → me), as in src/assets.ts
 const jobs = [];
-for (const f of (await readdir('data')).filter(f => f.endsWith('.json'))) {
+for (const f of (await readdir('data')).filter(f => f.startsWith('cards-'))) {
   const d = JSON.parse(await readFile('data/' + f, 'utf8')), set = d.id;
   jobs.push([`${set}/logo.png`]);
   for (const c of d.cards) for (const size of ['low', 'high']) jobs.push([`${set}/${c.n}/${size}.webp`]);

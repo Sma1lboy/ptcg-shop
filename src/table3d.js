@@ -130,6 +130,9 @@ const LOOK = {
   sv09: { chase: '184', c: ['#F4B8C8', '#4D9C7D', '#1F2B33'] },
   me01: { chase: '178', c: ['#EFEBE5', '#8F6A85', '#2C2A33'] },
   me02: { chase: '125', c: ['#4FA2BB', '#2E648A', '#0E0C19'] },
+  me03: { chase: '120', c: ['#F06BC8', '#2F9E6A', '#1A1328'] }, // me03–me05: colours from the chase card's art (Mega Zygarde / Greninja / Darkrai ex SIR)
+  me04: { chase: '116', c: ['#7FD3F0', '#1F6FB5', '#0E1A33'] },
+  me05: { chase: '116', c: ['#D9E07A', '#4A4F57', '#0B0B0E'] },
 };
 const K = 768 / PW; // pack-art pixels per cm
 const artCache = {};
