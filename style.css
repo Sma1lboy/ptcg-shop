@@ -49,6 +49,9 @@
   --back-ring: #E9ECF2;
   --foil-1: #C9D1DC; --foil-2: #F4F6F9; --foil-3: #9AA6B5;
   --foil-gold-1: #DBA256; --foil-gold-2: #FBEBC4; --foil-gold-3: #B8812F; /* 金标 / 黑标 achievement labels: gold foil stock, amber like --gold */
+  --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the lamp over the table, warm white by day */
+  --lamp-fill: #DCE4EF;   /* daylight fill from the room */
+  --lamp-rim: #CFDDF5;    /* back light that outlines the pack's edges */
   /* type (DESIGN.md「字」): the pixel face (Fusion Pixel 12px, OFL, subset to the glyphs the game prints) for everything the
      BW interface prints — menus, buttons, tabs, headings, text boxes, numbers; system sans only for long explanations and tables.
      Pixel sizes are whole multiples of 6 px so the 12 px grid lands on device pixels on 2x screens */
