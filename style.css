@@ -25,6 +25,9 @@
   --back-2: #0E214D;
   --back-ring: #E9ECF2;
   --foil-1: #C9D1DC; --foil-2: #F4F6F9; --foil-3: #9AA6B5;
+  --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the shop lamp over the playmat, warm white; same in both themes like the mat */
+  --lamp-fill: #DCE4EF;   /* sky fill from the room */
+  --lamp-rim: #CFDDF5;    /* back light that outlines the pack's edges */
   --font-display: "ZCOOL QingKe HuangYou", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -346,3 +349,26 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .basis th, .basis td { text-align: left; padding: 2px 16px 2px 0; }
 .basis-note { font-size: 12px; margin: 8px 0; }
 .dd-note { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+
+/* 3D opening mat (src/table3d.js): the canvas is the playmat; head, caption and price tags float over it */
+.mat.m3d { padding: 0; gap: 0; overflow: hidden; min-height: 0; }
+.mat.m3d .mat-head { position: absolute; z-index: 3; inset: 0 0 auto; padding: 14px 18px 36px; pointer-events: none;
+  background: linear-gradient(color-mix(in oklab, var(--mat) 88%, transparent), transparent); }
+.mat.m3d .mat-head button { pointer-events: auto; }
+.scene3d { position: relative; height: clamp(440px, 70vh, 700px); }
+.scene3d canvas { display: block; width: 100%; height: 100%; touch-action: pan-y; cursor: grab; -webkit-tap-highlight-color: transparent; user-select: none; }
+.scene3d::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 45%, transparent 55%, rgba(4, 8, 14, .5)); }
+.s3-hint, .s3-cap { position: absolute; z-index: 2; left: 16px; right: 16px; margin: 0; text-align: center; pointer-events: none; }
+.s3-hint { bottom: 10px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); font-size: 12px; color: var(--mat-muted);
+  background: color-mix(in oklab, var(--mat) 70%, transparent); padding: 2px 10px; border-radius: 4px; }
+.s3-cap { bottom: 36px; left: 50%; right: auto; transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; font-size: 13px; color: var(--mat-muted);
+  background: color-mix(in oklab, var(--mat) 78%, transparent); padding: 5px 12px 6px; border-radius: 6px; }
+.s3-cap:empty { display: none; }
+.s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
+.s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 14px var(--font-num); color: var(--mat-ink); }
+.s3-cap.t3 .glyph { color: var(--fx-silver); } .s3-cap:is(.t4, .t5) .glyph, .s3-cap:is(.t4, .t5) b:not(.s3-name) { color: var(--mat-gold); }
+.s3-tags { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.s3-tag { position: absolute; left: 0; top: 0; font: 600 12px var(--font-num); color: var(--mat-ink); background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
+.s3-tag:is(.t2, .t3, .t4, .t5) { background: var(--sticker); color: var(--sticker-ink); transform-origin: 50% 0; }
+.mat.m3d .summary { padding: 14px 18px 16px; }
+@media (max-width: 779px) { .scene3d { height: min(72vh, 560px); } .mat.m3d .mat-head { padding: 10px 14px 30px; } .mat { scroll-margin-top: 92px; } }
