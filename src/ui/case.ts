@@ -9,6 +9,14 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import type { Shown } from '../game.ts';
 import { G, $, money, rarLabel, lately } from './common.ts';
 import { face, mark } from './card.ts';
+import { renderSingles } from './singles.ts';
+import { hold } from './mat.ts';
+
+// A 缺货表 cell pointed at (goals.ts gaps): 'set:tier' ('' for any set). The case cubes and binder pockets holding a card that
+// seeker would take are lit, so 「现在 3 张」 points at the three cards. Not mid-reveal: the binder then holds unflipped cards.
+let spotK: string | null = null;
+export const spotted = (c: { set: string; kind: string }) => { if (!spotK) return false; const [id, t] = spotK.split(':'); return G.SEEK[+t].includes(c.kind) && (!id || c.set === id); };
+export function spot(k: string | null) { if (spotK === k) return; spotK = k; if (!hold) { renderCase(); renderSingles(); } }
 
 const stand = html`<i class="v-stand" aria-hidden="true"></i>`;
 
@@ -56,7 +64,7 @@ function balked() {
 
 function slot(c: Shown, i: number, k: number, miss?: { dear: number; broke: number; max: number }) {
   const pct = G.cardPct(c), off = Math.abs(pct - G.casePct()) > 1e-9;
-  return html`<li class="v-slot">
+  return html`<li class="v-slot ${spotted(c) ? 'spot' : ''}" data-spot="card:${c.name}">
       <div class="v-cube">${face(c, 'show', true)}${stand}${stamp(k)}</div>
       <p class="v-lip"><button type="button" data-act="cprice" data-i="${i}" data-d="-1" aria-label="${c.name} 降价" ?disabled=${pct <= G.MIN_PCT + 1e-9}>−</button>
         <span class="sticker" title="柜台标价：市价的 ${Math.round(pct * 100)}%">${money(G.cardAsk(c))}</span>

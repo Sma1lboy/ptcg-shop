@@ -1,7 +1,7 @@
 // 店内动态: every walk-in (G.state.recent) and the shop's own events (G.state.log) as one till roll, newest first.
 // A customer line says who came, what for, and how it ended (with the price they balked at and the most they would pay);
 // shop lines are what you and the clerk did. Money sits in its own column. New lines are keyed, so only they animate in.
-import { html, render } from 'lit-html';
+import { html, render, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { Visit, State } from '../game.ts';
 import { G, $, money } from './common.ts';
@@ -56,6 +56,30 @@ function merged(vs: Visit[]) {
 }
 const spread = (xs: number[]) => { xs = [...xs].sort((a, b) => a - b); return xs[0] === xs.at(-1) ? money(xs[0]) : `${money(xs[0])}–${money(xs.at(-1)!)}`; };
 
+// 点一行跳到墙上: a customer line leads to where that customer stood. A pack buyer or a flipper's sweep → their set's shelf (or
+// its row in the set table when it is on no shelf) on 货架; a case card sold or balked at → the cube or binder pocket holding
+// that card; a seeker who found nothing → their cell in the 缺货表 (goals.ts gaps; a merged line, any set, → that tier's column);
+// a collector who found nothing → the case. The view switches first (a hidden panel can't be scrolled to), then the first
+// visible match scrolls into view and every match flashes once (data-flash: an attribute lit doesn't bind, so the once-a-second
+// re-render leaves it). Shop lines (进货, 开包, 账单) have no place on the wall.
+function spotOf(vs: Visit[]): [string, string] | null {
+  const v = vs[0], n = vs.length;
+  if (v.card) return ['case', `[data-spot="card:${CSS.escape(v.card)}"]`];
+  if (v.t === 'seeker') return ['case', n > 1 || !v.set ? `.gaps td[data-spot$=":${v.tier}"]:not(.nil)` : `[data-spot="seek:${v.set}:${v.tier}"]`];
+  if (v.t === 'collector') return ['case', '.vitrine'];
+  return v.set ? ['shelf', `[data-spot="set:${v.set}"]`] : null;
+}
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+export function go([view, sel]: [string, string]) {
+  const land = () => requestAnimationFrame(() => {
+    const els = [...document.querySelectorAll<HTMLElement>(sel)].filter(e => e.offsetParent);
+    if (!els.length) return;
+    els[0].scrollIntoView({ block: 'center', behavior: calm.matches ? 'auto' : 'smooth' });
+    for (const e of els) { e.removeAttribute('data-flash'); void e.offsetWidth; e.setAttribute('data-flash', ''); setTimeout(() => e.removeAttribute('data-flash'), 1800); }
+  });
+  if (location.hash === `#${view}`) land(); else { addEventListener('hashchange', land, { once: true }); location.hash = view; }
+}
+
 export function renderLog() {
   const s = G.state, groups = new Map<string, Visit[]>();
   const rows: { at: number; key: string; vs?: Visit[]; l?: State['log'][number] }[] = s.log.map(l => ({ at: l.t, key: `l${l.t}${l.text}`, l }));
@@ -70,7 +94,9 @@ export function renderLog() {
   render(repeat(rows, r => r.key, (r, i) => {
     const t = hhmm(r.at), time = html`<time>${i && hhmm(rows[i - 1].at) === t ? '' : t}</time>`;
     if (r.vs) { const vs = r.vs, v = vs[0], n = vs.length, gain = vs.reduce((a, x) => a + (x.gain || 0), 0);
-      return html`<li class="r-${v.r}">${time}<b>${G.TYPES[v.t].name}${n > 1 ? html` <small>×${n}</small>` : ''}</b><span>${n > 1 ? merged(vs) : said(v)}</span>${amt(gain)}</li>`; }
+      const to = spotOf(vs);
+      return html`<li class="r-${v.r} ${to ? 'go' : ''}" tabindex=${to ? 0 : nothing} title=${to ? '点一下，看墙上那一格' : nothing}
+          @click=${to ? () => go(to) : null} @keydown=${to ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(to); } } : null}>${time}<b>${G.TYPES[v.t].name}${n > 1 ? html` <small>×${n}</small>` : ''}</b><span>${n > 1 ? merged(vs) : said(v)}</span>${amt(gain)}</li>`; }
     const l = r.l!; return html`<li class="shop ${l.tone}">${time}<span>${l.text}</span>${amt(l.amt)}</li>`;
   }), $('log'));
 }

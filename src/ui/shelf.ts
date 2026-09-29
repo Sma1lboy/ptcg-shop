@@ -60,7 +60,7 @@ const beat = (i: number) => { const b = beats[i]; return b && Date.now() - b.at 
 // A set customers keep asking for that is on no shelf, while every shelf is taken: the shelf whose set sold to the fewest buyers
 // in the same window says so and offers the swap (G.place, what its <select> does). Only when more came for the missing set
 // than bought from that shelf, so a busy wall doesn't nag.
-function swapHint(): { i: number; id: string; miss: number; buyers: number } | null {
+export function swapHint(): { i: number; id: string; miss: number; buyers: number } | null {
   const racks = G.shelves(); if (racks.some(r => !r.id)) return null;
   const want = SETS.filter(x => G.unlocked(x.id) && !racks.some(r => r.id === x.id)).map(x => ({ id: x.id, miss: G.missed(x.id) })).sort((a, b) => b.miss - a.miss)[0];
   if (!want?.miss) return null;
@@ -84,7 +84,7 @@ function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnTyp
   // the current set, leaving the option the player clicked (now some other set) shown as chosen.
   const bt = beat(i), lift = (j: number) => (bt?.faces.includes(j) ? keyed(bt.k, html`<i class="pk lift"></i>`) : nothing);
   const sw = swap?.i === i ? swap : null, canSwap = !!sw && (!!s.stock[sw.id] || clerk) && !full;
-  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'} ${lit && (id === lit || sw?.id === lit) ? 'lit' : ''}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
+  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'} ${lit && (id === lit || sw?.id === lit) ? 'lit' : ''}" data-spot="set:${id ?? ''}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
       <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>
       <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
         html`<i class="${row(r.qty - ((boards - 1 - b) * FACES + f) * per, per)}">${lift((boards - 1 - b) * FACES + f)}</i>`)}</div>`)}${id && !r.qty ? keyed(bt?.lost ? bt.k : 0, html`<span class="r-out ${bt?.lost ? 'shake' : ''}">卖空了</span>`) : nothing}
@@ -177,7 +177,7 @@ function draw() {
       : html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${can(10) ? 10 : 1}" ?disabled=${!can(1)}>进 ${can(10) ? 10 : 1}</button>`)
       : next === 'shelve' ? html`<button type="button" class="primary" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}">${shelveLabel(set.id, own > 0 || !free)}</button>`
       : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
-    return html`<article class="set ${unfolded(set.id) ? 'open' : ''}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
+    return html`<article class="set ${unfolded(set.id) ? 'open' : ''}" data-spot="set:${set.id}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
         <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 市价 × 你现在开包的概率（实测概率，有手气时乘上加成）算出的单包期望">开出期望 ${money(ev)}</span></p>
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>

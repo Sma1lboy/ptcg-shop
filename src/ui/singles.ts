@@ -6,10 +6,12 @@
 // pocket, emptied, until then, so the page doesn't close up under the player's pointer. Listing, 镇店 and selling to peers are silent.
 import { html, render, nothing } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
+import { repeat } from 'lit-html/directives/repeat.js';
 import type { Single } from '../game.ts';
 import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
 import { face, cap } from './card.ts';
+import { spotted } from './case.ts';
 
 const LIVE = 2400;
 let had: Record<string, { c: Single; n: number }> | null = null, lastAt = 0, soldN = 0;
@@ -38,9 +40,9 @@ export function renderSingles() {
   render(html`<h2>卡本 · 闪卡 ${n}/${G.BINDER} <small class="muted">找卡的直接翻，按单卡标价 ${Math.round(G.casePct() * 100)}%；卖同行 ${Math.round(G.BUYLIST * 100)}%</small></h2>
       <div class="bulk"><span>散卡 ${bulk.n} 张 · 可卖 ${money(bulk.v)}</span>
         <button type="button" data-act="bulk" ?disabled=${!bulk.n}>一键卖散卡</button></div>
-      ${pockets.length ? html`<div class="bk-book sb-book"><ol class="bk-page sb-page">${pockets.map(([k, c]) => {
+      ${pockets.length ? html`<div class="bk-book sb-book"><ol class="bk-page sb-page">${repeat(pockets, ([k]) => k, ([k, c]) => { // keyed: a pocket stays its card's while others sell around it (a lit or flashed pocket too)
         const gone = !s.singles[k];
-        return html`<li class="pk sb-pk ${gone ? 'gone' : ''}">
+        return html`<li class="pk sb-pk ${gone ? 'gone' : ''} ${!gone && spotted(c) ? 'spot' : ''}" data-spot="card:${c.name}">
           <div class="sb-card">${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${chip(k)}</div>
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
           <span class="sb-btns">${gone ? nothing : html`<button type="button" data-act="list" data-key="${k}" ?disabled=${full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
