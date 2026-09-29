@@ -242,7 +242,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (!unlocked(id)) return 0;
     n = Math.min(n, shelf ? depth() - shelf.qty : WAREHOUSE - (state.stock[id] || 0));
     const cost = wholesale(id) * n;
-    if (n <= 0 || state.cash < cost) return 0;
+    if (n <= 0 || state.cash < cost - 1e-6) return 0;
     state.cash -= cost;
     if (shelf) shelf.qty += n; else state.stock[id] = (state.stock[id] || 0) + n;
     return cost;
