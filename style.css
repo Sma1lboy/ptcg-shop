@@ -465,7 +465,7 @@ button:disabled { cursor: not-allowed; }
 .c-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; } .c-row b { font-weight: 600; } .c-row .muted { font-size: var(--fs-cap); }
 .c-n { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
 .c-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); } .c-note b { color: var(--ink); font-weight: 600; }
-.c-note button { margin-left: 8px; vertical-align: baseline; }
+.c-note button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
 /* the price rail on the shelf edge, MIN_PCT…MAX_PCT of market in price steps: each customer is a dot stacked on the step of the most
    they would pay (ink = would buy at the tag as it is now), the flippers' zone is the darker low end of the rail, and your price tag
    is clipped on under it. --h (set inline) is the height of the tallest stack */
