@@ -596,7 +596,7 @@ console.log('ok luck percentile');
 {
   for (const [id, scenes] of Object.entries(ST.SCENES)) for (const sc of scenes) {
     assert.ok(sc.lines.length, `story ${id}: empty scene`);
-    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', week: 2, card: 'X', price: '$1', set: 'Y', bills: 25, fame: 6, debt: '$60,000', shop: 2 }]) {
+    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', short: '$3.00', rate: '10%', week: 2, card: 'X', price: '$1', set: 'Y', bills: 25, fame: 6, debt: '$60,000', shop: 2 }]) {
       const t = typeof l.t === 'string' ? l.t : l.t(c); assert.ok(t && !t.includes('undefined'), `story ${id}: "${t}"`);
     }
   }
@@ -606,25 +606,28 @@ console.log('ok luck percentile');
   const fake = Object.assign(Object.create(g), { nextBill: () => ({ week: 3, amount: 120, dueAt: 9 }) });
   const due = D.debtBeat({ type: 'bill_due' }, fake);
   assert.deepEqual([due.kind, due.key, due.week, due.amount], ['due', 'due:0.0:3', 3, 120]);
-  assert.equal(ST.sceneFor(due, {}), 'due'); assert.equal(ST.sceneFor(due, { [due.key]: 1 }), null);
+  assert.equal(ST.sceneFor(due, {}), null, 'a bill falling due is no scene: covered → a slip, short → missed');
   const paid = w => D.debtBeat({ type: 'bill_paid', week: w }, fake);
-  assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(['paid', 'paid2'].includes(ST.sceneFor(paid(2), { paid1: 1 })));
+  assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(!ST.slipFor(paid(1), {}), 'the first paid bill is 九姐 in person');
+  assert.equal(ST.sceneFor(paid(2), { paid1: 1 }), null); assert.ok(ST.slipFor(paid(2), { paid1: 1 }), 'every later one a receipt');
+  assert.ok(!ST.slipFor(paid(2), { paid1: 1, [paid(2).key]: 1 }) && !ST.slipFor(due, { paid1: 1 }));
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'bankrupt' }, fake), { bankrupt: 1 }), 'bankrupt'); // a bankruptcy always plays
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'nope' }, fake), {}), null);
   assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'loan' }, fake), {}), 'loan');
-  for (const k of ['due', 'paid1', 'paid', 'paid2', 'last', 'missed', 'loan', 'bankrupt', 'debt_cleared', 'branch']) assert.ok(ST.SCENES[k], `no scene ${k}`);
+  for (const k of ['paid1', 'last', 'missed', 'loan', 'bankrupt', 'debt_cleared', 'branch']) assert.ok(ST.SCENES[k], `no scene ${k}`);
   // The end of a run, played as the ui plays it (a beat's key marks it seen): the bill before the last says so; the bill that
   // clears the debt emits due → paid → 还清 in one tick, and only 还清 speaks; the next shop starts at week 1 again and still
   // gets its weekly beats and, later, its own 还清.
   let T = 1_700_000_000_000; const E = createGame({ now: () => T, random: S.rng(3), storage: { getItem: () => null, setItem() {} } }), seen = {}, played = [];
-  E.on(ev => { const b = D.debtBeat(ev, E), id = ST.sceneFor(b, seen); if (id) { played.push(id); if (b.key) seen[b.key] = 1; } });
+  E.on(ev => { const b = D.debtBeat(ev, E), id = ST.sceneFor(b, seen); if (id) { played.push(id); seen[id] = 1; if (b.key) seen[b.key] = 1; } else if (ST.slipFor(b, seen)) played.push('slip'); });
   const week = () => { for (let i = 0; i < E.WEEK; i += 20) { T += 20e3; E.tick(); } };
   const owe = n => { E.state.owe = E.state.debt = [0, 1].reduce((a, i) => a + Math.round(E.BILL0 * (1 + E.DEBT_STEP * E.state.branch.n) * E.BILL_G ** (E.state.week - 1 + i)), 0) - n; };
   E.state.cash = 1e6; E.state.earned.sealed = 1; owe(0);
   week(); assert.deepEqual(played, ['last'], 'the bill before the last one (the till covered it: no 「这周的账」 before it)');
   week(); assert.deepEqual(played, ['last', 'debt_cleared'], 'the clearing bill: no 「下周见」 before 还清');
   assert.ok(E.branch()); assert.equal(played.at(-1), 'branch'); E.state.cash = 1e6;
-  played.length = 0; week(); assert.ok(['paid1', 'paid', 'paid2'].includes(played[0]), "shop 2's week 1 is not shop 1's week 1");
+  played.length = 0; week(); assert.deepEqual(played, ['paid1'], "shop 2's week 1 is not shop 1's week 1 (and 九姐 still comes in for the first bill ever)");
+  E.state.cash = 1e6; week(); assert.deepEqual(played, ['paid1', 'slip'], 'then a covered week is a receipt, no scene');
   E.state.cash = 1e6; owe(0); week(); week(); assert.deepEqual(played.slice(-2), ['last', 'debt_cleared'], 'shop 2 gets its own 还清');
   console.log('ok story beats, and the end of a run: last → 还清 → 开张, per shop');
 }
@@ -678,15 +681,28 @@ console.log('ok luck percentile');
   console.log(`ok 亲手开出: every card pullable, odds match the simulator, 名气 +${J.HAND_FAME} once per set at the next 开分店, kept through bankruptcy`);
 }
 
-// A week the till covers plays one beat (收到), not two: 「这周的账」 only when it could not be paid.
+// 每二十分钟的那一下: a week the till covers is one receipt and no scene; a short week is ONE scene (missed, not due + missed);
+// when the grace runs out the forced loan speaks and the bill that it settled is a receipt again.
 {
-  let T = 1_700_000_000_000; const W = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), kinds = [];
-  W.on(ev => { const b = D.debtBeat(ev, W); if (b) kinds.push(b.kind); });
+  let T = 1_700_000_000_000; const W = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), kinds = [], shown = [], seen = { paid1: 1 };
+  W.on(ev => { const b = D.debtBeat(ev, W); if (!b) return; kinds.push(b.kind); const id = ST.sceneFor(b, seen); if (id) { shown.push(id); if (b.key) seen[b.key] = 1; } else if (ST.slipFor(b, seen)) shown.push('slip'); if (b.kind === 'loan' && b.forced) shown.push('forced'); });
   const week = () => { for (let i = 0; i < W.WEEK; i += 20) { T += 20e3; W.tick(); } };
   W.state.cash = 1e5; week(); assert.ok(kinds.includes('paid') && !kinds.includes('due'), `covered week: ${kinds}`);
-  kinds.length = 0; W.state.cash = 0; W.state.shelves.length = 0; W.state.stock = { sv08: 5 }; week(); // stock in the back room: no 进货钱 bailout
+  assert.deepEqual(shown, ['slip'], `covered week: a receipt, no scene (${shown})`);
+  kinds.length = shown.length = 0; W.state.cash = 0; W.state.shelves.length = 0; W.state.stock = { sv08: 5 }; week(); // stock in the back room: no 进货钱 bailout
   assert.deepEqual(kinds.filter(k => k === 'due' || k === 'missed'), ['due', 'missed'], `a short week still says so: ${kinds}`);
-  console.log('ok a covered bill is one beat, a missed one still two');
+  for (let i = 0; i <= W.GRACE; i += 20) { T += 20e3; W.tick(); } // the grace runs out with the till still empty
+  assert.deepEqual(shown.slice(0, 3), ['missed', 'loan', 'forced'], `short week: one scene, then the grace runs out into a forced loan (${shown})`);
+  assert.equal(shown[3], 'slip', `...and the bill it settled prints a receipt (${shown})`);
+  // a fresh save whose first bill is short: after the hammer, 九姐 never says 「准时」 — a late receipt, and paid1 waits for an on-time week
+  T += 1e9; const F = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), fs = {}, fShown = []; let missedW = 0;
+  F.on(ev => { const b = D.debtBeat(ev, F); if (!b) return; if (b.kind === 'missed') missedW = b.week; const late = b.kind === 'paid' && b.week === missedW, id = ST.sceneFor(b, fs, late);
+    if (id) { fShown.push(id); fs[id] = 1; if (b.key) fs[b.key] = 1; } else if (ST.slipFor(b, fs, late)) fShown.push('slip'); });
+  const fTicks = s => { for (let i = 0; i < s; i += 20) { T += 20e3; F.tick(); } };
+  F.state.cash = 0; F.state.shelves.length = 0; F.state.stock = { sv08: 5 }; fTicks(F.WEEK + F.GRACE + 20);
+  assert.ok(fShown.includes('missed') && fShown.includes('slip') && !fShown.includes('paid1'), `a late first bill: ${fShown}`);
+  F.state.cash = 1e5; fShown.length = 0; fTicks(F.WEEK); assert.deepEqual(fShown, ['paid1'], 'the first on-time bill still gets 九姐 in person');
+  console.log('ok 每二十分钟: a covered bill is a receipt, a short one one scene, the lapse a forced loan + receipt');
 }
 
 // 成长: G.peek shows what one more level does and leaves the save exactly as it was (货架 must not pad a shelf in).
@@ -765,16 +781,42 @@ console.log('ok luck percentile');
   assert.ok(ms < 500, `hitTail on ${Object.values(big).reduce((a, b) => a + b, 0)} packs took ${ms.toFixed(0)} ms`);
   console.log(`ok hitTail: matches the per-pack DP (worst ${worst.toExponential(1)}); 9 rows over 90k packs in ${ms.toFixed(0)} ms`);
 }
-// luckPercentile draws a set with ≥ 1,000 packs 100 at a time from a pool of block sums: it must agree with the pack-by-pack
-// resampling it replaced (same 60k simulated packs per set, rebuilt here with the seed sim.ts uses), and take milliseconds.
+// luckPercentile at any pack count. (Replaces a test that checked block draws against resampling a 60k-pack pool: the pool itself was
+// the bug. Its mean was off by ~1/245 SD per pack, n packs multiplied that by n while the spread only grew as √n, and a 77k-pack save
+// read 66% where the true answer is 83%.) One pack's exact mean and variance are computed here from the card lists, independently of
+// sim.ts's sampler; the mean must equal packEV.
 {
-  const counts = { sv08: 2000 }, r0 = S.rng(0xC0FFEE ^ 'sv08'.length), pool = Float64Array.from({ length: 60000 }, () => S.packValue(S.openPack('sv08', r0)));
-  const r = S.rng(11), vs = Array.from({ length: 2000 }, () => { let v = 0; for (let i = 0; i < 2000; i++) v += pool[Math.floor(r() * pool.length)]; return v; }).sort((x, y) => x - y);
-  for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile(counts, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.03, `block-sampled percentile at pack-by-pack q=${q} came out ${got}`); }
-  const big = { sv08: 30000, 'sv08@1.05': 30000, sv10: 30000 }, ev = Object.entries(big).reduce((s, [k, n]) => s + n * S.packEV(k), 0);
-  S.luckPercentile(big, ev); const t0 = performance.now(); S.luckPercentile(big, ev); const ms = performance.now() - t0;
-  assert.ok(ms < 100, `luckPercentile on 90k packs took ${ms.toFixed(0)} ms`);
-  console.log(`ok luckPercentile: block draws agree with pack-by-pack resampling; 90k packs in ${ms.toFixed(0)} ms`);
+  const Phi = z => { const t = 1 / (1 + 0.2316419 * Math.abs(z)), d = 0.3989423 * Math.exp(-z * z / 2), p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return z > 0 ? 1 - p : p; };
+  const moments = key => {
+    const { id, m } = S.parseKey(key), set = PTCG_SETS.find(s => s.id === id), P = S.poolsFor(id), t = S.slotTables(set, m);
+    const list = k => { const ps = P[k].map(c => S.cardPrice(id, c.n, k)); return [ps.reduce((a, b) => a + b, 0) / ps.length, ps.reduce((a, b) => a + b * b, 0) / ps.length]; };
+    let mean = 0, v = 0;
+    const slot = pairs => { let m1 = 0, m2 = 0; for (const [p, k] of pairs) { const [a, b] = list(k); m1 += p * a; m2 += p * b; } mean += m1; v += m2 - m1 * m1; };
+    for (let i = 0; i < 4; i++) slot([[1, 'C']]); for (let i = 0; i < 3; i++) slot([[1, 'U']]);
+    for (const [tb, base] of [[t.rev1, 'REV'], [t.rev2, 'REV'], [t.rare, 'R']]) slot([...Object.entries(tb).map(([k, p]) => [p / 100, k]), [1 - Object.values(tb).reduce((a, b) => a + b, 0) / 100, base]]);
+    const fe = (set.rates.FE || 0) / 100, e = S.cardPrice(id, 'E', 'E'), f = S.cardPrice(id, 'E', 'FE');
+    mean += e + fe * (f - e); v += fe * (1 - fe) * (f - e) ** 2;
+    return { mean, v };
+  };
+  for (const set of PTCG_SETS) for (const key of [set.id, S.rateKey(set.id, 1.25)]) assert.ok(Math.abs(moments(key).mean - S.packEV(key)) < 1e-9, `packEV ${key} (the cosmos-foil Energy counts)`);
+  // The player's side counts the same cards (151 stocked directly, it unlocks later in the game): every pulled card (Energy and cosmos foil included) repriced from state.dex.
+  {
+    const mem = {}, Gv = createGame({ now: () => 1_700_000_000_000, random: S.rng(3), storage: { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } } });
+    Gv.state.stock['sv03.5'] = 60; const got = Gv.open('sv03.5', 60).flat();
+    assert.ok(got.some(c => c.kind === 'FE') && Math.abs(Gv.luck().value - S.packValue(got)) < 1e-6, 'luck value is every pulled card at the price openPack gave it');
+  }
+  // Large: 88k packs over three keys is a sum of 88k independent packs, so it is normal to within its skew (≈ 0.1 SD here).
+  const big = { sv08: 30000, 'sv08@1.05': 30000, 'sv08.5': 28000 };
+  let M = 0, V = 0; for (const k in big) { const x = moments(k); M += big[k] * x.mean; V += big[k] * x.v; }
+  for (const z of [-1.5, -1, 0, 1, 1.5]) { const got = S.luckPercentile(big, M + z * Math.sqrt(V)); assert.ok(Math.abs(got - Phi(z)) < 0.025, `88k packs at ${z} SD: ${got} vs normal ${Phi(z).toFixed(3)}`); }
+  // Medium: 1,000 packs (old bias ≈ 0.13 SD, invisible at 30 packs) against 800 players opening real packs with openPack.
+  const r = S.rng(4242), vs = Array.from({ length: 800 }, () => { let v = 0; for (let i = 0; i < 1000; i++) v += S.packValue(S.openPack('sv08.5', r)); return v; }).sort((x, y) => x - y);
+  for (const q of [0.1, 0.5, 0.9]) { const got = S.luckPercentile({ 'sv08.5': 1000 }, vs[Math.floor(q * vs.length)]); assert.ok(Math.abs(got - q) < 0.05, `1000 packs at true q=${q} came out ${got}`); }
+  // Cost doesn't grow with packs: 90k packs, and the slow middle (20 keys of ~1,500 packs: counts land in inversion and card-by-card picks).
+  const t0 = performance.now(); S.luckPercentile(big, M); const ms = performance.now() - t0;
+  const mid = Object.fromEntries(PTCG_SETS.flatMap(s => [[s.id, 1500], [S.rateKey(s.id, 1.25), 1500]])), t1 = performance.now(); S.luckPercentile(mid, 1e5); const ms2 = performance.now() - t1;
+  assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
+  console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
 
 // 街口 (GAMEPLAY.md §6.2): shop n stands on STREETS[n % 4]. The first shop (老街) is the old numbers exactly; later streets tilt
@@ -791,4 +833,26 @@ console.log('ok luck percentile');
   play({ hours: 34, openShare: 0, pct: 0.95, reserve: 1, repay: true, branch: 'paid', log: 3600, hook: G => { let n = 0; return t => { if (G.state.branch.n !== n) { shops.push({ h: (t - t0) / 3600, fame: G.state.branch.got - got }); t0 = t; got = G.state.branch.got; n = G.state.branch.n; } }; } });
   assert.ok(shops.length >= 4 && shops.every(s => s.h >= 6 && s.h <= 11 && s.fame >= 5), `shops: ${JSON.stringify(shops)}`);
   console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
+}
+
+// 店员没本钱 (GAMEPLAY.md §12.2): the clerk buys with the cash in the till at his round. A round that cannot fill the shelves is
+// recorded (clerkRound, clerkShort) and logged; 现在补货 (clerkNow) is his buying now and does not move his next round. The
+// 普通 player on seed 1 falls into it on the third shop (夜市, 2 级店员 bought with the last $10.4k before a round): shelves stay
+// empty for hours and the loan snowballs. The same player heeding the two notes (no upgrade that leaves less than a round needs;
+// 现在补货 when a round came up short) clears that shop and the next.
+{
+  let T = 1_700_000_000_000; const Z = createGame({ now: () => T, random: S.rng(5), storage: null });
+  Z.state.up.clerk = 2; Z.state.cash = 50; Z.place(0, 'sv10'); Z.state.clerkT = T;
+  T += 1000; Z.tick();
+  const short = Z.clerkShort(), need = Z.clerkNeed();
+  assert.ok(short > 0 && Math.abs(short - need) < 0.01 && Z.state.clerkRound.spent > 0 && Z.state.clerkRound.spent <= 50, `a round with $50 is short: ${short}`);
+  assert.match(Z.state.log.find(l => l.text.startsWith('店员进货')).text, /钱不够/);
+  assert.ok(Z.clerkBudget() >= need, 'the 成长 page warns against what a round takes');
+  const next = Z.state.clerkT; Z.state.cash = need + 1; assert.ok(Z.clerkNow() > 0);
+  assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
+  const { play } = await import('../scripts/autoplay.mjs'), run = heed => play({ hours: 30, seed: 1, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
+  const [blind, heeds] = [run(false), run(true)];
+  assert.ok(blind.G.state.branch.n === 2 && blind.G.state.loan > 20000, `without the notes the 3rd shop is stuck: loan ${blind.G.state.loan | 0}`);
+  assert.ok(heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed / 2, `heeding them clears it: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0}`);
+  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seed 1, 30 h: 3rd shop stuck on a $${Math.round(blind.G.state.loan / 1000)}k loan → heeding the notes reaches shop ${heeds.G.state.branch.n + 1}, borrowed $${Math.round(blind.debt.borrowed / 1000)}k → $${Math.round(heeds.debt.borrowed / 1000)}k`);
 }

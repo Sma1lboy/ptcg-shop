@@ -89,49 +89,79 @@ export function packEV(key: string) {
   const { id: setId, m } = parseKey(key), set = setOf(setId), t = slotTables(set, m), P = poolsFor(setId);
   const avg = (kind: string) => P[kind].reduce((s, c) => s + priceOf(c, kind), 0) / P[kind].length;
   const slot = (table: Record<string, number>, base: string) => { let rest = 100, v = 0; for (const k in table) { v += table[k] / 100 * avg(k); rest -= table[k]; } return v + rest / 100 * avg(base); };
-  return 4 * avg('C') + 3 * avg('U') + slot(t.rev1, 'REV') + slot(t.rev2, 'REV') + slot(t.rare, 'R') + 0.01;
+  return 4 * avg('C') + 3 * avg('U') + slot(t.rev1, 'REV') + slot(t.rev2, 'REV') + slot(t.rare, 'R') + energyEV(set);
 }
+// The basic Energy: $0.01, or the $0.50 cosmos foil at set.rates.FE (openPack reads set.rates, so 手气 doesn't touch it).
+const energyEV = (set: SetConf) => { const fe = (set.rates.FE || 0) / 100; return fe * cardPrice(set.id, 'E', 'FE')! + (1 - fe) * cardPrice(set.id, 'E', 'E')!; };
 
-// Luck: where a player's total pulled value sits among simulated players who opened the same packs.
-// 60k packs per set (~250ms once per set): a 0.07%-per-pack SIR chase card gets ~40 samples, 20k gave ~14.
-// Keyed by rateKey: packs opened with 手气 are compared with packs opened at the same boosted odds.
-const SAMPLES = 60000, samples: Record<string, Float64Array> = {};
-function valueSamples(key: string) {
-  if (samples[key]) return samples[key];
-  const { id, m } = parseKey(key), r = rng(0xC0FFEE ^ id.length), a = new Float64Array(SAMPLES);
-  for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(id, r, m));
-  return (samples[key] = a);
-}
-// Where one pack's value ranks among simulated packs of the same set: share of packs worth less (ties count half).
-const sorted: Record<string, Float64Array> = {};
+// Where one pack's value ranks among 60k simulated packs of its set (share worth less, ties count half). One pack, so a pool is
+// fine here: its sampling error doesn't grow with anything. ~250 ms once per set, built when a pack of that set is first ranked.
+const SAMPLES = 60000, sorted: Record<string, Float64Array> = {};
 export function packPercentile(key: string, value: number) {
-  const a = sorted[key] ||= Float64Array.from(valueSamples(key)).sort();
+  const a = sorted[key] ||= (() => { const { id, m } = parseKey(key), r = rng(0xC0FFEE ^ id.length), x = new Float64Array(SAMPLES); for (let i = 0; i < x.length; i++) x[i] = packValue(openPack(id, r, m)); return x.sort(); })();
   let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < value - 1e-9) lo = m + 1; else hi = m; }
   let up = lo; while (up < a.length && a[up] <= value + 1e-9) up++;
   return (lo + (up - lo) / 2) / a.length;
 }
-// Sums of BLOCK packs drawn from valueSamples, BLOCKS per key (~10 ms once): a set with thousands of packs is drawn a block at
-// a time, so a 20-hour save (90k packs) costs ~1M draws a check instead of 90M (0.5 s after every pack opened). 8k blocks put the
-// median 2pp off the pack-by-pack answer (the pool's spread is itself a sample); 32k is within its ~0.6pp noise.
-const BLOCK = 100, BLOCKS = 32000, blocks: Record<string, Float64Array> = {};
-function blockSamples(key: string) {
-  if (blocks[key]) return blocks[key];
-  const a = valueSamples(key), r = rng(0xB10C ^ key.length), b = new Float64Array(BLOCKS);
-  for (let i = 0; i < b.length; i++) for (let k = 0; k < BLOCK; k++) b[i] += a[Math.floor(r() * a.length)];
-  return (blocks[key] = b);
+
+// Luck: where a player's total pulled value sits among LUCK_TRIALS simulated players who opened exactly the same packs (same sets,
+// counts and odds). A pack is independent slots (openPack): 4 commons, 3 uncommons, two reverse slots, the rare slot, the Energy.
+// So n packs of one key are 4n common picks, 3n uncommon picks, and per slot a multinomial count of each rarity it rolled; the value
+// is, per rarity, the sum of that many uniform picks from its card list. A simulated player draws those counts, adds up small counts
+// card by card and large ones (> PICKS picks from one list) as a normal with the list's exact mean and variance. There is no finite
+// pool to resample: the old 60k-pack pool's mean was off by ~1/245 SD per pack, and summed over n packs that bias grew as n while
+// the spread grew as √n (1.35 SD at 88k packs). Cost doesn't grow with pack count. Error: the trial count, ±1.96·√(p(1−p)/T), plus the
+// normal approximations above (large counts only, where they are tight).
+export const LUCK_TRIALS = 4000;
+const PICKS = 100;
+interface List { v: Float64Array; mu: number; sd: number }
+interface Model { lists: Record<string, List>; slots: [string, number][][]; fe: number; e: number; foil: number }
+const models: Record<string, Model> = {};
+function model(key: string) {
+  if (models[key]) return models[key];
+  const { id, m } = parseKey(key), set = setOf(id), t = slotTables(set, m), P = poolsFor(id), lists: Record<string, List> = {};
+  const list = (k: string) => lists[k] ||= (() => { const v = Float64Array.from(P[k], c => priceOf(c, k)), mu = v.reduce((a, b) => a + b, 0) / v.length; return { v, mu, sd: Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) }; })();
+  // each slot: [rarity, percent] with the base (the remainder) last
+  const slots = ([[t.rev1, 'REV'], [t.rev2, 'REV'], [t.rare, 'R']] as const).map(([tb, base]) =>
+    [...Object.entries(tb), [base, 100 - Object.values(tb).reduce((a, b) => a + b, 0)] as [string, number]]);
+  for (const s of slots) for (const [k] of s) list(k);
+  list('C'); list('U');
+  const e = cardPrice(id, 'E', 'E')!;
+  return (models[key] = { lists, slots, fe: (set.rates.FE || 0) / 100, e, foil: cardPrice(id, 'E', 'FE')! - e });
 }
-// Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
-export function luckPercentile(counts: Record<string, number>, value: number, trials?: number) { // counts: {rateKey: packs}
-  const total = Object.values(counts).reduce((a, b) => a + b, 0);
-  trials ||= Math.max(1000, Math.min(4000, Math.floor(2e6 / Math.max(total, 1))));
+const gauss = (r: Rng) => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+// Binomial(n, p): inversion from 0 while the mean is ≤ 200 ((1−p)^n ≥ e^-200 is still a normal double), a rounded normal above.
+function binomial(r: Rng, n: number, p: number): number {
+  if (n <= 0 || p <= 0) return 0;
+  if (p >= 1) return n;
+  if (p > 0.5) return n - binomial(r, n, 1 - p);
+  const mean = n * p;
+  if (mean > 200) return Math.min(n, Math.max(0, Math.round(mean + Math.sqrt(mean * (1 - p)) * gauss(r))));
+  let u = r(), q = Math.pow(1 - p, n), k = 0;
+  while (u > q && k < n) { u -= q; q *= (n - k) / (k + 1) * p / (1 - p); k++; }
+  return k;
+}
+function picks(r: Rng, l: List, k: number) {
+  if (k > PICKS) return k * l.mu + Math.sqrt(k) * l.sd * gauss(r);
+  let v = 0; for (let i = 0; i < k; i++) v += l.v[Math.floor(r() * l.v.length)];
+  return v;
+}
+function simTotal(r: Rng, key: string, n: number) {
+  const M = model(key);
+  let v = picks(r, M.lists.C, 4 * n) + picks(r, M.lists.U, 3 * n) + n * M.e + M.foil * binomial(r, n, M.fe);
+  for (const s of M.slots) {
+    let left = n, rest = 100;
+    for (let i = 0; i < s.length; i++) {
+      const [k, pct] = s[i], c = i === s.length - 1 ? left : binomial(r, left, Math.min(1, pct / rest));
+      v += picks(r, M.lists[k], c); left -= c; rest -= pct;
+    }
+  }
+  return v;
+}
+export function luckPercentile(counts: Record<string, number>, value: number, trials = LUCK_TRIALS) { // counts: {rateKey: packs}
   const r = rng(7); let below = 0, ties = 0;
   for (let t = 0; t < trials; t++) {
-    let v = 0;
-    for (const id in counts) {
-      const a = valueSamples(id); let n = counts[id];
-      if (n >= 10 * BLOCK) { const b = blockSamples(id); for (; n >= BLOCK; n -= BLOCK) v += b[Math.floor(r() * b.length)]; }
-      for (let k = 0; k < n; k++) v += a[Math.floor(r() * a.length)];
-    }
+    let v = 0; for (const key in counts) if (counts[key] > 0) v += simTotal(r, key, counts[key]);
     if (v < value - 1e-9) below++; else if (Math.abs(v - value) <= 1e-9) ties++;
   }
   return (below + ties / 2) / trials;
