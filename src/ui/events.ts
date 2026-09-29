@@ -3,6 +3,7 @@
 import * as FX from '../fx.ts';
 import { G } from './common.ts';
 import { startPack, openBatch, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
+import { showLuck } from './share.ts';
 
 export function bindEvents() {
   let resetArmed = 0;
@@ -21,6 +22,7 @@ export function bindEvents() {
       case 'flipall': flipAll(); break;
       case 'mute': toggleMute(); break;
       case 'sharemat': shareMat(); break;
+      case 'shareluck': showLuck(); break;
       case 'sell': G.sell(b.dataset.key!); break;
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key!); break;

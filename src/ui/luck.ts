@@ -1,31 +1,10 @@
 // 欧气检测: the verdict as a grading label, percentile among simulated players, meter, per-rarity tally with exact tail odds.
 import { html, render, svg } from 'lit-html';
-import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, RAR, rarLabel } from './common.ts';
+import { grade, pctText, type Grade } from './share.ts';
 
 const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
-export const pctText = (p: number) => p >= 99.5 ? '99.5+' : p.toFixed(0);
-
-// A cert number for what a label grades: a hash, so the same thing always prints the same number and one more pack a new one.
-// The barcode is drawn from its digits (bar and gap widths alternating, starting and ending on a bar).
-export function cert(of: string) {
-  let h = 2166136261;
-  for (const ch of of) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-  const d = String((h >>> 0) % 1e8).padStart(8, '0');
-  return { cert: `${d.slice(0, 4)} ${d.slice(4)}`, bars: [2, 1, 1, 1, ...[...d].flatMap(c => [1 + +c % 3, 1 + (+c >> 2 & 1), 1 + (+c >> 1 & 1), 1]), 1, 1, 2] };
-}
-
-// 欧气鉴定 (DESIGN.md「评级标签」): the verdict printed like the label on a graded-card slab. The page and the share image
-// (share.ts) print the same fields: what was graded (packs, sets, the best card), the grade word and percentile, a cert number.
-export function grade() {
-  const L = G.luck(), s = G.state, best = s.hits[0] || null;
-  const sets = SETS.filter(x => s.opened[x.id]).map(x => x.name);
-  return { L, pct: L.pct == null ? null : L.pct * 100, best, ...cert(`${L.packs}|${Math.round(L.value * 100)}|${best ? best.set + best.n : ''}`),
-    what: `${L.packs} 包 · ${sets.slice(0, 2).join(' · ')}${sets.length > 2 ? ` 等 ${sets.length} 个系列` : ''}`, short: `${L.packs} 包 · ${sets.length} 个系列` };
-}
-export type Grade = ReturnType<typeof grade>;
-
 function barcode(b: number[]) {
   let x = 0;
   const rects = b.map((w, i) => { const r = i % 2 ? null : svg`<rect x=${x} width=${w} height="1"></rect>`; x += w; return r; });
@@ -56,6 +35,7 @@ export function renderLuck() {
   const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 id="luck-h">欧气检测</h2>
       ${label(g)}
+      ${pct == null ? '' : html`<p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>一块评级卡壳：这张标签 + 你开出过最贵的卡</small></p>`}
       <p class="verdict-sub">${pct == null ? '拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
         : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">

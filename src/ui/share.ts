@@ -1,12 +1,29 @@
-// Share images: the luck card (#share panel, built once then patched, so it stays imperative) and the per-pack poster
-// in a <dialog>. Both are drawn on a canvas with the page's own tokens.
+// Share images: the 欧气鉴定 card (欧气 page) and the per-pack poster (开包 table), both a graded-card slab, shown in one <dialog>. Both are drawn on a canvas with the page's own tokens.
 import { card } from '../assets.ts';
+import { SETS } from '../sets.ts';
 import { G, $, money } from './common.ts';
-import { opened } from './guide.ts';
-import { grade, pctText, cert } from './luck.ts';
 import type { ShareSpec } from './mat.ts';
 
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+export const pctText = (p: number) => p >= 99.5 ? '99.5+' : p.toFixed(0);
+// A cert number for what a label grades: a hash, so the same thing always prints the same number and one more pack a new one.
+// The barcode is drawn from its digits (bar and gap widths alternating, starting and ending on a bar).
+export function cert(of: string) {
+  let h = 2166136261;
+  for (const ch of of) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const d = String((h >>> 0) % 1e8).padStart(8, '0');
+  return { cert: `${d.slice(0, 4)} ${d.slice(4)}`, bars: [2, 1, 1, 1, ...[...d].flatMap(c => [1 + +c % 3, 1 + (+c >> 2 & 1), 1 + (+c >> 1 & 1), 1]), 1, 1, 2] };
+}
+// 欧气鉴定 (DESIGN.md「评级标签」): the verdict printed like the label on a graded-card slab. The page (luck.ts) and the share
+// image print the same fields: what was graded (packs, sets, the best card), the grade word and percentile, a cert number.
+export function grade() {
+  const L = G.luck(), s = G.state, best = s.hits[0] || null;
+  const sets = SETS.filter(x => s.opened[x.id]).map(x => x.name);
+  return { L, pct: L.pct == null ? null : L.pct * 100, best, ...cert(`${L.packs}|${Math.round(L.value * 100)}|${best ? best.set + best.n : ''}`),
+    what: `${L.packs} 包 · ${sets.slice(0, 2).join(' · ')}${sets.length > 2 ? ` 等 ${sets.length} 个系列` : ''}`, short: `${L.packs} 包 · ${sets.length} 个系列` };
+}
+export type Grade = ReturnType<typeof grade>;
 
 // ---------- card art for share images ----------
 // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
@@ -98,7 +115,6 @@ function mat(x: CanvasRenderingContext2D, W: number, H: number) {
 }
 
 // ---------- share card: the 欧气鉴定 label on a slab holding the priciest card ever pulled ----------
-let img = '', shownAt = -1;
 async function drawCard() {
   const g = grade(), L = g.L, t = G.state.tally, best = g.best, pct = pctText(g.pct!);
   await fonts(L.title + '欧气卡铺鉴定' + (best ? best.name : ''));
@@ -143,28 +159,13 @@ async function drawPack(d: ShareSpec) {
 }
 
 // A modal with the finished image: on phones long-press saves it, on desktop the buttons do.
-export async function showPack(d: ShareSpec) {
+async function pop(draw: () => Promise<string>, text: string, file: string) {
   let dlg = document.getElementById('share-pop') as HTMLDialogElement | null;
   if (!dlg) { const el = dlg = document.createElement('dialog'); el.id = 'share-pop'; el.addEventListener('click', e => { if (e.target === el || (e.target as HTMLElement).dataset.close) el.close(); }); document.body.append(el); }
   dlg.innerHTML = '<p class="muted">正在生成…</p>'; dlg.showModal();
-  const url = await drawPack(d), text = `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}），${d.rank}`;
-  dlg.innerHTML = `<img src="${url}" alt="${text}"><div class="btns"><a class="dl" href="${url}" download="ouqi-pack.png">下载 PNG</a><button type="button" id="pop-copy">复制文字</button><button type="button" class="ghost" data-close="1">关闭</button></div>`;
+  const url = await draw();
+  dlg.innerHTML = `<img src="${url}" alt="${text}"><div class="btns"><a class="dl" href="${url}" download="${file}">下载 PNG</a><button type="button" id="pop-copy">复制文字</button><button type="button" class="ghost" data-close="1">关闭</button></div>`;
   $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
 }
-
-export async function renderShare() {
-  const el = $('share'), n = opened();
-  if (!n) { el.hidden = true; return; }
-  el.hidden = false;
-  if (!el.firstChild) {
-    el.innerHTML = `<h2>分享欧气</h2><button type="button" id="make-card">生成分享图</button><div id="card-out"></div>`;
-    $('make-card').onclick = async () => {
-      shownAt = opened(); img = await drawCard();
-      const text = `我在欧气卡铺开了 ${G.luck().packs} 包，欧气超过 ${pctText(G.luck().pct! * 100)}% 的模拟玩家：${G.luck().title}`;
-      $('card-out').innerHTML = `<img src="${img}" alt="${text}"><div class="btns"><a class="dl" href="${img}" download="ouqi.png">下载 PNG</a><button type="button" id="copy-text">复制文字</button></div>`;
-      $('copy-text').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
-    };
-  }
-  // a card from fewer packs than now is stale
-  if (shownAt !== -1 && shownAt !== n) { $('card-out').innerHTML = ''; shownAt = -1; }
-}
+export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}），${d.rank}`, 'ouqi-pack.png');
+export const showLuck = () => { const L = G.luck(); return pop(drawCard, `我在欧气卡铺开了 ${L.packs} 包，欧气超过 ${pctText(L.pct! * 100)}% 的模拟玩家：${L.title}`, 'ouqi.png'); };
