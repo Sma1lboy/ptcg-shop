@@ -117,7 +117,6 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
 .page-luck > #dex { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 20px; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
-.page-grow { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
 }
@@ -330,14 +329,9 @@ button:disabled { cursor: not-allowed; }
 .notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
 .notice dt { color: var(--muted); } .notice dd { margin: 0; text-align: right; font-weight: 600; }
 .notice button { width: 100%; }
-#upgrades { margin-top: 32px; }
-.ups { list-style: none; margin: 0; padding: 0; }
-.ups li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-.ups small { display: block; color: var(--muted); font-size: var(--fs-cap); }
 .u-lv { display: inline-flex; gap: 3px; } /* level pips (common.ts pips) */
 .u-lv i { width: 8px; height: 8px; border: 1px solid var(--line-strong); border-radius: 1px; }
 .u-lv i.on { background: var(--ink); border-color: var(--ink); }
-.u-max { font-size: var(--fs-cap); color: var(--muted); min-width: 5em; text-align: right; }
 #skills details { margin-top: 16px; }
 .page summary { cursor: pointer; font-weight: 600; padding: 6px 0; }
 #skills details .tally { margin-top: 12px; }
@@ -538,28 +532,57 @@ button:disabled { cursor: not-allowed; }
 .rail-luck b { font: 900 32px/1.1 var(--font-display); }
 .rail-luck:hover span:last-child { color: var(--ink); }
 
-/* 成长 (upgrades.ts / skills.ts): the shop's level up top, then each upgrade/skill as a pocket on a binder page —
-   hairline seams between pockets, level pips, current → next effect, and a bar filling toward the next price */
-.grow-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 32px; align-items: end; max-width: 1100px; padding: 0 0 28px; margin-bottom: 8px; }
-.gh-lv { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+/* 成长 (upgrades.ts / skills.ts): the incremental loop at a glance up top (shop level, the next thing to buy, what growth has bought,
+   the next set revenue unlocks), then the two binder pages side by side — 店铺升级 left, 技能 right — each upgrade/skill a pocket:
+   hairline seams, level pips, current → next effect, and a bar filling toward the next price. Phones: one row per pocket */
+.page-grow { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 36px 48px; max-width: 1320px; }
+.grow-top { grid-column: 1 / -1; display: grid; gap: 28px; }
+.grow-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 20px 56px; align-items: end; }
+.gh-lv p, .gh-goal p { margin: 0; }
+.gh-lv p { display: flex; align-items: baseline; gap: 10px; }
 .gh-lv span { font-size: var(--fs-body); color: var(--muted); }
 .gh-lv b { font: 900 56px/1 var(--font-display); }
 .gh-lv small { font-size: var(--fs-h); color: var(--muted); }
-.gh-bar { position: relative; align-self: center; height: 8px; background: var(--line); border-radius: 1px; }
+.gh-bar { position: relative; display: block; height: 8px; margin-top: 14px; background: var(--line); border-radius: 1px; }
 .gh-bar i { position: absolute; inset: 0; background: var(--ink); border-radius: 1px; transform-origin: left; transform: scaleX(var(--p)); transition: transform .6s cubic-bezier(.23, 1, .32, 1); }
-.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; }
+.gh-goal { display: grid; gap: 6px; }
+.gg-k { font-size: var(--fs-cap); color: var(--muted); }
+.gg-what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.gg-what > b { font-size: var(--fs-h); }
+.gh-goal button { justify-self: start; border-color: var(--ink); font-weight: 600; }
+.gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
+.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 16px; border-top: 1px solid var(--line); }
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 .page-grow h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
-.page-grow > section + section { margin-top: 40px; }
-.grow-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-.gtile { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
+/* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
+   locked logos are greyed the way the shelf greys them */
+.mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
+.mile-track li { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; font-size: var(--fs-cap); color: var(--muted); min-width: 0; }
+.mile-track img { width: 76px; height: 40px; object-fit: contain; margin-bottom: 30px; }
+.mile-track li:not(.got) img { filter: grayscale(1); opacity: .5; }
+.mile-track b { font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.mile-track li.got b, .mile-track li.next b { color: var(--ink); font-weight: 600; }
+.mile-track li::before { content: ""; position: absolute; top: 55px; left: -50%; right: 50%; height: 4px; margin-top: -2px;
+  background: linear-gradient(to right, var(--ink) calc(var(--f) * 100%), var(--line) 0); }
+.mile-track li:first-child::before { display: none; }
+.mile-track li::after { content: ""; position: absolute; top: 55px; left: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%;
+  background: var(--bg); border: 2px solid var(--line-strong); }
+.mile-track li.got::after { background: var(--ink); border-color: var(--ink); }
+.mile-track li.next::after { border-color: var(--ink); }
+.mile-track small { font: 600 var(--fs-body)/1.3 var(--font-tag); }
+.mile-track li.next small { color: var(--ink); }
+.mile-next { margin: 0; color: var(--muted); } .mile-next b { color: var(--ink); }
+.m-short { display: none; }
+/* the pockets */
+.grow-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.gtile { display: flex; flex-direction: column; gap: 8px; padding: 16px 20px 18px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
 .gtile p { margin: 0; }
 .gt-top { display: flex; align-items: baseline; gap: 8px; }
 .gt-top b { font-size: 18px; } .gt-top > small { font-size: var(--fs-cap); color: var(--muted); }
 .gt-lv { margin-left: auto; font: 600 18px/1 var(--font-tag); } .gt-lv small { font-size: var(--fs-body); color: var(--muted); }
 .gtile .u-lv i { width: 12px; height: 12px; }
-.gt-desc { font-size: var(--fs-cap); color: var(--muted); flex: 1; }
 .gt-fx b { font-weight: 700; }
+.gt-desc { font-size: var(--fs-cap); color: var(--muted); flex: 1; }
 .gt-buy { display: grid; gap: 6px; }
 .gt-buy button { justify-self: start; }
 .gt-save { display: block; height: 3px; background: var(--line); } .gt-save i { display: block; height: 100%; background: color-mix(in oklab, var(--ink) 55%, transparent); }
@@ -569,6 +592,37 @@ button:disabled { cursor: not-allowed; }
    rich shop is not a wall of yellow */
 .gtile.can .u-lv :is(i.on + i:not(.on), i:first-child:not(.on)) { background: var(--sticker); border-color: var(--sticker-edge); }
 .gtile.can .gt-buy button { border-color: var(--ink); font-weight: 600; }
+@media (max-width: 1099px) {
+  .page-grow { grid-template-columns: minmax(0, 1fr); }
+  .grow-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+  .gtile.empty { display: none; }
+}
+/* phones: a pocket is one row — name, level, effect and what it does on the left, the price button on the right — so all
+   eleven fit in about three screens instead of seven; the milestone track keeps all seven sets in one row with short thresholds */
+@media (max-width: 779px) {
+  .grow-head { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .gh-lv b { font-size: 44px; }
+  .gh-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
+  .gh-now dd { font-size: var(--fs-h); }
+  .mile-track img { width: 44px; height: 28px; margin-bottom: 26px; }
+  .mile-track li::before, .mile-track li::after { top: 41px; }
+  .mile-track b { display: none; }
+  .mile-track small { font-size: var(--fs-cap); }
+  .m-full { display: none; } .m-short { display: inline; }
+  .grow-grid { grid-template-columns: minmax(0, 1fr); border-left: 0; }
+  .gtile { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; padding: 14px 0; border-right: 0; }
+  .gtile > * { grid-column: 1 / 3; }
+  .gtile > .gt-top { grid-column: 1; }
+  .gtile > .u-lv { grid-column: 2; grid-row: 1; align-self: center; }
+  .gtile > :is(.gt-buy, .gt-done) { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-items: end; text-align: right; max-width: 9em; }
+  .gt-top > small { display: none; }
+  .gt-lv { margin-left: 4px; }
+  .gt-top b { font-size: var(--fs-h); }
+  .gtile .u-lv i { width: 8px; height: 8px; }
+  .gt-buy button { justify-self: end; min-width: 5.5em; }
+  .gb-lv { display: none; }
+  .gt-buy .gt-save { width: 100%; }
+}
 
 /* phones: one column per page; the nav docks to the bottom (thumb reach), the 开包 table fills the screen between the bars */
 @media (max-width: 779px) {
