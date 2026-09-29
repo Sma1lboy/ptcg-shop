@@ -6,39 +6,67 @@
 <title>欧气卡铺</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+SC:wght@900&display=swap">
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
+<!-- Four pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #luck #grow) so switching never loses state (DESIGN.md「布局」).
+     The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
   <h1 class="brand">欧气卡铺</h1>
-  <dl class="stats" id="stats"></dl>
-  <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+  <nav class="nav" aria-label="页面">
+    <a href="#open">开包</a>
+    <a href="#shelf">货柜</a>
+    <a href="#luck">欧气</a>
+    <a href="#grow">成长<b class="tab-n" id="grow-n" hidden></b></a>
+  </nav>
+  <div class="stats" id="stats"></div>
 </header>
-<section class="guide" id="guide" hidden></section>
-<div class="notice" id="notice" hidden></div>
-<main class="shop">
-  <section class="shelf" aria-labelledby="shelf-h">
-    <h2 class="eyebrow" id="shelf-h">货架 · 进货</h2>
-    <div id="shelf"></div>
+<div class="notice" id="notice" role="status" hidden></div>
+<main>
+  <section class="page page-open" id="page-open" aria-label="开包">
+    <section class="mat" id="mat" aria-live="polite"></section>
+    <aside class="rail">
+      <section id="rail"></section>
+      <section class="guide" id="guide" hidden></section>
+    </aside>
+  </section>
+  <section class="page page-shelf" id="page-shelf" aria-label="货柜" hidden>
+    <section class="shelf" aria-labelledby="shelf-h">
+      <h2 id="shelf-h">货架 · 进货</h2>
+      <div id="shelf"></div>
+    </section>
+    <div class="col">
+      <section id="casepanel"></section>
+      <section id="singles"></section>
+    </div>
+    <div class="col">
+      <section id="customers"></section>
+      <section id="clerk"></section>
+      <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
+    </div>
+  </section>
+  <section class="page page-luck" id="page-luck" aria-label="欧气" hidden>
+    <div class="col">
+      <section id="luck" aria-labelledby="luck-h"></section>
+    </div>
+    <div class="col">
+      <section id="share" hidden></section>
+      <section id="binder"></section>
+    </div>
+    <section id="dex"></section>
+  </section>
+  <section class="page page-grow" id="page-grow" aria-label="成长" hidden>
     <section id="upgrades"></section>
     <section id="skills"></section>
-    <h2 class="eyebrow">店内动态</h2>
-    <ol class="log" id="log"></ol>
   </section>
-  <section class="mat" id="mat" aria-live="polite"></section>
-  <aside class="side">
-    <section id="luck" aria-labelledby="luck-h"></section>
-    <section id="share" hidden></section>
-    <section id="goals"></section>
-    <section id="binder"></section>
-    <section id="casepanel"></section>
-    <section id="singles"></section>
-  </aside>
 </main>
-<footer class="sources" id="sources"></footer>
-<details class="sources basis" id="basis"></details>
+<footer class="foot">
+  <details><summary>数据来源与游戏设定</summary><div id="sources"></div></details>
+  <details class="basis" id="basis"></details>
+  <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+</footer>
 <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -6,7 +6,7 @@ import { G, $, money, rar, rarLabel } from './common.ts';
 export function renderSingles() {
   const list = Object.entries(G.state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
   const bulk = G.bulkValue();
-  render(html`<h2 class="eyebrow">单卡库存 · 同行收卡价 ${Math.round(G.BUYLIST * 100)}%</h2>
+  render(html`<h2>单卡库存 · 同行收卡价 ${Math.round(G.BUYLIST * 100)}%</h2>
       <div class="bulk"><span>散卡 ${bulk.n} 张 · 可卖 ${money(bulk.v)}</span>
         <button type="button" data-act="bulk" ?disabled=${!bulk.n}>一键卖散卡</button></div>
       <ul class="singles">${list.map(([k, c]) => html`<li>
