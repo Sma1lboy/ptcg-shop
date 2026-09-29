@@ -376,7 +376,6 @@ button:disabled { cursor: not-allowed; }
 /* the playmat */
 .mat { background: var(--mat) padding-box; color: var(--mat-ink); border: 14px solid var(--trim); border-image: url(gen/frame.webp) 48 / 20px / 0 stretch; box-shadow: 0 16px 36px rgba(4, 8, 14, .3); padding: 18px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .mat-empty { margin: auto; text-align: center; color: var(--mat-muted); }
-.mat-big { font: 900 var(--fs-display)/1 var(--font-display); color: var(--mat-ink); margin: 0 0 10px; }
 .mat-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .mat-head h2 { margin: 0; font: 900 24px/1.2 var(--font-display); }
 .mat-head span { font-size: var(--fs-body); color: var(--mat-muted); }
@@ -861,34 +860,35 @@ button:disabled { cursor: not-allowed; }
   color: var(--mat-ink); white-space: nowrap; pointer-events: auto; opacity: 0; transition: opacity .3s; }
 .s3-shelf button.in { opacity: 1; }
 /* everything the scene lays over the canvas is a small HUD plate: dark glass in the same aluminium trim as the panels */
-:is(.s3-shelf button, .s3-cap, .s3-hint) { border-radius: 3px; background: linear-gradient(rgba(26, 42, 78, .9), rgba(10, 18, 38, .9));
+:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag) { border-radius: 3px; background: linear-gradient(rgba(26, 42, 78, .9), rgba(10, 18, 38, .9));
   box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(174, 184, 200, .35), 0 6px 14px rgba(0, 0, 0, .35); }
-.s3-shelf button:not(:disabled):is(:hover, :focus-visible) { box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(255, 236, 206, .6), 0 0 14px var(--lamp-glow); }
-.s3-shelf b { font: 900 var(--fs-h)/1.2 var(--font-display); }
-.s3-shelf small { font-size: var(--fs-cap); color: var(--mat-muted); }
-.s3-shelf small span::before { content: ' · '; }
-.s3-shelf button:disabled { cursor: default; } .s3-shelf button:disabled b { color: var(--mat-muted); }
+:is(.s3-shelf button:not(:disabled):is(:hover, :focus-visible), .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-tag) { box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(255, 236, 206, .6), 0 0 14px var(--lamp-glow); }
+:is(.s3-shelf, .ip-tag) b { font: 900 var(--fs-h)/1.2 var(--font-display); }
+:is(.s3-shelf, .ip-tag) small { font-size: var(--fs-cap); color: var(--mat-muted); }
+:is(.s3-shelf, .ip-tag) small span::before { content: ' · '; }
+.s3-shelf button:disabled { cursor: default; } :is(.s3-shelf button, .idle-pack):disabled b { color: var(--mat-muted); }
 .scene3d :focus-visible { outline-color: var(--mat-ink); }
-@media (max-width: 779px), (orientation: landscape) and (max-height: 520px) { .s3-shelf b { font-size: var(--fs-body); } .s3-shelf button { padding: 2px 4px; }
-  .s3-shelf small span::before { content: none; } /* phones: the note is only the stock count or the price (mat.ts shelfItems) */ }
+@media (max-width: 779px), (orientation: landscape) and (max-height: 520px) { :is(.s3-shelf, .ip-tag) b { font-size: var(--fs-body); } :is(.s3-shelf button, .ip-tag) { padding: 2px 4px; } .idle-packs { gap: 22px 14px; }
+  :is(.s3-shelf, .ip-tag) small span::before { content: none; } /* phones: the note is only the stock count or the price (mat.ts shelfItems) */ }
 
 /* idle mat (ui/mat.ts renderIdle): the warehouse's sealed packs lie on the rubber; the stitched edge is the playmat's hem (same as drawMat in table3d.js) */
-.mat:has(.mat-idle)::before { content: ""; position: absolute; inset: 10px; border: 1px dashed var(--mat-line); border-radius: calc(var(--r-mat) - 6px); pointer-events: none; }
-.mat-idle { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 40px; padding: 24px clamp(16px, 6%, 64px); }
-.mat-idle .mat-big { margin: 0; color: var(--mat-muted); font-size: 28px; }
-.idle-packs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 28px 40px; align-items: end; }
-.idle-packs li { display: flex; flex-direction: column; gap: 14px; }
-.idle-pack { position: relative; width: clamp(100px, 10vw, 150px); aspect-ratio: 5 / 8.4; padding: 22px 12px; border: 0; border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+.mat-idle::before { content: ""; position: absolute; inset: 0 10px 10px; border: 1px dashed var(--mat-line); border-radius: calc(var(--r-mat) - 6px); pointer-events: none; }
+.mat-idle { position: relative; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 28px; padding: 24px clamp(16px, 4%, 48px); }
+.idle-packs { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 28px clamp(16px, 3vw, 40px); align-items: end; }
+/* one button per set: the stack of packs lying on the mat, and under it the same two-line label as the 3D table's (.s3-shelf) */
+.idle-pack { display: grid; justify-items: center; gap: 22px; padding: 0; border: 0; background: none; color: var(--mat-ink); cursor: pointer; }
+.ip-face { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: clamp(92px, 11vw, 160px); aspect-ratio: 7.4 / 12.8; border-radius: 3px;
   background: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1) 55%, var(--foil-2) 75%, var(--foil-3)); color: var(--back-2);
-  box-shadow: 0 14px 28px rgba(0, 0, 0, .5), 0 2px 4px rgba(0, 0, 0, .4); transform: rotate(-3deg); transition: transform .25s cubic-bezier(.23, 1, .32, 1), box-shadow .25s; }
-.idle-packs li:nth-child(even) .idle-pack { transform: rotate(2.5deg); }
-.idle-pack::before, .idle-pack::after { content: ""; position: absolute; left: 0; right: 0; height: 14px; background: repeating-linear-gradient(90deg, var(--foil-3) 0 3px, var(--foil-2) 3px 6px); }
-.idle-pack::before { top: 0; border-radius: 4px 4px 0 0; } .idle-pack::after { bottom: 0; border-radius: 0 0 4px 4px; }
-.idle-pack img { width: 90%; }
+  transform: rotate(-2deg); transition: transform .25s cubic-bezier(.23, 1, .32, 1); } /* box-shadow (the stack's crimp edges) is set per stack in mat.ts */
+.idle-packs li:nth-child(even) .ip-face { transform: rotate(1.5deg); }
+.ip-face.art { background: none; }
+.ip-face img { width: 88%; } .ip-face.art img { width: 100%; height: 100%; border-radius: inherit; display: block; }
 .ip-name { font: 900 18px/1.1 var(--font-display); }
-.idle-pack:not(:disabled):hover { transform: translateY(-8px) rotate(0); box-shadow: 0 22px 36px rgba(0, 0, 0, .55), 0 2px 4px rgba(0, 0, 0, .4); }
-.idle-pack:disabled { filter: grayscale(1) brightness(.6); cursor: not-allowed; }
-.ip-note { font-size: var(--fs-body); color: var(--mat-muted); }
+.idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-face { transform: translateY(-8px) rotate(0); }
+.idle-pack.none .ip-face { opacity: .72; } /* none in the warehouse: the sample on the counter, bought when opened */
+.idle-pack:disabled { cursor: not-allowed; } .idle-pack:disabled .ip-face { filter: grayscale(1) brightness(.6); }
+.ip-tag { display: grid; justify-items: center; gap: 1px; padding: 4px 8px; } /* the plate itself: the .s3-shelf rules above */
+.ip-next { margin: 0; text-align: center; font-size: var(--fs-cap); color: var(--mat-muted); } .ip-next:empty { display: none; }
 
 /* 开包 rail (src/ui/rail.ts): the warehouse's packs, a way to the shelf, and where luck stands */
 .rail-sets { list-style: none; margin: 0; padding: 0; }
