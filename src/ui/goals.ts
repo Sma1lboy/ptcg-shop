@@ -116,10 +116,10 @@ function collect(id: string) {
 }
 
 function clerk() {
-  if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）会在货架见底时自动进货上架，你不在线也照样补。</p>`;
+  if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，自动进货补上，你不在线也照样补。</p>`;
   return html`<ul class="auto">${SETS.filter(s => G.unlocked(s.id)).map(s =>
     html`<li><label><input type="checkbox" data-act="auto" data-id="${s.id}" .checked=${!!G.state.auto[s.id]}> ${s.name}</label></li>`)}</ul>
-      <p class="muted">勾选的系列，店员按标价上架；钱不够就少买。</p>`;
+      <p class="muted">勾选的系列，店员给它的货架补货；钱不够就少买。</p>`;
 }
 
 function renderGoals() {

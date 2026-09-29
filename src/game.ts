@@ -14,14 +14,16 @@ export interface Trophy extends Pull { key: string }
 // asking price and max = the most this customer would pay, both as shares of that market price; why = 'budget' (fine price, not
 // enough money on them) | 'cool' (flipper still holding that set).
 export interface Visit { at: number; t: string; r: string; set?: string; miss?: string; tier?: number; card?: string; n?: number; price?: number; pct?: number; max?: number; gain?: number; why?: string }
+export interface Shelf { id: string | null; qty: number } // one set per shelf; id stays after it sells out (the clerk refills it), null = empty
 export interface State {
   cash: number; stock: Record<string, number>; singles: Record<string, Single>; opened: Record<string, number>; tally: Record<string, number>;
   pulled: number; costOpened: number; hits: (Pull & { t: number })[]; earned: { sealed: number; singles: number }; customers: number;
-  log: { t: number; text: string; tone: string; amt?: number }[]; shelf: Record<string, { qty: number; pct: number }>;
+  log: { t: number; text: string; tone: string; amt?: number }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: Visit[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
-  shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>;
+  shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
+  miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   offline: { secs: number; sales: number; revenue: number; lost: number } | null;
 }
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
@@ -64,9 +66,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
   const BIG_CARD = 12;                    // collectors only look at case cards worth at least this much
-  const RECENT = 60;                      // walk-ins kept for the 顾客 panel (about five minutes of a young shop)
+  const RECENT = 600;                     // walk-ins kept for the 顾客 panel: the last MISS_WINDOW, at most this many
   const SIGN_STEP = 0.04;                 // signage: customers pay +4% more per level, and more seekers/collectors come
-  const SHELF_BASE = 20, SHELF_STEP = 20; // packs per set the shelf holds
+  // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
+  // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
+  // settle half the time); deeper shelves = longer before a shelf sells out, while you are away or between the clerk's rounds.
+  const RACK_BASE = 3, DEPTH_BASE = 20, DEPTH_STEP = 20;
   const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop sales credited on return
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
@@ -78,13 +83,16 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
+  const MISS_WINDOW = 600, MISS_KEEP = 60; // 货柜 page: pack buyers who found their set missing, over the last 10 minutes (at most 60 kept per set)
+  const CLERK_ROUND = 300;                // the clerk goes round the shelves every 5 minutes: a shelf has to last until the next round (why 加层 pays late)
   const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
-    shelf:    { name: '货架', desc: `每个系列多放 ${SHELF_STEP} 包`, costs: [80, 160, 320, 640] },
+    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i)) }, // up to one per set: a second shelf of a set is only more depth
+    depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640] },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
-    clerk:    { name: '店员', desc: '1 级：货架见底自动进货上架（含打烊时）；2 级：补满货架，并把散卡卖给同行', costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
+    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
   };
   // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
@@ -105,14 +113,17 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const wholesaleRate = () => WHOLESALE - WHOLESALE_STEP * lvl('supplier');
   const wholesale = (id: string) => Math.round(setById(id).packPrice * wholesaleRate() * 100) / 100;
   const sealedPrice = (id: string) => Math.round(setById(id).packPrice * (state.heat[id] || 1) * 100) / 100;
-  const capacity = () => SHELF_BASE + SHELF_STEP * lvl('shelf');
+  const racks = () => RACK_BASE + lvl('racks');
+  const depth = () => DEPTH_BASE + DEPTH_STEP * lvl('depth');
+  const shelves = () => { while (state.shelves.length < racks()) state.shelves.push({ id: null, qty: 0 }); return state.shelves; }; // padded here, so a level set any way shows up
   const slots = () => CASE_BASE + CASE_STEP * lvl('case');
   const revenue = () => state.earned.sealed + state.earned.singles;
   const unlockAt = (id: string) => UNLOCK[id] || 0;
   const unlocked = (id: string) => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
-  const shelfQty = (id: string) => state.shelf[id]?.qty || 0;
-  const pctOf = (id: string) => state.shelf[id]?.pct ?? 1;
+  const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
+  const facings = (id: string) => shelves().filter(s => s.id === id && s.qty > 0).length;
+  const pctOf = (id: string) => state.price[id] ?? 1;
   const ask = (id: string) => Math.round(sealedPrice(id) * pctOf(id) * 100) / 100;
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
@@ -125,8 +136,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
   const lineup = () => SETS.reduce((a, s) => a + (unlocked(s.id) ? DEMAND[s.id]?.crowd || 0 : 0), 0);
   const rate = () => ARRIVAL * (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')) * (1 + lineup()); // walk-ins per second: 图鉴 word of mouth × 人气 × new sets
-  const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelf: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, skills: {}, packsBy: {} });
+  const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {} });
 
   let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: (() => void)[] = [];
@@ -135,24 +146,39 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function load(): State {
     try { const s = JSON.parse(store.getItem(SAVE_KEY)!); if (s && typeof s.cash === 'number') {
         const st = { ...fresh(), ...s };
-        if (!s.shelf) { for (const [id, n] of Object.entries(st.stock as State['stock'])) if (n > 0) st.shelf[id] = { qty: n, pct: 1 }; st.stock = {}; } // pre-storefront saves: everything was on sale
+        if (!s.shelves) {
+          let old = s.shelf;
+          if (!old) { old = Object.fromEntries(Object.entries(st.stock as State['stock']).map(([id, n]) => [id, { qty: n, pct: 1 }])); st.stock = {}; } // pre-storefront saves: everything was on sale
+          unify(st, old);
+        }
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
         return st;
       } } catch {}
     return fresh();
   }
+  // Pre-统一货架 saves had one shelf per set ({ qty, pct }) and a 货架 level that deepened all of them. Each set that was on sale
+  // gets a shelf of its own (货架 level = sets − RACK_BASE), the old level becomes 加层, and packs that do not fit go to the back room,
+  // even past its cap: nothing is lost. Prices carry over.
+  function unify(st: State & { shelf?: unknown }, old: Record<string, { qty: number; pct: number }>) {
+    const used = Object.entries(old).filter(([, o]) => o.qty > 0), max = (k: string) => UPGRADES[k].costs.length;
+    st.up = { ...st.up, racks: Math.min(max('racks'), Math.max(0, used.length - RACK_BASE)), depth: Math.min(max('depth'), st.up.shelf || 0) }; delete st.up.shelf;
+    const deep = DEPTH_BASE + DEPTH_STEP * st.up.depth, n = RACK_BASE + st.up.racks;
+    st.price = Object.fromEntries(Object.entries(old).map(([id, o]) => [id, o.pct])); st.shelves = [];
+    used.forEach(([id, o], i) => { const k = i < n ? Math.min(o.qty, deep) : 0; if (k) st.shelves.push({ id, qty: k }); st.stock[id] = (st.stock[id] || 0) + o.qty - k; });
+    delete st.shelf;
+  }
   function save() { state.savedAt = clock(); try { store.setItem(SAVE_KEY, JSON.stringify(state)); } catch {} }
   function log(text: string, tone = '', amt?: number) { state.log.unshift({ t: clock(), text, tone, amt }); state.log.length = Math.min(state.log.length, 40); }
 
-  // Moves cash into stock (back room, or straight onto the shelf for the clerk) without logging or saving; returns the cost.
-  function stockUp(id: string, n: number, toShelf?: boolean) {
+  // Moves cash into stock (back room, or straight onto a shelf for the clerk) without logging or saving; returns the cost.
+  function stockUp(id: string, n: number, shelf?: Shelf) {
     if (!unlocked(id)) return 0;
-    n = Math.min(n, toShelf ? capacity() - shelfQty(id) : WAREHOUSE - (state.stock[id] || 0));
+    n = Math.min(n, shelf ? depth() - shelf.qty : WAREHOUSE - (state.stock[id] || 0));
     const cost = wholesale(id) * n;
     if (n <= 0 || state.cash < cost) return 0;
     state.cash -= cost;
-    if (toShelf) (state.shelf[id] ||= { qty: 0, pct: 1 }).qty += n; else state.stock[id] = (state.stock[id] || 0) + n;
+    if (shelf) shelf.qty += n; else state.stock[id] = (state.stock[id] || 0) + n;
     return cost;
   }
   function buy(id: string, n: number) {
@@ -161,21 +187,38 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     log(`进货 ${setById(id).name} ×${state.stock[id] - before}`, '', -cost);
     emit(); return true;
   }
-  // Shelf: only packs on the shelf are sold to customers. pct = asking price as a share of the market pack price.
+  // Shelves: only packs on a shelf are sold to customers. Moves up to n packs between the back room and the set's shelves; no save.
+  function fill(id: string, n: number) {
+    let left = Math.min(n, state.stock[id] || 0);
+    for (const s of shelves()) if (s.id === id) { const k = Math.min(left, depth() - s.qty); s.qty += k; left -= k; }
+    const moved = Math.min(n, state.stock[id] || 0) - left; state.stock[id] -= moved; return moved;
+  }
+  // A set put on a shelf is one the clerk restocks, unless the player turned that off for it.
+  const label = (s: Shelf, id: string | null) => { s.id = id; if (id && state.auto[id] == null && lvl('clerk')) state.auto[id] = true; };
+  // Fills the shelves this set already has; a set with none takes the first empty shelf. More shelves for one set: place().
   function shelve(id: string, n: number) {
-    n = Math.min(n, state.stock[id] || 0, capacity() - shelfQty(id));
-    if (n <= 0) return false;
-    state.stock[id] -= n; (state.shelf[id] ||= { qty: 0, pct: 1 }).qty += n;
+    if (!(state.stock[id] > 0)) return false;
+    if (!shelves().some(s => s.id === id)) { const free = shelves().find(s => !s.id); if (free) label(free, id); }
+    if (!fill(id, n)) return false;
     emit(); return true;
   }
-  function unshelve(id: string, n: number) {
-    n = Math.min(n, shelfQty(id), WAREHOUSE - (state.stock[id] || 0));
-    if (n <= 0) return false;
-    state.shelf[id].qty -= n; state.stock[id] = (state.stock[id] || 0) + n;
+  function unshelve(id: string, n: number) { // back to the back room (while it has room); the shelves keep their set
+    let left = Math.min(n, shelfQty(id), WAREHOUSE - (state.stock[id] || 0)); const moved = left;
+    for (const s of shelves()) if (s.id === id) { const k = Math.min(left, s.qty); s.qty -= k; left -= k; }
+    if (moved <= 0) return false;
+    state.stock[id] = (state.stock[id] || 0) + moved;
+    emit(); return true;
+  }
+  // Puts set id on shelf i (null clears it): what was there goes back to the back room, then the shelf is filled from it.
+  function place(i: number, id: string | null) {
+    const s = shelves()[i]; if (!s || (id && !unlocked(id))) return false;
+    if (s.qty && s.id !== id) { const back = s.id!; if ((state.stock[back] || 0) + s.qty > WAREHOUSE) return false; state.stock[back] = (state.stock[back] || 0) + s.qty; s.qty = 0; }
+    label(s, id);
+    if (id) { const k = Math.min(state.stock[id] || 0, depth() - s.qty); s.qty += k; state.stock[id] = (state.stock[id] || 0) - k; }
     emit(); return true;
   }
   const clampPct = (p: number) => Math.round(Math.round(Math.min(MAX_PCT, Math.max(MIN_PCT, p)) / PCT_STEP) * PCT_STEP * 100) / 100;
-  function setPrice(id: string, pct: number) { (state.shelf[id] ||= { qty: 0, pct: 1 }).pct = clampPct(pct); emit(); }
+  function setPrice(id: string, pct: number) { state.price[id] = clampPct(pct); emit(); }
 
   function open(id: string, n: number) {
     n = Math.min(n, state.stock[id] || 0);
@@ -293,7 +336,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const cost = upgradeCost(k);
     if (cost == null || state.cash < cost) return false;
     state.cash -= cost; state.up[k] = lvl(k) + 1;
-    if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelfQty(s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
+    if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelves().some(o => o.id === s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
     log(`升级：${UPGRADES[k].name} Lv${lvl(k)}`, '', -cost);
     emit(); return true;
   }
@@ -312,8 +355,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     v.r = 'sold'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); v.gain = cardAsk(c); state.cash += v.gain; state.earned.singles += v.gain;
   };
   const sellPacks = (id: string, n: number, v: Visit) => {
-    v.r = 'sold'; v.set = id; v.n = n; v.price = sealedPrice(id); v.pct = pctOf(id); v.gain = ask(id) * n;
-    state.shelf[id].qty -= n; state.cash += v.gain; state.earned.sealed += v.gain;
+    v.r = 'sold'; v.set = id; v.n = n; v.price = sealedPrice(id); v.pct = pctOf(id); v.gain = ask(id) * n; state.cash += v.gain; state.earned.sealed += v.gain;
+    let left = n; for (const s of shelves()) if (s.id === id) { const k = Math.min(left, s.qty); s.qty -= k; left -= k; }
   };
   const balk = (v: Visit, c: Shown, max: number) => { v.r = 'pricey'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); if (v.pct <= max) v.why = 'budget'; };
 
@@ -326,7 +369,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (type === 'opener') {
       const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
       let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
-      if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, i => shelfQty(i)); } // settles for another set
+      if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); if (m.length > MISS_KEEP) m.shift(); } // the set they came for, before any settling
+      if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, facings); } // settles for another set, more likely one on several shelves
       v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
         const n = Math.min(want, shelfQty(id), Math.floor(lognorm(25 * demand(id).budget, 0.6) / ask(id)));
@@ -360,29 +404,33 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       else if (big.length) balk(v, big[0][0], tol);
     }
     const c = state.cust; c.visits++; if (v.r === 'sold') { c.sold++; state.customers++; } else if (v.r === 'pricey') c.pricey++; else { c.none++; state.lost++; }
-    state.recent.unshift(v); state.recent.length = Math.min(state.recent.length, RECENT);
+    state.recent.unshift(v); while (state.recent.length > RECENT || state.recent.at(-1)!.at < vnow - MISS_WINDOW * 1000) state.recent.pop();
     return v.gain || 0;
   }
 
-  // The clerk (upgrade): tops up the shelf of every set with auto-restock on (buying straight onto it), and at level 2 sells the bulk to peers.
-  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }) {
+  // The clerk (upgrade): once a round, tops up every shelf whose set has auto-restock on (buying straight onto it; half full at
+  // level 1, full at level 2); at level 2 also sells the bulk to peers (every tick, like 带徒弟's listing).
+  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }, t: number) {
     const L = lvl('clerk'); if (!L) return;
     if (skill('apprentice')) { // 带徒弟: priciest hits first into the free case slots
       const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
       for (const [k] of hits) { while (toCase(k, SKILLS.apprentice.step)) acc.listed++; if (state.shown.length >= slots()) break; }
     }
-    for (const set of SETS) {
-      const id = set.id, cap = capacity(), goal = L >= 2 ? cap : Math.ceil(cap / 2), have = shelfQty(id);
-      if (!state.auto[id] || have >= goal / 2) continue;
-      const n = Math.min(goal - have, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n, true) : 0;
-      if (cost) { acc.packs += n; acc.spent += cost; }
+    if (t >= state.clerkT) {
+      state.clerkT = t + CLERK_ROUND * 1000;
+      for (const sh of shelves()) {
+        const id = sh.id, cap = depth(), goal = L >= 2 ? cap : Math.ceil(cap / 2);
+        if (!id || !state.auto[id] || sh.qty >= goal) continue;
+        const n = Math.min(goal - sh.qty, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n, sh) : 0;
+        if (cost) { acc.packs += n; acc.spent += cost; }
+      }
     }
     if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
   }
   // Dead end guard: no cash for the cheapest pack, nothing on the shelf, nothing to sell. Game setting.
   function bailout() {
     const cheapest = Math.min(...SETS.filter(s => unlocked(s.id)).map(s => wholesale(s.id)));
-    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || Object.values(state.shelf).some(o => o.qty > 0) || Object.keys(state.singles).length || state.shown.length) return false;
+    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0) || Object.keys(state.singles).length || state.shown.length) return false;
     state.cash += BAILOUT; log('货架空了、钱也花光了，亲戚周济', 'gain', BAILOUT); return true;
   }
 
@@ -397,7 +445,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
       n += m;
       for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
-      clerkWork(acc);
+      clerkWork(acc, now - (left - len) * 1000);
     }
     if (acc.packs) log(`店员进货 ${acc.packs} 包`, '', -acc.spent);
     if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
@@ -410,6 +458,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const rescued = bailout();
     if (n || dt > 30 || acc.packs || acc.bulk || acc.listed || rescued) emit(); else save();
   }
+  const missed = (id: string) => (state.miss[id] || []).filter(t => t > clock() - MISS_WINDOW * 1000).length;
   function setAuto(id: string, on: boolean) { state.auto[id] = !!on; emit(); }
   function ackOffline() { state.offline = null; emit(); }
 
@@ -446,9 +495,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   return {
     get state() { return state; }, on: (f: () => void) => listeners.push(f),
-    buy, shelve, unshelve, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
+    buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
-    demand, lineup, sealedPrice, ask, cardAsk, shelfQty, pctOf, cardPct, capacity, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    demand, lineup, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, MISS_KEEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }
