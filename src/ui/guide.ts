@@ -24,10 +24,12 @@ const shown = (el: Element | null) => (el && el.getClientRects().length ? el : n
 const pick = (...sels: string[]) => { for (const q of sels) for (const el of document.querySelectorAll(q)) if (shown(el)) return el; return null; };
 const firstShelved = () => G.shelves().find(r => r.id)?.id;
 const mins = (s: number) => Math.max(1, Math.ceil(s / 60));
-// an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid or 30 packs opened
-// means the loop is known, whatever the flags say
+// an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid, or 30 packs opened once
+// the first bill has landed (a pack-happy newcomer opens 30 in three minutes and still needs 账单), or a second shop / a
+// bankruptcy (billsPaid counts this shop only) means the loop is known, whatever the flags say
 const GRAD = { bills: 2, packs: 30 };
-const graduated = () => G.state.billsPaid >= GRAD.bills || sum(G.state.opened) >= GRAD.packs;
+const graduated = () => { const s = G.state;
+  return s.billsPaid >= GRAD.bills || (sum(s.opened) >= GRAD.packs && (s.billsPaid > 0 || !G.nextBill())) || s.branch.n > 0 || !!s.branch.broke; };
 
 // alt: a button off the step's page that answers it just as well (the share button under a finished pack, for 测欧气)
 type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null; alt?: () => Element | null };
@@ -86,7 +88,7 @@ function place() {
   // a new step's button off screen, or a strip with no room under its button: scroll, once. Kept pending for a moment, because
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
-  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in)')) {
+  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
     const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
     else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
