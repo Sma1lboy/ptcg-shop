@@ -849,8 +849,8 @@ button:disabled { cursor: not-allowed; }
    same stock as the 3D binder's tabs) along the top, one per set; the cover is card-back navy (--back-2, both themes, like the
    mat); two pages of nine pockets open on it with the rings in the spine (one page on phones). A pocket is a hairline seam; the
    card sits in it flat (no shadow: the page is flat); 补 is an ink tag; a gap prints its number, mark and name in outline. */
-#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot) { all: unset; box-sizing: border-box; cursor: pointer; }
-#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot):focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot, .bk-lid) { all: unset; box-sizing: border-box; cursor: pointer; }
+#dex :is(.bk-tab, .bk-mm, .pk-card, .pk-slot, .bk-lid):focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 .bk-tabs { display: flex; gap: 3px; overflow-x: auto; padding: 0 10px; scrollbar-width: thin; }
 #dex .bk-tab { flex: none; display: grid; grid-template-columns: auto auto; align-items: center; justify-content: start; gap: 0 7px; margin-top: 6px; padding: 6px 16px 6px;
   background: var(--foil-1); color: var(--paper-ink); clip-path: polygon(9px 0, calc(100% - 9px) 0, 100% 100%, 0 100%); font-size: 13px; font-weight: 600; line-height: 1.25; }
@@ -859,11 +859,20 @@ button:disabled { cursor: not-allowed; }
 .bk-tab small { font: 600 13px/1.1 var(--font-tag); color: var(--paper-muted); }
 #dex .bk-tab:hover { background: var(--foil-2); }
 #dex .bk-tab[aria-selected="true"] { margin-top: 0; padding-bottom: 12px; background: var(--foil-2); box-shadow: inset 0 3px 0 var(--lamp), inset 0 12px 14px -10px var(--lamp-glow); }
-.bk-book { background: var(--back-2); border-radius: 6px; padding: 14px 10px; outline: none; }
+/* The book is sized to its pages, not the panel: a padded board (--back-2 under a pebbled grain, the vinyl of a real binder) with
+   a stitched line round its edge, a lit top edge and a dark cut edge, so it stands off the navy panel in the dark theme as well as
+   the white one; the pages stack a few sheets deep at the bottom. The one object on the page with a contact shadow: it's a book
+   lying on the counter, not a card in a pocket. */
+:is(.bk-book, .bk-close) { --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .16 -.03'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+.bk-book { padding: 6px 0 4px; outline: none; }
 .bk-open { display: flex; align-items: center; justify-content: center; gap: 8px; }
 #dex .bk-turn { flex: none; width: 34px; height: 96px; padding: 0; font: 400 26px/1 var(--font-body); }
-.bk-spread { position: relative; flex: 0 1 auto; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 440px); gap: 30px; }
-.bk-spread[data-n="2"]::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 30px; transform: translateX(-50%);
+.bk-spread { position: relative; flex: 0 1 auto; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 440px); gap: 30px;
+  padding: 16px 16px 19px; border-radius: 8px; background: radial-gradient(ellipse 70% 55% at 50% 0, color-mix(in oklab, var(--lamp) 9%, transparent), transparent 75%), var(--grain), var(--back-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -2px 0 rgba(0, 0, 0, .35), 0 0 0 1px color-mix(in oklab, var(--back-ring) 16%, transparent), 0 10px 22px -12px rgba(4, 8, 14, .7); }
+.bk-spread::after { content: ""; position: absolute; inset: 6px; border: 1px dashed color-mix(in oklab, var(--back-ring) 26%, transparent); border-radius: 5px; pointer-events: none; } /* the stitching */
+.bk-spread > .bk-page { box-shadow: 0 1px 0 color-mix(in oklab, var(--panel) 78%, #0A0F1C), 0 2px 0 var(--panel), 0 3px 0 color-mix(in oklab, var(--panel) 70%, #0A0F1C); } /* the sheets under it */
+.bk-spread[data-n="2"]::before { content: ""; position: absolute; z-index: 1; top: 16px; bottom: 19px; left: 50%; width: 30px; transform: translateX(-50%);
   background: radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 18% / 30px 14px no-repeat,
     radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 50% / 30px 14px no-repeat,
     radial-gradient(closest-side, var(--foil-2) 55%, var(--foil-3) 80%, transparent 100%) 50% 82% / 30px 14px no-repeat; }
@@ -910,6 +919,7 @@ button:disabled { cursor: not-allowed; }
 .bk-hand { margin-left: 14px; color: var(--muted); } .bk-hand b { color: var(--ink); }
 .bk-key { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: 12px; font-size: var(--fs-cap); } .bk-key i + * { margin-right: 6px; }
 .bk-key i:not(:first-child) { margin-left: 8px; }
+.bk-head .master { display: block; } /* 大师套 and 亲手开齐 are two lines, not one run-on */
 .bk-head .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
 /* the card up close: a popover in the case trim, the card at hand size beside its line */
 .bk-zoom { width: min(600px, calc(100vw - 32px)); padding: 16px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 16px / 0 stretch; background: var(--panel) padding-box; color: var(--ink); }
@@ -921,7 +931,8 @@ button:disabled { cursor: not-allowed; }
 .pk-ghost { display: grid; align-content: center; justify-items: center; gap: 8px; background: none; box-shadow: none; border: 1px dashed var(--line-strong); color: var(--muted); }
 .pk-ghost b { font: 600 56px/1 var(--font-tag); } .pk-ghost .mk { font-size: 22px; }
 @media (max-width: 779px) {
-  .bk-book { padding: 8px 6px; }
+  .bk-book { padding: 4px 0; }
+  .bk-spread { padding: 9px 9px 11px; } .bk-spread::after { inset: 4px; }
   .bk-open { flex-wrap: wrap; }
   .bk-spread { order: -1; flex: 1 1 100%; grid-auto-columns: minmax(0, 1fr); }
   #dex .bk-turn { flex: 1; width: auto; height: 44px; }
@@ -933,6 +944,58 @@ button:disabled { cursor: not-allowed; }
   .bk-zoom > .cf { max-width: 240px; }
   .bk-key { display: flex; margin: 4px 0 0; }
 }
+
+/* 收齐 (DESIGN.md「卡册」): a set at 100% is a closed binder, its cover hot-stamped with the set's logo — silver foil for 大师套,
+   gold for 亲手开齐 (the silver and gold stars on the cards). The logo is the mask of a foil gradient, so it prints in foil, not
+   in its own colours; the stamp is pressed into the board (a dark edge above, a lit one below). */
+.bk-cover { --fa: var(--foil-3); --fb: var(--foil-2); --fc: var(--foil-1); position: relative; display: grid; place-items: center; aspect-ratio: 25 / 31; width: 100%;
+  border-radius: 3px 10px 10px 3px; container-type: inline-size;
+  background: linear-gradient(90deg, rgba(0, 0, 0, .38), rgba(255, 255, 255, .07) 3%, rgba(0, 0, 0, .28) 9%, rgba(255, 255, 255, .05) 10.5%, transparent 12%),
+    radial-gradient(ellipse 90% 55% at 50% 0, color-mix(in oklab, var(--lamp) 11%, transparent), transparent 72%), var(--grain), var(--back-2);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -2px 0 rgba(0, 0, 0, .35), 0 0 0 1px color-mix(in oklab, var(--back-ring) 16%, transparent); }
+.bk-cover::before { content: ""; position: absolute; inset: 9px 9px 9px calc(12% + 5px); border: 1px dashed color-mix(in oklab, var(--back-ring) 26%, transparent); border-radius: 2px 7px 7px 2px; }
+.bk-cover.gold { --fa: var(--foil-gold-3); --fb: var(--foil-gold-2); --fc: var(--foil-gold-1); }
+.bk-seal { position: relative; display: grid; justify-items: center; gap: 6cqi; width: 70%; margin-left: 12%; text-align: center;
+  filter: drop-shadow(0 -1px 0 rgba(0, 0, 0, .55)) drop-shadow(0 1px 0 rgba(255, 255, 255, .14)); }
+.bk-seal :is(.bk-seal-logo, b, small) { background-image: linear-gradient(115deg, var(--fa) 18%, var(--fb) 40%, var(--fc) 50%, var(--fb) 60%, var(--fa) 82%); background-size: 260% 100%; }
+/* a luminance mask: the logo's light lettering takes the most foil and its dark outlines the least, so the words still read */
+.bk-seal-logo { width: 100%; aspect-ratio: 2 / 1; mask: var(--logo) center / contain no-repeat luminance; }
+.bk-seal b { font: 900 max(15px, 9cqi)/1.2 var(--font-display); letter-spacing: .08em; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bk-seal small { padding-top: 3cqi; border-top: 1px solid var(--fa); font: 600 max(12px, 5.5cqi)/1 var(--font-tag); letter-spacing: .1em; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bk-cover:not(.silver, .gold) .bk-seal b { background-image: none; color: color-mix(in oklab, var(--back-ring) 24%, transparent); } /* blind (no foil) before the press */
+.bk-tab:is(.silver, .gold) small { color: var(--paper-ink); }
+/* in the binder: a completed set's tab opens on its closed cover; a tap opens the book */
+.bk-book.shut { display: grid; justify-items: center; gap: 10px; padding: 12px 0 6px; }
+#dex .bk-lid { width: min(300px, 72%); border-radius: 3px 10px 10px 3px; box-shadow: 0 12px 26px -12px rgba(4, 8, 14, .75); transition: box-shadow .2s, transform .2s; cursor: pointer; }
+#dex .bk-lid:hover { transform: translateY(-2px); box-shadow: 0 16px 30px -12px rgba(4, 8, 14, .8), 0 0 0 1px var(--lamp-glow); }
+.bk-lid-say { margin: 0; font-size: var(--fs-cap); }
+/* The 收齐 scene (ui/story.ts over the shop illustration): the set's last page with its nine dearest cards, the cover swinging shut
+   over it and the spread sliding to centre (lands at .85 s), the press coming down (1.5 s: a flash of the lamp and the foil
+   appearing), one sweep of light across the foil. fx.ts seal() plays at the same marks. Reduced motion: the stamped cover, still. */
+.bk-close { position: absolute; z-index: 1; left: 50%; top: max(20px, 5vh); width: min(330px, calc((100vh - 300px) * .8), 44vw); aspect-ratio: 25 / 31; translate: -50% 0;
+  perspective: 1800px; filter: drop-shadow(0 22px 34px rgba(4, 8, 14, .6)); }
+.bk-close > .bk-page { position: absolute; inset: 0; align-content: center; gap: 0; padding: 6%; border-radius: 3px 8px 8px 3px; box-shadow: inset 14px 0 16px -12px rgba(0, 0, 0, .45); }
+.bk-close .pk { padding: 4px; }
+.bk-hinge { position: absolute; inset: 0; transform-style: preserve-3d; transform-origin: 0 50%; }
+.bk-hinge > * { position: absolute; inset: 0; }
+.bk-hinge, .bk-hinge * { backface-visibility: hidden; } /* not inherited: the seal's own animated layer would show through the open lid, mirrored */
+.bk-lid-in { transform: rotateY(180deg); border-radius: 10px 3px 3px 10px; background: linear-gradient(270deg, rgba(0, 0, 0, .35), transparent 10%), var(--grain), var(--back-2); }
+.bk-close .bk-cover::after { content: ""; position: absolute; inset: 0; border-radius: inherit; opacity: 0; pointer-events: none;
+  background: radial-gradient(circle at 56% 45%, color-mix(in oklab, var(--lamp) 80%, transparent), transparent 55%); mix-blend-mode: screen; }
+@media (prefers-reduced-motion: no-preference) {
+  .bk-close { animation: bk-slide .5s .35s cubic-bezier(.55, 0, .35, 1) backwards; }
+  .bk-hinge { animation: bk-shut .5s .35s cubic-bezier(.55, 0, .35, 1) backwards; }
+  .bk-close .bk-seal { animation: bk-press .45s 1.5s cubic-bezier(.2, 1.4, .4, 1) backwards; }
+  .bk-close .bk-cover::after { animation: bk-flash .9s 1.5s ease-out; }
+  .bk-close .bk-seal :is(.bk-seal-logo, b, small) { animation: bk-foil 1.4s 1.8s ease-in-out backwards; }
+  #dex .bk-lid .bk-seal :is(.bk-seal-logo, b, small) { animation: bk-foil 1.6s .2s ease-in-out backwards; }
+}
+@keyframes bk-slide { from { translate: 0 0; } }
+@keyframes bk-shut { from { transform: rotateY(-178deg); } }
+@keyframes bk-press { from { opacity: 0; transform: scale(1.12); filter: brightness(2.2); } }
+@keyframes bk-flash { 20% { opacity: 1; } }
+@keyframes bk-foil { from { background-position: 100% 0; } }
+@media (max-width: 700px) { .bk-close { top: 64px; width: min(280px, calc((100vh - 300px) * .8), 64vw); } } /* the lid swings out past the screen edge; the closed book is what matters */
 
 /* price-basis footer + luck notes */
 .basis table { border-collapse: collapse; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }

@@ -11,6 +11,8 @@ import { hold } from './mat.ts';
 import { SCENES, NAMES, END, BIG_PULL, sceneFor, slipFor, SLIP_NOTES, SLIP_LOAN, SLIP_LATE, type Ctx, type Seen, type Who } from '../story.ts';
 import { bill, inDebt, debtBeat } from '../debt.ts';
 import { printSlip } from './notice.ts';
+import { closing } from './binder.ts';
+import * as FX from '../fx.ts';
 
 const KEY = 'ptcg.story';
 let seen: Seen = {};
@@ -46,6 +48,7 @@ function type() {
   clearInterval(timer);
   if (!cur) return;
   const sc = SCENES[cur.id][cur.scene]; // a new line: src/ui/sound.ts plays its scene's bed and the cues in its text
+  if (sc.seal && cur.line === 0 && !cur.typed) FX.seal(sc.seal === 'gold'); // the cover shutting and the stamp, in time with the CSS
   document.dispatchEvent(new CustomEvent('ptcg:line', { detail: { id: cur.id, scene: cur.scene, bg: sc.bg, who: sc.lines[cur.line].who, text: text(cur) } }));
   const full = text(cur).length;
   if (still()) { cur.typed = full; draw(); return; }
@@ -67,6 +70,7 @@ function draw() {
   const cast = [...new Set(sc.lines.map(l => l.who))].filter(w => SIDE[w]) as Who[];
   const last = cur.scene === SCENES[cur.id].length - 1 && cur.line === sc.lines.length - 1;
   render(html`${keyed(`${cur.id}.${cur.scene}`, html`<div class="st-scene" data-bg=${sc.bg}></div>`)}
+    ${sc.seal && cur.ctx.setId ? keyed(`${cur.id}.${cur.scene}.book`, closing(cur.ctx.setId, sc.seal)) : nothing}
     ${cast.map(w => html`<img class="st-who ${SIDE[w]} ${w === line.who ? 'on' : ''}" src="gen/story/${w}.webp" alt="" @error=${(e: Event) => ((e.target as HTMLElement).hidden = true)}>`)}
     <button type="button" class="ghost st-skip" @click=${(e: Event) => { e.stopPropagation(); end(); }}>跳过</button>
     <div class="st-box ${line.who ? '' : 'narr'}">
@@ -89,7 +93,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
     if (b.kind === 'paid') forced = 0;
   }
   if (id === 'branch') { seen.sets = unlockedSets().length; save(); } // the new shop relocks the later sets: each unlock plays again
-  if (b && id) play(id, b.kind === 'story' ? { ...storyCtx(), ...(b.set ? { set: G.setById(b.set).name, fame: G.HAND_FAME } : {}) } : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);
+  if (b && id) play(id, b.kind === 'story' ? { ...storyCtx(), ...(b.set ? { set: G.setById(b.set).name, fame: G.HAND_FAME, setId: b.set, total: G.dexTotal(b.set), bought: G.dexTotal(b.set) - G.handCount(b.set), tol: `${Math.round(G.MASTER.tol * 100)}%` } : {}) } : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);
   const big = ev?.open?.flat().filter(c => c.price >= BIG_PULL).sort((a, c) => c.price - a.price)[0];
   if (big && !seen.bigpull) play('bigpull', { card: big.name, price: money(big.price) });
   const nowUnlocked = unlockedSets();

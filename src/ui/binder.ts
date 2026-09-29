@@ -6,6 +6,8 @@
 // Frozen while a pack is being revealed (a pocket filling would spoil the pull): main.ts renderAll skips it during hold.
 // 新: a pocket filled since the player last had the binder open wears 新, its tab and page map say so, and the 欧气 tab carries a
 // dot with the count; the pack summary on the mat names them and opens the binder on their page (see 「新」 below).
+// 收齐: a set at 100% has its binder closed and its cover hot-stamped with the set's logo (silver 大师套, gold 亲手开齐); its tab opens
+// on that cover, a tap opens the book. The same cover() is what closes in the 收齐 scene (ui/story.ts).
 import { html, render, nothing } from 'lit-html';
 import { SETS, DATA } from '../sets.ts';
 import * as S from '../sim.ts';
@@ -16,7 +18,7 @@ import { hold, huntable } from './mat.ts';
 
 const PER = 9, HITS = 'hits';
 type Pocket = { set: string; n: string; name: string; r: string; kind: string; price: number };
-let at = { tab: '', page: 0 }, zoom: Pocket | null = null;
+let at = { tab: '', page: 0, shut: false }, zoom: Pocket | null = null;
 const wide = matchMedia('(min-width: 780px)'); // two pages open side by side
 const span = () => (wide.matches ? 2 : 1);
 
@@ -40,7 +42,22 @@ function open(tab: string) {
   const h = hand(tab), all = pocketsOf(tab), nu = fresh();
   let i = tab === HITS ? -1 : all.findIndex(c => nu.has(`${c.set}|${c.n}`));
   if (i < 0) i = tab === HITS ? 0 : all.findIndex(c => has(c, h) === 'none');
-  at = { tab, page: Math.max(0, Math.floor(i / PER)) };
+  at = { tab, page: Math.max(0, Math.floor(i / PER)), shut: tab !== HITS && !!sealOf(tab) && !freshOf(tab).length };
+}
+
+// ---------- 收齐: the cover ----------
+export const sealOf = (id: string): '' | 'silver' | 'gold' => (G.handDone(id) ? 'gold' : G.master(id) ? 'silver' : '');
+// The binder's front cover, stamped (kind) or blank. The logo is pressed as foil: the logo image is the mask of a foil gradient, so
+// it takes the stamp's colour, not its print. A CDN logo (pen, file://) may not be readable as a mask: the name alone is stamped.
+export function cover(id: string, kind: '' | 'silver' | 'gold') {
+  const s = G.setById(id), tot = G.dexTotal(id), src = logo(id);
+  return html`<span class="bk-cover ${kind}">
+      <span class="bk-seal" aria-label="${s.name}${kind ? `，${kind === 'gold' ? '亲手开齐' : '大师套'} ${tot}/${tot}` : ''}">
+        ${kind && !/^https?:/.test(src) ? html`<i class="bk-seal-logo" style="--logo:url(${src})"></i>` : nothing}
+        <b>${s.name}</b>
+        ${kind ? html`<small>${kind === 'gold' ? '亲手开齐' : '大师套'} · ${tot}/${tot}</small>` : nothing}
+      </span>
+    </span>`;
 }
 
 // ---------- 新: feat.dexSeenN / feat.dexHandN are how many keys state.dexSeen / state.dex had when the player last had the binder
@@ -91,7 +108,17 @@ function pocket(c: Pocket, st: string, i: number, nu: boolean) {
       ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}</button>${nu ? html`<i class="hand-new">新</i>` : nothing}${cap(c, 'show')}</li>`;
 }
 
+// The 收齐 scene's centrepiece (ui/story.ts): the set's last page — its nine dearest cards — with the cover swinging shut over it,
+// then the stamp pressed on. The animation is all CSS (style.css「收齐」), so it plays once, when the scene mounts it.
+export function closing(id: string, kind: 'silver' | 'gold') {
+  const nine = DATA[id].cards.map(c => ({ set: id, n: c.n, name: c.name, r: c.r, kind: c.r, price: S.cardPrice(id, c.n, c.r) ?? 0 })).sort((a, b) => b.price - a.price).slice(0, PER);
+  return html`<div class="bk-close ${kind}" aria-hidden="true"><ol class="bk-page">${nine.map(c => html`<li class="pk got">${face(c, 'show')}</li>`)}</ol>
+      <span class="bk-hinge"><span class="bk-lid-in"></span>${cover(id, kind)}</span></div>`;
+}
+
 function spread(tab: string) {
+  if (at.shut) return html`<div class="bk-book shut"><button type="button" class="bk-lid" data-bk-open aria-label="翻开${G.setById(tab).name}的卡册">${cover(tab, sealOf(tab))}</button>
+      <p class="muted bk-lid-say">${sealOf(tab) === 'gold' ? `${G.dexTotal(tab)} 张全是开包开出来的，一张没买` : `${G.dexTotal(tab)} 张收齐，其中补的 ${G.dexTotal(tab) - G.handCount(tab)} 张`} · 点封面翻开</p></div>`;
   const all = pocketsOf(tab), h = tab === HITS ? new Map() : hand(tab), pages = Math.max(1, Math.ceil(all.length / PER)), w = span();
   const nu = fresh(), isNew = (c: Pocket) => tab !== HITS && nu.has(`${c.set}|${c.n}`);
   // a page with every pocket filled gets a 满页 stamp; it's pressed on (animated) when one of those went in on this visit
@@ -122,7 +149,8 @@ function head(id: string) {
       <p class="bk-count"><span><b>${c}</b>/${tot}</span> 张入册 <span class="bk-hand">亲手开出 <b>${h}</b>/${tot}</span></p>
       <p class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(id) * 100)}%
         <span class="bk-key"><i class="got"></i>开包开出 <i class="bought"></i>补的 <i class="none"></i>还没有</span></p>
-      ${stock ? html`<div class="btns"><button type="button" class="primary" data-act="open1" data-id=${id}>开一包${G.setById(id).name}（仓库 ${stock}）</button></div>` : nothing}
+      ${stock || (sealOf(id) && !at.shut) ? html`<div class="btns">${stock ? html`<button type="button" class="primary" data-act="open1" data-id=${id}>开一包${G.setById(id).name}（仓库 ${stock}）</button>` : nothing}
+        ${sealOf(id) && !at.shut ? html`<button type="button" data-bk-shut>合上看封面</button>` : nothing}</div>` : nothing}
       ${G.unlocked(id) ? collect(id) : nothing}${handLine(id)}
     </div>`;
 }
@@ -181,8 +209,8 @@ export function renderBinder() {
   render(html`<h2>卡册 · 图鉴 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2>
     <div class="bk-tabs" role="tablist" aria-label="卡册的系列">
       ${hits ? html`<button type="button" role="tab" class="bk-tab" aria-selected=${tab === HITS} data-bk-tab=${HITS}><span>战利品</span><small>最贵的 ${G.state.hits.length} 张</small></button>` : nothing}
-      ${ss.map(s => html`<button type="button" role="tab" class="bk-tab ${G.master(s.id) ? 'full' : ''}" aria-selected=${tab === s.id} data-bk-tab=${s.id}>
-        <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}${newTag(s.id)}</small></button>`)}
+      ${ss.map(s => html`<button type="button" role="tab" class="bk-tab ${sealOf(s.id)}" aria-selected=${tab === s.id} data-bk-tab=${s.id}>
+        <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}${sealOf(s.id) ? ` · ${sealOf(s.id) === 'gold' ? '亲手开齐' : '大师套'}` : ''}${newTag(s.id)}</small></button>`)}
     </div>
     ${tab ? html`${spread(tab)}
       ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张 RR 以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
@@ -192,14 +220,15 @@ export function renderBinder() {
 
 const newTag = (id: string) => { const n = freshOf(id).length; return n ? html` <i class="hand-new" aria-label="${n} 张新卡">新 ${n}</i>` : nothing; };
 
-function go(page: number) { at.page = Math.max(0, page); renderBinder(); }
+function go(page: number) { at.page = Math.max(0, page); at.shut = false; renderBinder(); }
 export function initBinder() {
   const root = $('dex');
   let swiped = false; // the click that ends a swipe doesn't open the pocket under it
   root.addEventListener('click', e => {
     if (swiped) { swiped = false; return; }
-    const b = (e.target as Element).closest<HTMLElement>('[data-bk-tab], [data-bk-pg], [data-bk-zoom]'); if (!b) return;
-    if (b.dataset.bkTab) { open(b.dataset.bkTab); renderBinder(); root.querySelector('.bk-tab[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    const b = (e.target as Element).closest<HTMLElement>('[data-bk-tab], [data-bk-pg], [data-bk-zoom], [data-bk-open], [data-bk-shut]'); if (!b) return;
+    if (b.matches('[data-bk-open], [data-bk-shut]')) { at.shut = b.matches('[data-bk-shut]'); renderBinder(); }
+    else if (b.dataset.bkTab) { open(b.dataset.bkTab); renderBinder(); root.querySelector('.bk-tab[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
     else if (b.dataset.bkPg) go(+b.dataset.bkPg);
     else { zoom = pocketsOf(at.tab)[+b.dataset.bkZoom!]; renderBinder(); $('bk-zoom').showPopover(); }
   });
