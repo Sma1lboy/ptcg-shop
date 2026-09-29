@@ -41,6 +41,19 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
     </li>`;
 }
 
+// 店员没本钱: the clerk's last round came up short (the till was emptied, most often by an upgrade just before it) and the shelves
+// still lack it. Says what it cost, where the money went, and offers his buying now; the 成长 page warns before the buy that causes it.
+function clerkNote() {
+  const short = G.clerkShort(); if (short <= 0) return nothing;
+  const s = G.state, r = s.clerkRound!, cash = s.cash, need = G.clerkNeed(), b = G.nextBill(), missed = SETS.reduce((a, x) => a + G.missed(x.id), 0);
+  const ago = Math.round((Date.now() - r.at) / 60000), next = Math.max(1, Math.ceil((s.clerkT - Date.now()) / 60000));
+  const cheap = Math.min(...G.shelves().filter(x => x.id && s.auto[x.id]).map(x => G.wholesale(x.id!))), spend = Math.min(cash, need), left = cash - spend;
+  return html`<p class="wall-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮补满货架要 ${money(r.need)}，到现在只进了 ${money(r.spent)}，还差 <b>${money(short)}</b> 的货${missed ? html`；${lately()} <b>${missed} 位</b>来买整包没买到` : ''}。
+      店员只拿收银台里的现钱进货：巡货前钱被升级或账单花掉，货架就空着等他下一轮（约 ${next} 分钟后）。
+      ${cash >= cheap ? html`<button type="button" class="primary" @click=${() => G.clerkNow()}>现在补货 ${money(spend)}</button>${b && left < b.amount ? html` <small>补完剩 ${money(left)}，九姐来收 ${money(b.amount)}：卖出去才回得来</small>` : nothing}`
+        : html`<small>收银台里还不够一包，卖出几单再补。</small>`}</p>`;
+}
+
 function wall() {
   const shelves = G.shelves(), deep = G.depth(), boards = Math.ceil(deep / G.DEPTH_STEP), cash = G.state.cash;
   const nr = G.upgradeCost('racks'), nd = G.upgradeCost('depth');
@@ -48,6 +61,7 @@ function wall() {
       <p class="wall-h"><b>货架 ${shelves.length}/${G.RACK_BASE + G.UPGRADES.racks.costs.length}</b><span class="muted">每个 ${boards} 层、放 ${deep} 包，摆一个系列</span>
         <span class="wall-up">${nr != null ? html`<button type="button" data-act="up" data-k="racks" ?disabled=${cash < nr}>加一个货架 ${money(nr)}</button>` : nothing}
           ${nd != null ? html`<button type="button" data-act="up" data-k="depth" ?disabled=${cash < nd}>每个加一层 ${money(nd)}</button>` : nothing}</span></p>
+      ${clerkNote()}
       <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}</ol>
       <p class="wall-note">想买的系列不在架上，拆包玩家一半改买别的，一半直接走。</p>
     </div>`;
