@@ -277,7 +277,7 @@ const CARD_VS = `
     vN = normalize(m * normal); vR = normalize(m * vec3(1.0, 0.0, 0.0)); vU = normalize(m * vec3(0.0, 1.0, 0.0));
     gl_Position = projectionMatrix * viewMatrix * wp;
   }`;
-// uKind: 0 plain, 1 reverse holo (all but the art box), 2 holo art box, 3 full holo, 4 etched (full arts and gold), 6 ball pattern reverse, 7 cosmos (5 unused)
+// uKind: 0 plain, 1 reverse holo (all but the art box), 2 holo art box, 3 full holo (brushed), 4 etched (full arts and gold), 6 ball pattern reverse, 7 cosmos (5 unused)
 // uLit 0…1: 1 for the card in hand (held to the eye, or the front of the pack being revealed). Its light is then a neutral
 // hand light, not the room's: away from the lamp's cone and under the dimmed show moods it still shows the printed colours.
 // Foil only ADDS reflection (a white sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
@@ -287,7 +287,7 @@ const CARD_FS = `
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
-  float etchH(vec2 uv) { return dot(texture2D(uFace, uv, 2.5).rgb, vec3(0.299, 0.587, 0.114)) + 0.12 * vnoise(uv * vec2(5.0, 7.0)); }
+  float etchH(vec2 uv) { return dot(texture2D(uFace, uv, 2.5).rgb, vec3(0.299, 0.587, 0.114)) + 0.03 * vnoise(uv * vec2(5.0, 7.0)); }
   void main() {
     vec3 N = normalize(vN), V = normalize(cameraPosition - vP);
     bool front = vFront > 0.5;
@@ -316,13 +316,24 @@ const CARD_FS = `
       float spark = step(0.9, h) * smoothstep(0.45, 0.1, length(fract(vUv * vec2(84.0, 118.0)) - 0.5)) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
       float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
       float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
+      if (k < 3.5) { // plain foil under ink: where the print is light the foil is a mirror (a tight, bright streak), where the ink
+        // is heavy it scatters (a wide, dim wash). Same light either way, only spread differently: the print's colour never moves.
+        // Full-card holo is also brushed: fine lengthwise grain breaks its sweep into streaks, so it never reads as reverse foil.
+        float rough = 1.0 - dot(texture2D(uFace, vUv, 3.0).rgb, vec3(0.299, 0.587, 0.114)), b = band, gr = 1.0;
+        if (k > 2.5) { gr = vnoise(vUv * vec2(260.0, 5.0)); b += (gr - 0.5) * 0.35; gr = 0.4 + 1.2 * gr; rough = 0.35 + 0.65 * rough; }
+        float sharp = mix(18.0, 2.5, rough);
+        sheen = 0.03 + 0.3 * sqrt(sharp / 6.0) * mix(1.0, 0.6, rough) * exp(-b * b * sharp) * gr;
+      }
       if (k > 3.5 && k < 4.5) { // etched: the foil is pressed into ridges that follow the art. The ridges are contour lines of the scan's
         // blurred brightness (plus a slow swirl, so flat print like a gold card's field still has grain); each ridge's flank tilts
         // toward or away from the light, so the sweep breaks into streaks along the drawing and slides between them as the card turns.
         vec2 e = vec2(2.0 / 512.0, 2.0 / 715.0);
         float hr = etchH(vUv + vec2(e.x, 0.0)), hl = etchH(vUv - vec2(e.x, 0.0)), hu = etchH(vUv + vec2(0.0, e.y)), hd = etchH(vUv - vec2(0.0, e.y));
-        float ph = (hr + hl + hu + hd) * 0.25 * 70.0, fade = 1.0 - smoothstep(0.25, 0.6, fwidth(ph)); // ridges finer than ~3 px would shimmer: flat foil there
-        vec2 g = vec2(hr - hl, hu - hd); g /= length(g) + 0.004;
+        // Where the print is flat (a gold card's field, an art's plain sky) there are no contours to follow: the plate there is cut
+        // in fine parallel lines instead, like a real gold card's etch, bending as they meet the drawing.
+        vec2 g = vec2(hr - hl, hu - hd); float plain = 1.0 - smoothstep(0.004, 0.03, length(g));
+        float ph = ((hr + hl + hu + hd) * 0.25 + plain * 0.6 * dot(vUv, vec2(0.5, 1.0))) * 70.0, fade = 1.0 - smoothstep(0.25, 0.6, fwidth(ph)); // ridges finer than ~3 px would shimmer: flat foil there
+        g += plain * vec2(0.5, 1.0) * 0.04; g /= length(g) + 0.004;
         float c = cos(ph * 6.2832), flank = c * fade, crest = 0.5 + 0.5 * sin(ph * 6.2832);
         float b = band + dot(g, vec2(0.7, 0.9)) * flank * 0.55;
         crest *= crest; tx = mix(tx, 0.3 + 0.9 * crest * crest, fade); // grooves hold less light than crests: only how much white goes on moves, never the print
@@ -366,13 +377,18 @@ function cardMesh(c) {
   m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; m.userData.face = t; });
   return m;
 }
-const HALO_FS = `uniform vec3 uCol; uniform float uAmt; varying vec2 vP;
+// Sized in CSS pixels, not cm, like the 2D mat's 26 px glow (DESIGN.md「卡面」): d over its own screen derivative is the distance
+// from the card's edge in device pixels, uDpr takes it to CSS pixels. So a small card in a ten-pack spread gets the same thin rim
+// as the one held up close, instead of a glow a third of its width (a phone's small cards get it narrower still). The world fade only keeps it off the plane's edge.
+const HALO_FS = `uniform vec3 uCol; uniform float uAmt, uDpr; varying vec2 vP;
   float sdr(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
-  void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}); gl_FragColor = vec4(uCol * uAmt * exp(-max(d, 0.0) * 2.0) * smoothstep(-0.3, 0.0, d) * smoothstep(2.4, 0.6, d), 1.0); }`; // gone well before the plane's edge: no box of light
+  void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}), wpx = length(vec2(dFdx(d), dFdy(d))) * uDpr + 1e-5,
+      px = max(d, 0.0) / wpx / min(1.0, ${CW} / wpx / 110.0); // and never wider than about a quarter of the card as it shows on screen
+    gl_FragColor = vec4(uCol * uAmt * exp(-max(px - 4.0, 0.0) / 9.0) * smoothstep(34.0, 20.0, px) * smoothstep(-0.3, 0.0, d) * smoothstep(2.5, 1.9, d), 1.0); }`;
 function halo(card, col, amt, ms = 500) {
   let h = card.userData.halo;
   if (!h) {
-    h = new T.Mesh(new T.PlaneGeometry(CW + 5, CH + 5), new T.ShaderMaterial({ uniforms: { uCol: { value: new T.Color() }, uAmt: { value: 0 } },
+    h = new T.Mesh(new T.PlaneGeometry(CW + 5, CH + 5), new T.ShaderMaterial({ uniforms: { uCol: { value: new T.Color() }, uAmt: { value: 0 }, uDpr: shared.u.dpr },
       vertexShader: 'varying vec2 vP; void main() { vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: HALO_FS, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
     h.position.z = -.03; card.add(h); card.userData.halo = h;
@@ -1110,7 +1126,7 @@ function resize() {
   const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
   renderer.setSize(w, h, false); composer.setSize(w, h);
   camera.aspect = w / h; camera.updateProjectionMatrix();
-  parts.mat.uniforms.uScale.value = h * renderer.getPixelRatio() / (2 * TAN);
+  parts.mat.uniforms.uScale.value = h * renderer.getPixelRatio() / (2 * TAN); shared.u.dpr.value = renderer.getPixelRatio();
   if (R && !tws.length && R.stage !== 'spread') { // keep the shot right while the window is still being dragged
     const set = st => { cam.t.copy(st.t); cam.d = st.d; };
     if (R.shelf) set(R.cam = shelfGrid(R.items.length).cam);
@@ -1325,7 +1341,7 @@ function init() {
     crinkle: crinkleTex() };
   shared.inner.normalMap = shared.crinkle;
   svgTex(backSVG()).then(t => { back.dispose(); shared.back.value = t; wake(100); }); // card.ts's back, the one the 2D mat and the share image show
-  shared.u = { back: shared.back, time: { value: 0 }, key: { value: new V3() }, keyDir: { value: new V3() }, glowAt: { value: new V3() }, cone0: { value: 0 }, cone1: { value: 1 }, keyCol: { value: new T.Color() }, amb: { value: new T.Color() }, wash: { value: new T.Color() } };
+  shared.u = { back: shared.back, time: { value: 0 }, key: { value: new V3() }, keyDir: { value: new V3() }, glowAt: { value: new V3() }, cone0: { value: 0 }, cone1: { value: 1 }, keyCol: { value: new T.Color() }, amb: { value: new T.Color() }, wash: { value: new T.Color() }, dpr: { value: 1 } };
 
   world(); // after shared: the showcase's booster box wears a pack's material
   parts = makeParticles(900); scene.add(parts.pts);
