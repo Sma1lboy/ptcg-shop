@@ -68,7 +68,7 @@
     const r = rar(c);
     const face = c.r === 'E'
       ? `<span class="energy"><b>${c.name.slice(2, 3)}</b>${esc(c.name)}</span>`
-      : `<img src="${imgUrl(c, big ? 'high' : 'low')}" alt="${esc(c.name)}" loading="eager" decoding="async">`;
+      : `<img src="${imgUrl(c, big ? 'high' : 'low')}" crossorigin="anonymous" alt="${esc(c.name)}" loading="eager" decoding="async">`;
     const act = big ? 'advance' : up ? 'peek' : '';
     return `<figure class="slot">
       <button type="button" class="card t${r.t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
@@ -245,7 +245,7 @@
   function renderBinder() {
     const hits = G.state.hits.slice(0, 8);
     $('binder').innerHTML = `<h2 class="eyebrow">战利品 · 开出过最贵的</h2>` + (hits.length
-      ? `<ul class="binder">${hits.map(c => `<li><img src="${imgUrl(c)}" alt="${esc(c.name)}" loading="lazy"><span>${money(c.price)}</span></li>`).join('')}</ul>`
+      ? `<ul class="binder">${hits.map(c => `<li><img src="${imgUrl(c)}" crossorigin="anonymous" alt="${esc(c.name)}" loading="lazy"><span>${money(c.price)}</span></li>`).join('')}</ul>`
       : '<p class="muted">还没出过 RR 以上的卡。</p>');
   }
 
@@ -283,7 +283,7 @@
         <span class="s-name">${esc(c.name)}<small>${G.setById(c.set).name} #${c.n}</small></span>
         <span class="s-count">${money(c.price * tiers[s.casePrice].mult)}</span>
         <button type="button" data-act="unlist" data-i="${i}">撤下</button></li>`).join('') || '<li class="muted">空着。在单卡库存里点「上柜」。</li>'}</ul>
-      <div class="trophy">${t ? `<img src="${imgUrl(t)}" alt="${esc(t.name)}"><span>${esc(t.name)} ${money(t.price)}<small>客流 +${Math.round(G.trophyBonus() * 100)}%，不会被卖掉</small></span>
+      <div class="trophy">${t ? `<img src="${imgUrl(t)}" crossorigin="anonymous" alt="${esc(t.name)}"><span>${esc(t.name)} ${money(t.price)}<small>客流 +${Math.round(G.trophyBonus() * 100)}%，不会被卖掉</small></span>
         <button type="button" data-act="untrophy">收回</button>` : '<span class="muted">没有镇店之宝。单卡越值钱，加成越高（上限 +50%）。</span>'}</div>`;
   }
 
@@ -377,7 +377,8 @@
   function startPack(id) {
     hold = true;
     const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
-    cards.forEach(c => { if (c.r !== 'E') { new Image().src = imgUrl(c); new Image().src = imgUrl(c, 'high'); } }); // warm the cache before the flips
+    const warm = u => { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = u; };
+    cards.forEach(c => { if (c.r !== 'E') { warm(imgUrl(c)); warm(imgUrl(c, 'high')); } }); // warm the cache before the flips (CORS mode, so the share poster can reuse it)
     mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0 };
     renderMat();
   }

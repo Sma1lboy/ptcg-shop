@@ -24,9 +24,10 @@
 
   // ---------- card art for share images ----------
   // assets.tcgdex.net answers with access-control-allow-origin: *, so a CORS-mode load keeps the canvas exportable.
-  // The "?cors" suffix keeps the browser from reusing the no-CORS copy ui.js already cached for the same URL.
+  // ui.js loads card art with crossorigin="anonymous", so the cached copy passes CORS. No query string here:
+  // assets.tcgdex.net answers query-string URLs with a doubled Access-Control-Allow-Origin, which browsers reject.
   // The CDN sometimes sends the CORS header twice for a given card/format, which browsers reject, so try other formats before giving up.
-  const loadOne = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url + '?cors'; });
+  const loadOne = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url; });
   async function loadArt(url) {
     const base = url.replace(/\/(high|low)\.webp$/, '');
     for (const f of ['high.webp', 'high.png', 'low.webp', 'low.png']) { const i = await loadOne(`${base}/${f}`); if (i) return i; }
