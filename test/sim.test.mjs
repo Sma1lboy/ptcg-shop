@@ -250,7 +250,7 @@ console.log('ok luck percentile');
   assert.ok(st().offline.sales > 20, `a clerk lets a closed shop keep selling past one shelf (${st().offline.sales} sales)`);
   // 货柜 page: pack buyers who came for a set that was on no shelf are counted per set, for the last MISS_WINDOW seconds.
   G.reset(); st().cash = 1e6; T += 1; G.buy('sv08', 200); G.shelve('sv08', 999);
-  for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) G.shelve('sv08', 999); }
+  for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) { G.buy('sv08', 100); G.shelve('sv08', 999); } } // the back room is topped up too: 200 packs can sell out inside the 5 minutes
   assert.ok(G.missed('sv10') > 0 && G.missed('sv08') === 0, `the set left off the shelves is the one missed (${G.missed('sv10')} / ${G.missed('sv08')})`);
   T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
   // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
@@ -351,7 +351,7 @@ console.log('ok luck percentile');
     assert.ok(PTCG_SETS.every(s => G.DEMAND[s.id]) && late.length === PTCG_SETS.length - 4, 'every set has buyers, every set after the first four brings walk-ins');
     assert.ok(late.every((s, i) => G.unlockAt(s.id) > G.unlockAt('sv03.5') && (!i || G.unlockAt(s.id) > G.unlockAt(late[i - 1].id))), 'later releases unlock later');
     st().earned.sealed = G.unlockAt(late[0].id); assert.ok(Math.abs(G.rate() / r0 - 1 - G.DEMAND[late[0].id].crowd) < 1e-9, 'one new set, its crowd');
-    st().earned.sealed = 1e9; assert.ok(Math.abs(G.rate() / r0 - 1 - late.reduce((a, s) => a + G.DEMAND[s.id].crowd, 0)) < 1e-9, 'all of them');
+    st().earned.sealed = 1e9; assert.ok(Math.abs(G.rate() / r0 - G.crowdMult(1 + late.reduce((a, s) => a + G.DEMAND[s.id].crowd, 0))) < 1e-9, 'all of them (together past the knee, so through the 客流上限)');
     assert.deepEqual(G.missing('me02').filter(c => c.r === 'MHR').map(c => c.n), ['130'], 'MHR is collectable');
   }
   console.log('ok economy');
@@ -447,7 +447,7 @@ console.log('ok luck percentile');
   st().branch.fame = 1e3; for (const k of Object.keys(G.PERKS)) { while (G.learnPerk(k)); assert.equal(G.perk(k), G.PERKS[k].max, `${k} stops at max`); }
   assert.equal(st().branch.fame, 1e3 - total);
   assert.equal(G.skillMax('luck'), G.SKILLS.luck.max + G.PERKS.luck.max);
-  assert.ok(G.rate() <= G.ARRIVAL * (1 + G.REG_STEP * G.PERKS.regulars.max) * G.crowdCap(), 'traffic stays under the capped ceiling');
+  assert.ok(G.rate() <= G.ARRIVAL * (1 + G.REG_STEP * G.PERKS.regulars.max) * (1 + G.SKILLS.crowd.step * G.SKILLS.crowd.max) * G.crowdCap(), 'traffic stays under the capped ceiling');
   assert.equal(st().branch.fame, 1e3 - total);
   assert.ok(G.unlockAt('me05') > 0 && G.unlockAt('me05') < 1e6, '门路 lowers the thresholds, never to zero');
   st().cash = 1e7; G.repay(1e9); G.branch();
@@ -483,10 +483,11 @@ console.log('ok luck percentile');
   assert.ok(by(1 / 6).length >= 3 && by(1).length >= by(1 / 6).length + 5 && by(10).length >= by(1).length + 5 && by(10).length < A.ACH.length,
     `achievement pacing ${by(1 / 6).length} / ${by(1).length} / ${by(10).length}`);
   console.log(`ok achievement pacing: ${by(1 / 6).length} / ${by(1).length} / ${by(10).length} of ${A.ACH.length} by 10 min / 1 h / 10 h, rewards $${paid(1 / 6)} / $${paid(1)} / $${paid(10)}`);
-  // 客流上限: every master set, 人气 maxed and all sets out would be ×7 walk-ins; late traffic stays under the capped ceiling
-  // (with however many 店面扩建 levels were bought) yet keeps rising, and income keeps growing without running away.
-  const G0 = createGame({ storage: { getItem: () => null, setItem() {} } }), cap = lv => G0.ARRIVAL * 60 * (G0.CROWD_KNEE + G0.CROWD_ROOM + G0.ROOM_STEP * lv);
-  assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 250 * G0.ARRIVAL, `late walk-ins are capped (${chase[20].rate}/min)`);
+  // 客流上限: every master set and all sets out would be ×8 word of mouth, times 人气 (up to ×2, outside the cap); late traffic stays
+  // under the capped ceiling (with however many 店面扩建 levels were bought) yet keeps rising, and income keeps growing without running away.
+  // (Was < 125 walk-ins/min before 人气 moved outside the cap; a collector at 20 h now has about 180.)
+  const G0 = createGame({ storage: { getItem: () => null, setItem() {} } }), cap = lv => G0.ARRIVAL * 60 * (1 + G0.SKILLS.crowd.step * G0.SKILLS.crowd.max) * (G0.CROWD_KNEE + G0.CROWD_ROOM + G0.ROOM_STEP * lv);
+  assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 400 * G0.ARRIVAL, `late walk-ins are capped (${chase[20].rate}/min)`);
   assert.ok(chase[20].rate > chase[10].rate && chase[20].rate > plain[20].rate * 1.5, `still growing late (${chase[10].rate} → ${chase[20].rate}/min)`);
   assert.ok(chase[20].perMin > chase[10].perMin && chase[20].perMin < chase[10].perMin * 2.5, `income grows, not a money machine ($${chase[10].perMin} → $${chase[20].perMin}/min)`);
   // 开分店: a player who branches as soon as the debt is paid pays off the second shop's bigger debt in about the same time (名气 perks
@@ -499,7 +500,7 @@ console.log('ok luck percentile');
 }
 
 // 客流上限 and 店面扩建: below the knee nothing changes; above it the multiplier bends toward knee + room and never passes the
-// raw product; each 扩建 level pays back slower than the one before (cost ×1.6, fewer extra walk-ins), so it is a sink, not a printer.
+// raw product; each 扩建 level pays back slower than the one before (cost ×1.55, fewer extra walk-ins), so it is a sink, not a printer.
 {
   const G = createGame({ storage: { getItem: () => null, setItem() {} } }), K = G.CROWD_KNEE, n = G.UPGRADES.expand.costs.length;
   for (const raw of [1, 1.3, K]) assert.equal(G.crowdMult(raw), raw, `under ×${K} the bonus counts in full`);
@@ -513,9 +514,10 @@ console.log('ok luck percentile');
   for (let lv = 0; lv < n; lv++) {
     const before = G2.rate(), cost = G2.upgradeCost('expand'); assert.ok(G2.upgrade('expand'));
     const p = cost / (G2.rate() - before); assert.ok(G2.rate() > before && p > pay, `扩建 Lv${lv + 1}: $${cost} per extra walk-in/s, slower than the last`); pay = p;
-    assert.ok(G2.rate() < G2.ARRIVAL * G2.crowdCap() && G2.rate() < G2.ARRIVAL * G2.crowdRaw());
+    const pop = G2.ARRIVAL * (1 + G2.SKILLS.crowd.step * G2.skill('crowd')); // 人气, outside the cap
+    assert.ok(G2.rate() < pop * G2.crowdCap() && G2.rate() < pop * G2.crowdRaw());
   }
-  console.log(`ok 客流上限: all maxed ×${G2.crowdRaw().toFixed(2)} raw → ×${(G2.rate() / G2.ARRIVAL).toFixed(2)} with ${n} 扩建 levels (×${G2.crowdMult(G2.crowdRaw()).toFixed(2)})`);
+  console.log(`ok 客流上限: all collected ×${G2.crowdRaw().toFixed(2)} raw → ×${G2.crowdMult(G2.crowdRaw()).toFixed(2)} with ${n} 扩建 levels, ×${(G2.rate() / G2.ARRIVAL).toFixed(2)} walk-ins with 人气 maxed`);
 }
 // The 顾客 panel and the shelf wall count the same 10 minutes: with more misses than the old cap (60 a set),
 // every opener who found their set missing is both in G.missed and in state.recent, and nothing older than the window is kept.
@@ -688,7 +690,8 @@ console.log('ok luck percentile');
 }
 
 // 成长: G.peek shows what one more level does and leaves the save exactly as it was (货架 must not pad a shelf in).
-// Past the 客流上限 a 人气 level moves walk-ins by far less than its nominal +10%, which is why the pockets show walk-ins.
+// 人气 sits outside the 客流上限: on a save with every set collected (word of mouth far past the cap) a level still adds what it
+// says (+10 points of base, +6% at Lv6), and 扩建 moves that capped shop too.
 {
   const P = createGame({ now: () => 1_700_000_000_000, random: S.rng(9), storage: { getItem: () => null, setItem() {} } });
   P.state.skills.crowd = 6; P.state.dexSeen = Object.fromEntries(PTCG_SETS.flatMap(s => PTCG_DATA[s.id].cards.map(c => [`${s.id}|${c.n}`, 1])));
@@ -697,9 +700,9 @@ console.log('ok luck percentile');
   assert.equal(JSON.stringify(P.state), before, 'peek leaves no trace');
   assert.equal(P.peek('racks', P.racks), P.racks() + 1); assert.ok(P.peek('supplier', P.wholesaleRate) < P.wholesaleRate());
   const gain = P.peek('crowd', P.rate) / P.rate() - 1;
-  assert.ok(P.crowdRaw() > P.crowdCap() && gain > 0 && gain < 0.03, `人气 past the cap: +${(gain * 100).toFixed(1)}% walk-ins, not +10%`);
-  assert.ok(P.peek('expand', P.rate) / P.rate() - 1 > gain, '扩建 is the level that moves a capped shop');
-  console.log(`ok 成长 peek: no trace in the save; past the cap 人气 +10% = +${(gain * 100).toFixed(1)}% walk-ins`);
+  assert.ok(P.crowdRaw() > P.crowdCap() && Math.abs(gain - 0.1 / 1.6) < 1e-9, `人气 past the cap: +${(gain * 100).toFixed(1)}% walk-ins, its full step`);
+  const wide = P.peek('expand', P.rate) / P.rate() - 1; assert.ok(wide > 0.03, `扩建 moves a capped shop (+${(wide * 100).toFixed(1)}%)`);
+  console.log(`ok 成长 peek: no trace in the save; past the cap 人气 Lv7 = +${(gain * 100).toFixed(1)}% walk-ins, 扩建 Lv1 = +${(wide * 100).toFixed(1)}%`);
 }
 
 // 展示柜标价 + 补满柜位: one tag for the case (listings, 补满, 带徒弟 all use it), 补满 fills the free slots from singles hits only.
@@ -722,4 +725,18 @@ console.log('ok luck percentile');
   C.state.up.clerk = 1; C.state.skills.apprentice = 1; C.state.shown.length = 0; T += 1000; C.tick();
   assert.equal(C.state.shown.length, C.slots()); assert.ok(C.state.shown.every(c => c.pct === 1.35), '带徒弟 lists at the case tag');
   console.log(`ok 展示柜: one tag (default ${Math.round(C.CASE_PCT * 100)}%) for 上柜 / 补满柜位 / 带徒弟, 补满 fills free slots with hits, priciest first`);
+}
+// 成长节奏 (GAMEPLAY.md §12.1): the pure manager always has something to buy soon — the longest wait between two buys stays
+// under 45 minutes through the first 8 h (it was 52 at the heaviest weeks) and about an hour at most after (was 61–111; the
+// 8–10 h stretch includes paying back the one loan of the last weeks before buying again);
+// 店面扩建 is within reach of a shop that never opens a pack (it was never bought: $24k, and 人气 inside the cap never lifted
+// the word of mouth past the knee), and every 人气 level adds at least +5% walk-ins, capped shop or not.
+{
+  const { pace } = await import('../scripts/autoplay.mjs');
+  const p = pace({ openShare: 0, pct: 0.95, reserve: 1, repay: true }, { hours: 16 }), wait = r => r['longest wait (min)'];
+  assert.ok(p.slice(0, 4).every(r => wait(r) <= 45) && p.slice(4).every(r => wait(r) <= 65), `longest waits ${p.map(wait).join(' / ')} min`);
+  assert.ok(p.slice(0, 6).some(r => /expand1/.test(r.bought)), '扩建 bought by 12 h');
+  const G = createGame({ storage: null }); G.state.dexSeen = Object.fromEntries(PTCG_SETS.flatMap(s => PTCG_DATA[s.id].cards.map(c => [`${s.id}|${c.n}`, 1])));
+  for (let lv = 0; lv < G.SKILLS.crowd.max; lv++, G.state.skills.crowd = lv) assert.ok(G.peek('crowd', G.rate) / G.rate() > 1.05, `人气 Lv${lv + 1}`);
+  console.log(`ok 成长节奏: longest wait between buys per 2 h ${p.map(wait).join(' / ')} min over 16 h; 人气 ≥ +5% walk-ins every level`);
 }

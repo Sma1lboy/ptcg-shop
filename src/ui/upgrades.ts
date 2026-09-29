@@ -14,11 +14,11 @@ const UFX: Record<string, (lv: number) => string> = {
   depth: lv => `每架 ${G.DEPTH_BASE + G.DEPTH_STEP * lv} 包`,
   case: lv => `${G.CASE_BASE + G.CASE_STEP * lv} 个柜位`,
   supplier: lv => `进货打 ${+((G.WHOLESALE - G.WHOLESALE_STEP * lv) * 10).toFixed(1)} 折`,
-  expand: lv => `客流上限 ×${G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv}`, // the tile shows walk-ins instead (fxOf); this is the 目标 line's words when blocked
+  expand: lv => `口碑上限 ×${+(G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv).toFixed(2)}`, // the tile shows walk-ins instead (fxOf); this is the 目标 line's words when blocked
   clerk: lv => ['没有店员', '巡货架，补到半满', '补满，卖散卡'][lv],
 };
 
-// 人气 and 扩建 act through the 客流上限: past it, +10% 人气 can be +1% walk-ins. Their pockets show the walk-ins a level really
+// 人气 and 扩建 both move walk-ins (人气 outside the 客流上限, 扩建 by lifting it): their pockets show the walk-ins a level really
 // gives (G.peek), the others their own words, which are exact.
 const perMin = (r: number) => `进店 ${(r * 60).toFixed(1)} 人/分`;
 export function fxOf(k: string, lv: number, words: (lv: number) => string): [string, string] {
@@ -104,7 +104,7 @@ export function renderUpgrades() {
       </div>` : html`<p class="gh-goal gg-k">都升满了。</p>`}
       <dl class="gh-now">
         <div><dt>进店</dt><dd>${(G.rate() * 60).toFixed(1)} 人/分</dd></div>
-        <div><dt>客流加成</dt><dd>×${G.crowdMult().toFixed(2)}${G.crowdRaw() > G.CROWD_KNEE ? `（叠加 ×${G.crowdRaw().toFixed(2)}，上限 ×${G.crowdCap()}）` : ''}</dd></div>
+        <div><dt>口碑客流</dt><dd>×${G.crowdMult().toFixed(2)}${G.crowdRaw() > G.CROWD_KNEE ? `（叠加 ×${G.crowdRaw().toFixed(2)}，上限 ×${+G.crowdCap().toFixed(2)}）` : ''}</dd></div>
         <div><dt>进货价</dt><dd>市价打 ${+(G.wholesaleRate() * 10).toFixed(1)} 折</dd></div>
         <div><dt>货架</dt><dd>${G.racks()} × ${G.depth()} 包</dd></div>
         <div><dt>展示柜</dt><dd>${G.slots()} 格</dd></div>
@@ -117,7 +117,7 @@ export function renderUpgrades() {
   renderBranch();
   render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
     <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: G.canUpgrade(k) ? fxOf(k, l, UFX[k]) : [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
-      blocked: G.canUpgrade(k) ? '' : `客流加成到 ×${G.CROWD_KNEE} 才能扩建（现在 ×${G.crowdRaw().toFixed(2)}）· 首级 ${money(G.upgradeCost(k)!)}` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
+      blocked: G.canUpgrade(k) ? '' : `口碑客流（图鉴 × 新系列）到 ×${G.CROWD_KNEE} 才能扩建（现在 ×${G.crowdRaw().toFixed(2)}）· 首级 ${money(G.upgradeCost(k)!)}` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
 }
 
 // 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
