@@ -271,3 +271,16 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 #share-pop img { display: block; width: 100%; height: auto; border-radius: 8px; }
 #share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 #share-pop .btns :is(button, a) { border: 1px solid var(--line); background: var(--bg); color: var(--ink); border-radius: 6px; padding: 6px 12px; font-size: 13px; text-decoration: none; cursor: pointer; }
+
+/* pack-opening feel: fast bulk cards, card slides off, drag-to-rip pack, swipe (ui.js) */
+.stage { touch-action: pan-y; }
+.stage .card:not(.up) { touch-action: pan-y; }
+.stage .slot.quick { animation-duration: .12s; }
+.stage .slot.away { position: absolute; inset: 0; z-index: 2; pointer-events: none; animation: away .26s cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes away { to { transform: translate(-75%, 6%) rotate(-12deg); opacity: 0; } }
+.pack { touch-action: pan-y; cursor: grab; user-select: none; }
+.pack.dragging { transition: none; cursor: grabbing; }
+.pack.dragging .pack-crimp:not(.bottom) { transition: none; }
+.pack:not(.torn) .pack-crimp:not(.bottom) { transform: translate(calc(var(--tear, 0) * 90px), calc(var(--tear, 0) * -22px)) rotate(calc(var(--tear, 0) * 14deg)); transform-origin: 0 100%; }
+.pack-hint::after { content: "，或向右拖动撕开"; }
+@media (prefers-reduced-motion: reduce) { .stage .slot.away { display: none; } }

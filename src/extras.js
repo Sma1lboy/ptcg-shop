@@ -38,7 +38,7 @@
     if (!img) {
       roundRect(x, px, py, w, h, w * .046); x.fillStyle = 'rgba(255,255,255,.06)'; x.fill(); x.strokeStyle = css('--mat-gold'); x.lineWidth = 3; x.stroke();
       x.fillStyle = css('--mat-muted'); x.textAlign = 'center'; x.font = `${Math.round(w / 12)}px ${css('--font-body')}`;
-      (name ? nameLines(name, 12) : []).forEach((l, i) => x.fillText(l, px + w / 2, py + h / 2 + i * w / 10));
+      (name ? nameLines(name, 18) : []).forEach((l, i) => x.fillText(l, px + w / 2, py + h / 2 + i * w / 10));
       return h;
     }
     x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, w * .046); x.fillStyle = '#000'; x.fill(); x.restore();

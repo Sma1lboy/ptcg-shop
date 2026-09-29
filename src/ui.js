@@ -150,19 +150,32 @@
 
   function release() { if (hold) { hold = false; renderAll(); } }
 
+  // Flip time by rarity tier: bulk cards fly past, chase cards slow down. The last (rare) slot is always at least 1.2 s so a miss and a hit look the same until the flip lands.
+  const FLIP_MS = [140, 380, 600, 900, 1300, 1300];
+  // The card just seen slides off to the left as the next one comes up, like moving the top card to the back of the stack.
+  function slideAway(stage) {
+    const old = stage.firstElementChild; if (!old || reduced()) return;
+    const g = old.cloneNode(true); g.classList.add('away'); g.querySelectorAll('[data-act]').forEach(n => n.removeAttribute('data-act'));
+    g.addEventListener('animationend', () => g.remove()); stage.append(g);
+  }
+
   // One tap = next card slides out of the pack and flips. The last card (the rare slot) flips slowly for every pack, hit or not.
   function advance() {
     if (mat.mode !== 'cards' || mat.busy || mat.up.size >= mat.cards.length) return false;
-    const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i;
+    const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i, bulk = rar(mat.cards[i]).t === 0;
     mat.busy = true;
-    if (fresh) { mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild.classList.add('deal'); }
+    if (fresh) {
+      slideAway(stage);
+      mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild.classList.add('deal');
+      if (bulk) stage.firstElementChild.classList.add('quick');
+    }
     const btn = stage.querySelector('.card');
-    ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? 240 : 0));
+    ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? (bulk ? 60 : 240) : 0));
     return true;
   }
 
   function reveal(tok, i, btn) {
-    const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : last ? 1200 : 460;
+    const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : Math.max(FLIP_MS[t], last ? 1200 : 0);
     btn.style.setProperty('--flip', ms + 'ms');
     btn.style.setProperty('--ease', last ? 'cubic-bezier(.55, 0, .25, 1)' : 'cubic-bezier(.2, .7, .2, 1)');
     tok.up.add(i); btn.classList.add('up'); btn.setAttribute('aria-label', c.name);
@@ -324,6 +337,35 @@
         break;
     }
   });
+  // Swipe the card on the stage sideways to send it to the back (same as a tap). Taps right after a swipe are ignored.
+  let swipe = null, swiped = 0;
+  document.addEventListener('pointerdown', e => { swipe = e.target.closest('.stage .card') ? { x: e.clientX, y: e.clientY } : null; });
+  document.addEventListener('pointerup', e => {
+    if (!swipe) return; const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y; swipe = null;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > 2 * Math.abs(dy)) { swiped = Date.now(); PTCG_FX.unlock(); advance(); }
+  });
+  document.addEventListener('click', e => { if (Date.now() - swiped < 120) e.stopPropagation(); }, true);
+
+  // Drag the top of the sealed pack to the right to rip it; a plain tap or Space still works.
+  const TEAR_PX = 150; let rip = null, ripMoved = false;
+  document.addEventListener('pointerdown', e => {
+    const p = e.target.closest('.pack'); if (!p || p.classList.contains('torn')) return;
+    rip = { p, x: e.clientX }; ripMoved = false; p.setPointerCapture?.(e.pointerId); p.classList.add('dragging');
+  });
+  document.addEventListener('pointermove', e => {
+    if (!rip) return; const d = Math.max(0, e.clientX - rip.x);
+    if (d > 6) ripMoved = true;
+    rip.p.style.setProperty('--tear', Math.min(1, d / TEAR_PX).toFixed(2));
+  });
+  document.addEventListener('pointerup', e => {
+    if (!rip) return; const { p } = rip, done = e.clientX - rip.x >= TEAR_PX * .7; rip = null;
+    p.classList.remove('dragging'); if (!done) { p.style.removeProperty('--tear'); return; }
+    p.style.removeProperty('--tear'); ripMoved = true; ripGo = true; p.click();
+  });
+  // A drag ends in a native click on the pack; swallow it (ripGo lets our own click through once).
+  let ripGo = false;
+  document.addEventListener('click', e => { if (!ripMoved || !e.target.closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
+
   document.addEventListener('keydown', e => {
     if (e.code !== 'Space' || e.target.closest('input, textarea')) return;
     PTCG_FX.unlock();
