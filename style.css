@@ -31,6 +31,11 @@
   --paper-ink: #14203A; --paper-muted: #58627A; --paper-gain: #C8261C;
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
   --fx-gold: #F6A533;
+  --stock-rim: #C9CED6;   /* blank card stock (DESIGN.md「卡面」): the silver border, the paper, the print, the cut edge. A printed object, same in */
+  --stock: #E9ECF0;       /* both themes; the card shows it while its scan loads, and with its name when the scan can't load */
+  --stock-ink: #1F2833; --stock-edge: rgba(0, 0, 0, .18);
+  --ace: #C4166A;         /* the pink star printed on ACE SPEC cards. Cards only, like silver and gold */
+  --mat-ace: #FF78B6;
   --back-1: #1D3F86;      /* card back */
   --back-2: #0E214D;
   --back-ring: #E9ECF2;
@@ -64,14 +69,14 @@
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #172443; --panel: #1F2D50; --ink: #EEF1F7; --muted: #A3AEC6;
   --line: rgba(238, 241, 247, .12); --line-strong: rgba(238, 241, 247, .32); --hover: rgba(238, 241, 247, .06);
-  --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B;
+  --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B; --ace: #FF78B6;
   --gain: #FF6E5E; --loss: #A9BBDD; --mat: #060B17; --paper: #E6E9EF; color-scheme: dark;
   --lamp: #FFE8CC; --lamp-fill: #AEBACC; --lamp-rim: #B9CBEB; /* 3D mat by night: warmer lamp, dimmer room */
 } }
 :root[data-theme="dark"] {
   --bg: #172443; --panel: #1F2D50; --ink: #EEF1F7; --muted: #A3AEC6;
   --line: rgba(238, 241, 247, .12); --line-strong: rgba(238, 241, 247, .32); --hover: rgba(238, 241, 247, .06);
-  --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B;
+  --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B; --ace: #FF78B6;
   --gain: #FF6E5E; --loss: #A9BBDD; --mat: #060B17; --paper: #E6E9EF; color-scheme: dark;
   --lamp: #FFE8CC; --lamp-fill: #AEBACC; --lamp-rim: #B9CBEB; /* 3D mat by night: warmer lamp, dimmer room */
 }
@@ -286,30 +291,52 @@ button:disabled { cursor: not-allowed; }
 .mat-head .ghost { margin-left: auto; }
 .spread { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
 .slot { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.slot figcaption { font-size: var(--fs-cap); line-height: 1.3; color: var(--mat-muted); min-height: 2.6em; }
-.slot figcaption b { display: block; font: 600 16px var(--font-tag); color: var(--mat-ink); }
-.glyph { font-size: var(--fs-cap); margin-right: 3px; letter-spacing: -.05em; }
 
-/* cards: 63×88 mm proportion, flip in 3D */
+/* 卡面 (src/ui/card.ts, DESIGN.md「卡面」): one card everywhere. 63×88 with the scan's own 3.2 mm corner; the scan fills the box (it is
+   1.5% wider than 63:88), as the 3D table maps it. Blank card stock while the scan loads; stock with the card's name if it can't. */
+.cf { position: relative; display: block; width: 100%; aspect-ratio: 63 / 88; border-radius: 5.08% / 3.64%; overflow: hidden;
+  background: linear-gradient(var(--stock), var(--stock)) 50% / 91.4% 93.8% no-repeat var(--stock-rim); box-shadow: 0 0 0 1px var(--stock-edge); }
+.cf-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; display: block; }
+.cf-miss, .cf-failed .cf-art { display: none; }
+.cf-failed:is(.cf-show, .cf-big) .cf-miss { position: absolute; inset: 0; display: grid; place-content: center; gap: 4px; padding: 12%; text-align: center; overflow-wrap: anywhere;
+  color: var(--stock-ink); font: 600 var(--fs-cap)/1.3 var(--font-body); }
+.cf-big .cf-miss { font-size: var(--fs-h); }
+.cf-miss small { font-weight: 400; opacity: .7; }
+/* foil: light off the printed foil, never a colour over the art. Only where the real card is foil (FOIL in card.ts); the band sits where
+   the shop lamp puts it and follows the pointer on the card in hand (fx.ts sets --mx/--my). Art box = x 7.5–92.5%, y 9.7–47.5%, as in 3D. */
+.cf-foil { position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen; opacity: .7;
+  background: linear-gradient(115deg, transparent 42%, rgba(255, 255, 255, .3) 46.5%, #fff 50%, rgba(255, 255, 255, .3) 53.5%, transparent 58%) var(--mx, 70%) var(--my, 70%) / 200% 200% no-repeat; }
+.f-rev > .cf-foil { mask: linear-gradient(#000 0 0) 50% 15.6% / 85% 37.8% no-repeat, linear-gradient(#000 0 0); mask-composite: exclude, add; }
+.f-holo > .cf-foil { mask: linear-gradient(#000 0 0) 50% 15.6% / 85% 37.8% no-repeat; }
+:is(.f-rev, .f-ball) > .cf-foil { background-position: var(--mx, 45%) var(--my, 45%); } /* resting glint on the text box, where reverse foil shows */
+.f-etch > .cf-foil { opacity: .8; }
+.f-etch.cf-big > .cf-foil { mask: repeating-linear-gradient(62deg, #000 0 1px, rgba(0, 0, 0, .25) 1px 2.5px); opacity: .9; } /* etched: in hand, the glint breaks on the texture */
+.f-ball > .cf-foil { mask: radial-gradient(circle, transparent 0 22%, #000 26% 36%, transparent 40%) 0 0 / 12.5% 8.9%, linear-gradient(#000 0 0) 50% 15.6% / 85% 37.8% no-repeat, linear-gradient(#000 0 0);
+  mask-composite: intersect, exclude, add; opacity: .75; }
+.f-cosmos > .cf-foil { mask: radial-gradient(circle, #000 0 18%, transparent 24%) 0 0 / 9% 6.4%, radial-gradient(circle, #000 0 10%, transparent 16%) 4% 2% / 6% 4.3%; mask-composite: add; opacity: .8; }
+/* on the mat a card lies on rubber: a contact shadow. UR and up throw the lamp's light back onto the mat (no ring: it would read as a border) */
+.mat .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 1px 1px rgba(0, 0, 0, .45), 0 6px 14px rgba(0, 0, 0, .3); }
+.mat .card.t3.up .face .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 1px 1px rgba(0, 0, 0, .45), 0 0 24px 3px color-mix(in oklab, var(--fx-silver) 40%, transparent); }
+.mat .card:is(.t4, .t5).up .face .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 1px 1px rgba(0, 0, 0, .45), 0 0 26px 4px var(--gold-glow); }
+/* rarity mark: the symbol printed after the card number. Black on the card = ink here; the gap stroke is the surface colour */
+.mk { display: inline-block; vertical-align: -.14em; margin-right: .3em; fill: currentColor; overflow: visible; }
+.mk path { stroke: var(--mk-gap, var(--bg)); stroke-width: 1.3; stroke-linejoin: round; paint-order: stroke; }
+.mk-ink { color: var(--mk-ink, var(--ink)); } .mk-silver { color: var(--mk-silver, var(--silver)); } .mk-gold { color: var(--mk-gold, var(--gold)); } .mk-ace { color: var(--mk-ace, var(--ace)); }
+.mk-mhr path { stroke: var(--mk-ink, var(--ink)); stroke-width: 1; paint-order: normal; }
+.mat { --mk-ink: var(--mat-ink); --mk-silver: var(--fx-silver); --mk-gold: var(--mat-gold); --mk-ace: var(--mat-ace); --mk-gap: var(--mat); }
+/* under the card, from its left edge: mark (+ rarity name at big size), then the market price in label numerals. Never label-yellow: that is the player's price */
+.cf-cap { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; font-size: var(--fs-cap); line-height: 1.3; color: var(--muted); }
+.cf-cap .mk { margin-right: 0; }
+.cf-price { font: 600 16px/1.2 var(--font-tag); color: var(--ink); }
+.mat .cf-cap { color: var(--mat-muted); } .mat .cf-price { color: var(--mat-ink); }
+
+/* the flip on the mat: back and face are two .cf, back to back */
 .card { display: block; width: 100%; max-width: 100%; aspect-ratio: 63 / 88; padding: 0; border: 0; background: none; perspective: 900px; }
 .card-in { position: relative; display: block; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .5s cubic-bezier(.2, .7, .2, 1); }
 .card.up .card-in { transform: rotateY(180deg); }
-.back, .face { position: absolute; inset: 0; border-radius: 4.6% / 3.3%; overflow: hidden; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
-.back { background: radial-gradient(circle at 50% 50%, var(--back-ring) 0 13%, var(--back-2) 13.5% 17%, transparent 17.5%), radial-gradient(circle at 30% 20%, var(--back-1), var(--back-2) 70%); border: 4px solid var(--back-2); }
+.back, .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
 .card:not(.up):hover .card-in { transform: translateY(-4px); }
-.face { transform: rotateY(180deg); background: var(--foil-3); }
-.face img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.energy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; background: var(--foil-2); color: var(--back-2); font-size: var(--fs-cap); }
-.energy svg { width: 62%; margin: 0 auto; }
-/* foil sheen on reverse holos and hits; SIR/HR get a gold edge */
-.t1 .face::after, .t2 .face::after, .t3 .face::after, .t4 .face::after, .t5 .face::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .28;
-  background: linear-gradient(115deg, transparent 20%, #ff8ad8 35%, #8af0ff 50%, #fff58a 65%, transparent 80%); background-size: 250% 250%;
-}
-.t4.up .face, .t5.up .face { box-shadow: 0 0 0 2px var(--gold), 0 0 26px 4px var(--gold-glow); }
-.t3.up .face { box-shadow: 0 0 0 2px var(--silver); }
-.t5.up .face::after { opacity: .45; animation: sheen 3s linear infinite; }
-@keyframes sheen { from { background-position: 0% 0%; } to { background-position: 250% 250%; } }
+.face { transform: rotateY(180deg); }
 
 /* sealed pack */
 .mat-pack { margin: auto; }
@@ -376,15 +403,13 @@ button:disabled { cursor: not-allowed; }
 
 /* binder + singles */
 .binder { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.binder li { display: flex; flex-direction: column; gap: 4px; font: 600 15px var(--font-tag); }
-.binder img { width: 100%; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 4.6% / 3.3%; background: var(--line); }
+.binder li { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .bulk { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
 .singles { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
-.singles li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.singles li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
 .singles small { display: block; color: var(--muted); font-size: var(--fs-cap); }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
-.glyph.t3 { color: var(--silver); } .glyph.t4, .glyph.t5 { color: var(--gold); }
 
 /* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
 .notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05);
@@ -411,7 +436,7 @@ button:disabled { cursor: not-allowed; }
 #casepanel .singles { max-height: 220px; }
 #casepanel p { margin: 0 0 6px; font-size: 12px; }
 .trophy { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; }
-.trophy img { width: 48px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 4.6% / 3.3%; background: var(--line); }
+.trophy .cf { width: 48px; }
 .trophy small { display: block; color: var(--muted); font-size: var(--fs-cap); }
 .trophy > .muted { grid-column: 1 / -1; font-size: 12px; }
 .s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
@@ -431,13 +456,11 @@ button:disabled { cursor: not-allowed; }
 .stage { position: relative; width: min(230px, 62vw, 30vh); perspective: 1000px; }
 .stage .slot { gap: 10px; }
 .stage .slot.deal { animation: deal .26s ease-out; }
-.stage figcaption { font-size: 13px; text-align: center; min-height: 2.8em; }
-.stage .card { position: relative; z-index: 1; cursor: pointer; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .12s; box-shadow: 0 14px 30px rgba(0, 0, 0, .4); border-radius: 4.6% / 3.3%; }
-.stage :is(.t1, .t2, .t3, .t4, .t5).up .face::after { animation: none; background-position: var(--mx, 50%) var(--my, 50%); }
-.stage :is(.t3, .t4, .t5).up .face::after { opacity: .5; }
+.stage .cf-cap { font-size: 13px; } .stage .cf-price { font-size: 20px; }
+.stage .card { position: relative; z-index: 1; cursor: pointer; transform: rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform .12s; }
+.mat .stage .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 14px 30px rgba(0, 0, 0, .4); } /* in hand, off the mat */
 .tray { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; width: 100%; }
 .tray .slot { gap: 3px; }
-.tray figcaption { font-size: 10px; min-height: 2.6em; }
 .tray .card:not(.up) { opacity: .55; cursor: default; }
 .tray .card.up { cursor: pointer; }
 .snd { margin-left: auto; }
@@ -519,7 +542,14 @@ button:disabled { cursor: not-allowed; }
   .mat { padding: 14px; }
   .stage { width: min(260px, 66vw); }
   .tray { grid-template-columns: repeat(auto-fill, minmax(52px, 1fr)); gap: 6px; }
-  .tray figcaption { font-size: 9px; }
+  /* single-card rows: the card and its name on top, the buttons on a second line, so the name isn't squeezed to one word a line */
+  .singles li { grid-template-columns: 36px minmax(0, 1fr) auto; row-gap: 6px; }
+  .singles li > .cf { grid-row: span 2; align-self: start; }
+  .singles .s-btns { grid-column: 2 / -1; justify-content: flex-start; }
+  #casepanel .singles li { grid-template-columns: 36px auto auto minmax(0, 1fr); }
+  #casepanel .singles .s-name { grid-column: 2 / -1; }
+  #casepanel .singles .pricer { margin-left: 0; }
+  #casepanel .singles li > button { justify-self: end; }
   .g-grade b { font-size: 36px; }
   .g-grade b.long { font-size: 28px; }
   .g-bar { width: 64px; }
@@ -532,7 +562,7 @@ button:disabled { cursor: not-allowed; }
 .pricer b { min-width: 3em; text-align: center; font-weight: 600; }
 .page .pricer button { width: 34px; padding: 0; border-image-width: 9px; }
 .margin { font-size: var(--fs-cap); } .margin.loss { font-weight: 700; } /* priced under wholesale: the one loss the player should act on */
-#casepanel .singles li { grid-template-columns: 2.2em minmax(0, 1fr) auto auto auto; }
+#casepanel .singles li { grid-template-columns: 36px minmax(0, 1fr) auto auto auto; }
 .cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
 .cust-bar span { border-radius: 2px; min-width: 0; }
 .c-sold { background: var(--gain); } .c-pricey { background: color-mix(in oklab, var(--ink) 50%, transparent); } .c-none { background: var(--line); }
@@ -593,7 +623,7 @@ button:disabled { cursor: not-allowed; }
 .s3-cap:empty { display: none; }
 .s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
 .s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 17px var(--font-tag); color: var(--mat-ink); }
-.s3-cap.t3 .glyph { color: var(--fx-silver); } .s3-cap:is(.t4, .t5) .glyph, .s3-cap:is(.t4, .t5) b:not(.s3-name) { color: var(--mat-gold); }
+.s3-cap:is(.t4, .t5) b:not(.s3-name) { color: var(--mat-gold); }
 .s3-tags { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
 .s3-tag { position: absolute; left: 0; top: 0; font: 600 14px var(--font-tag); color: var(--mat-ink); background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
 .s3-tag:is(.t2, .t3, .t4, .t5) { transform-origin: 50% 0; } /* market prices, not the player's: no sticker yellow; rarity rings for UR and up */

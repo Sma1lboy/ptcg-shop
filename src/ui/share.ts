@@ -2,6 +2,7 @@
 import { card } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import { G, $, money } from './common.ts';
+import { back } from './card.ts';
 import type { ShareSpec } from './mat.ts';
 
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -33,16 +34,20 @@ async function loadArt(c: { set: string; n: string }) {
   return null;
 }
 const roundRect = (x: CanvasRenderingContext2D, px: number, y: number, w: number, h: number, r: number) => { x.beginPath(); x.roundRect(px, y, w, h, r); };
-function drawArt(x: CanvasRenderingContext2D, img: HTMLImageElement | null, px: number, py: number, w: number, name?: string) { // card art with a soft shadow; a plain frame with the card name when the image can't load (offline)
-  const h = img ? w * img.height / img.width : w * 1.4;
-  if (!img) {
-    roundRect(x, px, py, w, h, w * .046); x.fillStyle = 'rgba(255,255,255,.06)'; x.fill(); x.strokeStyle = css('--mat-line'); x.lineWidth = 3; x.stroke();
-    x.fillStyle = css('--mat-muted'); x.textAlign = 'center'; x.font = `${Math.round(w / 12)}px ${css('--font-body')}`;
-    (name ? nameLines(name, 18) : []).forEach((l, i) => x.fillText(l, px + w / 2, py + h / 2 + i * w / 10));
-    return h;
+// The card as card.ts draws it on the page (DESIGN.md「卡面」): the scan filling a 63×88 box with its 3.2 mm corner, a soft shadow;
+// blank card stock with the name when the scan can't load (offline). The face-down card is card.ts's back, drawn the same way.
+function drawArt(x: CanvasRenderingContext2D, img: HTMLImageElement | null, px: number, py: number, w: number, name?: string) {
+  const h = w * 88 / 63, r = w * .0508;
+  x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, r); x.fillStyle = css('--stock-rim'); x.fill(); x.restore();
+  x.save(); roundRect(x, px, py, w, h, r); x.clip();
+  if (img) x.drawImage(img, px, py, w, h);
+  else {
+    x.fillStyle = css('--stock'); x.fillRect(px + w * .043, py + h * .031, w * .914, h * .938);
+    x.fillStyle = css('--stock-ink'); x.textAlign = 'center'; x.font = `600 ${Math.round(w / 12)}px ${css('--font-body')}`;
+    const ls = name ? nameLines(name, 18) : []; ls.forEach((l, i) => x.fillText(l, px + w / 2, py + h * .45 + i * w / 10));
+    x.globalAlpha = .7; x.font = `${Math.round(w / 18)}px ${css('--font-body')}`; x.fillText('卡图没加载出来', px + w / 2, py + h * .45 + ls.length * w / 10 + w / 16);
   }
-  x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, w * .046); x.fillStyle = '#000'; x.fill(); x.restore();
-  x.save(); roundRect(x, px, py, w, h, w * .046); x.clip(); x.drawImage(img, px, py, w, h); x.restore();
+  x.restore();
   return h;
 }
 
@@ -58,13 +63,6 @@ function fit(x: CanvasRenderingContext2D, s: string, w: number) {
   if (x.measureText(s).width <= w) return s;
   let n = s.length; while (n > 1 && x.measureText(s.slice(0, n) + '…').width > w) n--;
   return s.slice(0, n) + '…';
-}
-function drawBack(x: CanvasRenderingContext2D, px: number, py: number, w: number) { // the card face down, as .back in style.css
-  const h = w * 88 / 63, g = x.createRadialGradient(px + w * .3, py + h * .2, 0, px + w * .3, py + h * .2, h * .8);
-  g.addColorStop(0, css('--back-1')); g.addColorStop(1, css('--back-2'));
-  roundRect(x, px, py, w, h, w * .046); x.fillStyle = g; x.fill();
-  x.beginPath(); x.arc(px + w / 2, py + h / 2, w * .17, 0, 7); x.fillStyle = css('--back-2'); x.fill();
-  x.beginPath(); x.arc(px + w / 2, py + h / 2, w * .13, 0, 7); x.fillStyle = css('--back-ring'); x.fill();
 }
 interface Label { k: string; what: string; short?: string; best?: string; price?: string; cert?: string; bars?: number[]; grade: string; gradeF: string; sub: string }
 // Clear acrylic case: body and shadow, the seam where the two halves meet, the label with its inset navy frame, the card in its well,
@@ -99,7 +97,7 @@ function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, a
   // card in its well
   const cx = (W - cw) / 2;
   roundRect(x, cx - 14, cy - 14, cw + 28, ch + 28, 14); x.fillStyle = 'rgba(0,0,0,.3)'; x.fill(); x.strokeStyle = 'rgba(255,255,255,.1)'; x.lineWidth = 2; x.stroke();
-  if (art || name) drawArt(x, art, cx, cy, cw, name); else drawBack(x, cx, cy, cw);
+  drawArt(x, art, cx, cy, cw, name);
   // glare
   x.save(); body(); x.clip();
   const g = x.createLinearGradient(sx, top, sx + sw * .9, top + sh * .6);
@@ -118,7 +116,7 @@ function mat(x: CanvasRenderingContext2D, W: number, H: number) {
 async function drawCard() {
   const g = grade(), L = g.L, t = G.state.tally, best = g.best, pct = pctText(g.pct!);
   await fonts(L.title + '欧气卡铺鉴定' + (best ? best.name : ''));
-  const art = best ? await loadArt(best) : null;
+  const art = best ? await loadArt(best) : await loadOne(back()); // no hit yet: the card lies face down
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body'), num = css('--font-tag');
   mat(x, W, H);
