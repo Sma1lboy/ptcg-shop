@@ -532,9 +532,21 @@ button:disabled { cursor: not-allowed; }
 
 /* singles */
 .bulk { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
-.singles { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; }
-.singles li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
-.singles small { display: block; color: var(--muted); font-size: var(--fs-cap); }
+/* 卡本 (singles.ts): a page of the 卡册 (binder.ts .bk-book / .bk-page / .pk), denser: as many pockets a row as fit, the page scrolls
+   inside the cover past about two rows. Under each card its cap, name and the three moves; ×N for copies, on the sleeve like a pencil
+   note. A sold-out card's pocket stands empty for the chip's 2.4 s (.v-gone / .r-beat, the case's) */
+.sb-book { padding: 10px; }
+.bk-page.sb-page { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); max-height: 560px; overflow: auto; }
+.sb-card { position: relative; display: grid; place-items: center; width: min(100%, 110px); justify-self: center; overflow: hidden; }
+.sb-card > .cf, .sb-card .v-gone .cf, .sb-empty { width: 100%; }
+.sb-card .v-gone { position: absolute; inset: 0; padding: 0; place-items: center; }
+.sb-card .v-beat { bottom: 4px; }
+.sb-empty { aspect-ratio: 63 / 88; border: 1px dashed var(--line-strong); }
+.sb-n { position: absolute; right: 3px; top: 3px; z-index: 1; padding: 0 5px; border-radius: 2px; background: var(--ink); color: var(--bg); font: 700 var(--fs-cap)/1.5 var(--font-tag); }
+.sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-cap); font-weight: 600; }
+.sb-btns { display: flex; flex-wrap: wrap; gap: 4px; }
+.page .sb-btns button { flex: 1 1 auto; min-height: 28px; padding: 2px 6px; font-size: var(--fs-cap); }
+.page .sb-btns [data-act="sell"] { flex-basis: 100%; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
@@ -802,7 +814,6 @@ button:disabled { cursor: not-allowed; }
 /* polish pass: mat semantic colours, narrow-panel fixes, phone tap targets */
 .mat .gain, .mat .summary .gain, .mat-head b.gain { color: var(--mat-gain); }
 .mat .loss, .mat .summary .loss, .mat-head b.loss { color: var(--mat-loss); }
-.singles li.muted, .singles li:only-child.muted { display: block; }
 .tally th:nth-child(4), .tally td:nth-child(4) { width: auto; white-space: nowrap; }
 .tally td:first-child { padding-right: 6px; }
 @media (max-width: 779px) {
@@ -826,9 +837,7 @@ button:disabled { cursor: not-allowed; }
    a second line, so the name isn't squeezed to one character a line. The panel's width, not the viewport's */
 :is(#singles, #casepanel) { container-type: inline-size; }
 @container (max-width: 520px) {
-  .singles li { grid-template-columns: 36px minmax(0, 1fr) auto; row-gap: 6px; }
-  .singles li > .cf { grid-row: span 2; align-self: start; }
-  .singles .s-btns { grid-column: 2 / -1; justify-content: flex-start; }
+  .bk-page.sb-page { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 }
 .cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
 .cust-bar span { border-radius: 2px; min-width: 0; }
