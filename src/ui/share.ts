@@ -27,7 +27,7 @@ let without = { of: '', pct: 0 };
 export function grade() {
   const L = G.luck(), s = G.state, best = s.hits[0] || null;
   const sets = SETS.filter(x => s.opened[x.id]).map(x => x.name);
-  const pct = L.pct == null ? null : L.pct * 100, bestNow = best ? S.cardPrice(best.set, best.n, best.kind) ?? best.price : 0;
+  const pct = L.pct == null ? null : L.pct * 100, bestNow = best ? (L.live ? S.cardPrice(best.set, best.n, best.kind) ?? best.price : best.price) : 0; // same price basis as L.value
   const of = `${L.packs}|${L.value}|${bestNow}`;
   if (best && pct != null && without.of !== of) without = { of, pct: S.luckPercentile(s.packsBy, L.value - bestNow) * 100 };
   return { L, pct, best, bestNow, err: pct == null ? '' : margin(pct), ...cert(`${L.packs}|${Math.round(L.value * 100)}|${best ? best.set + best.n : ''}`),
