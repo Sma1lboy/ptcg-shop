@@ -10,6 +10,7 @@ import { G, $, money, imgUrl, logoUrl, rar, rarLabel, batchBtn } from './common.
 import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
 import { mountTable, ready as threeReady } from '../table3d.js';
+import { bill } from '../debt.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -299,19 +300,21 @@ let run: Run | null = null;
 // average); before that every 十连 stops on new cards anyway.
 export const huntable = (id: string) => hunt(id) && canGo(id); // the 图鉴 row offers 连开 too (goals.ts)
 const hunt = (id: string) => { const m = G.handMissing(id); return m.length > 0 && m[m.length - 1].packs > 10; };
-const canGo = (id: string) => (G.state.stock[id] || 0) > 0 || G.state.cash >= G.wholesale(id);
+// Top-ups never spend the cash this week's bill needs: a hands-off run must not be what makes the bill go to a loan.
+const spare = () => G.state.cash - (bill(G)?.amount ?? 0);
+const canGo = (id: string) => (G.state.stock[id] || 0) > 0 || spare() >= G.wholesale(id);
 const stopBtn = () => `<button type="button" class="ghost" data-act="runstop"${run?.stop ? ' disabled' : ''}>${run?.stop ? '这轮开完就停' : '停'}</button>`;
-const runProg = () => { const r = run!; return `连开第 ${r.rounds + (mat.finished ? 0 : 1)} 轮 · 已开 ${r.packs + (mat.finished ? 0 : mat.packs.length)} 包 · 亲手开出 ${G.handCount(r.id) - (mat.finished ? 0 : mat.news.length)}/${G.dexTotal(r.id)}`; }; // the round's new cards count once they're shown
+const runProg = () => { const r = run!; return `连开第 ${r.rounds + (mat.finished ? 0 : 1)} 轮 · 已开 ${r.packs + (mat.finished ? 0 : mat.packs.length)} 包 · 亲手开出 ${G.handCount(r.id) - (mat.finished ? 0 : mat.news.length)}/${G.dexTotal(r.id)}${r.bought ? ` · 现进 ${r.bought} 包` : ''}`; }; // the round's new cards count once they're shown
 function runEnd(r: Run, id: string) {
   const h = G.handCount(id), tot = G.dexTotal(id);
   if (r.end === 'new') return `亲手开出新卡：${r.fresh.map(c => esc(c.name)).join('、')}。${G.setById(id).name}亲手开出 ${h}/${tot}。`;
   const miss = G.handMissing(id), last = miss.length ? `，${miss.length > 1 ? '最难的一张' : '这张'}平均约 ${Math.round(miss[0].packs).toLocaleString('en-US')} 包出一张` : '';
-  const why = r.end === 'max' ? `连开 ${RUN_MAX} 轮还没出新卡` : r.end === 'empty' ? '仓库空了，现金也不够再进' : '停下了';
+  const why = r.end === 'max' ? `连开 ${RUN_MAX} 轮还没出新卡` : r.end === 'empty' ? '仓库空了，现金留着付这周的账单，不够再进' : '停下了';
   return `${why}。${G.setById(id).name}亲手开出 ${h}/${tot}，还差 ${tot - h} 张${last}。`;
 }
-export function startRun(id: string) { run = { id, rounds: 0, packs: 0, value: 0, cost: 0, bought: 0, fresh: [], end: '' }; nextRound(run); }
+export function startRun(id: string) { if (hold) return; run = { id, rounds: 0, packs: 0, value: 0, cost: 0, bought: 0, fresh: [], end: '' }; nextRound(run); }
 function nextRound(r: Run) {
-  const n = G.state.stock[r.id] || 0, top = n >= 10 ? 0 : Math.min(10 - n, Math.floor(G.state.cash / G.wholesale(r.id)));
+  const n = G.state.stock[r.id] || 0, top = n >= 10 ? 0 : Math.max(0, Math.min(10 - n, Math.floor(spare() / G.wholesale(r.id))));
   if (top) { const n0 = n; if (G.buy(r.id, top)) r.bought += (G.state.stock[r.id] || 0) - n0; }
   openBatch(r.id, true);
 }
