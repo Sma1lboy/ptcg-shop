@@ -5,7 +5,7 @@ import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
 import { ACH } from '../achievements.ts';
 
-const maxM = () => S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
+const maxM = () => S.roundM(1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max)); // the ceiling: 手气 maxed plus 名气「手气底子」maxed
 
 export function renderSources() {
   const upd = SETS.map(s => DATA[s.id].pricesUpdated).sort().pop()?.slice(0, 10);

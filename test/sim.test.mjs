@@ -117,9 +117,10 @@ console.log('ok luck percentile');
   const G = createGame(env), st = () => G.state;
 
   // 1. No money pump: opening a pack and selling it at market value returns less than the pack costs even at the best supplier level,
-  //    with 手气 maxed too.
-  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length, maxM = S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
+  //    with 手气 maxed too, including the extra levels 名气 can buy.
+  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length, maxM = S.roundM(1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max)); // 手气 maxed + 名气「手气底子」maxed
   for (const set of PTCG_SETS) assert.ok(S.packEV(S.rateKey(set.id, maxM)) < set.packPrice * bestWholesale, `${set.id}: opening packs must stay negative EV even at 手气 ×${maxM}`);
+  assert.ok(maxM <= 1.35, `the 手气 ceiling stays bounded (×${maxM})`);
   assert.ok(bestWholesale > G.BUYLIST * 0.8, 'supplier discount must not undercut what the sealed sale is worth');
   for (const [k, u] of Object.entries(G.UPGRADES)) assert.ok(u.costs.every((c, i, a) => !i || c > a[i - 1]), `${k} costs must increase`);
   assert.ok(G.DEX_TIERS.every(([a, b], i, t) => !i || (a > t[i - 1][0] && b >= t[i - 1][1])) && G.DEX_TIERS.at(-1)[0] === 1, 'dex tiers ascend and end at 100%');
@@ -409,6 +410,45 @@ console.log('ok luck percentile');
   G.reset(); assert.deepEqual(st().ach, {}, 'reset clears achievements');
   console.log(`ok achievements (${A.ACH.length})`);
 }
+// 开分店 (prestige): gated on this shop's revenue; the new shop starts over but the binder, 图鉴, achievements and the whole
+// 欧气 record come along untouched; 名气 is paid once per shop; every perk is capped; old saves load with no branch history.
+{
+  let T = 1_700_000_000_000; const store = {};
+  const env = { now: () => T, random: S.rng(11), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+  const G = createGame(env), st = () => G.state;
+  assert.deepEqual(st().branch, { n: 0, fame: 0, got: 0, life: 0, perks: {} });
+  st().earned.sealed = G.BRANCH_AT - 1; assert.ok(!G.canBranch() && !G.branch(), 'no branch below the gate');
+  st().earned.sealed = G.BRANCH_AT; st().cash = 1e6; st().up = { signage: 3, racks: 2 }; st().skills = { luck: 3, talk: 2 };
+  G.buy('sv08', 60); G.open('sv08', 60); A.check(G);
+  const hits = Object.keys(st().singles).filter(k => S.HITS.includes(st().singles[k].kind));
+  G.list(hits[0]); G.setTrophy(hits[1] ?? hits[0]);
+  const cards = () => Object.values(st().singles).reduce((a, c) => a + c.count, 0) + st().shown.length + (st().trophy ? 1 : 0);
+  const n0 = cards(), L0 = G.luck(), ach0 = { ...st().ach }, fame = G.fameFor();
+  assert.ok(G.branch());
+  const L1 = G.luck();
+  assert.deepEqual([L1.packs, L1.value, L1.live, L1.expected, L1.pct], [L0.packs, L0.value, L0.live, L0.expected, L0.pct], '欧气 record unchanged by a branch');
+  assert.equal(cards(), n0, 'every card comes along'); assert.equal(st().shown.length + (st().trophy ? 1 : 0), 0, 'the case is emptied into the binder');
+  assert.deepEqual(st().ach, ach0); assert.deepEqual(A.check(G), [], 'achievements are not paid twice');
+  assert.deepEqual([st().cash, G.revenue(), st().up, st().skills, G.unlocked('sv08.5')], [G.START_CASH, 0, {}, {}, false], 'the new shop starts from zero, later sets lock again');
+  assert.deepEqual([st().branch.n, st().branch.fame, st().branch.life], [1, fame, G.BRANCH_AT]); assert.equal(fame, Math.floor(Math.sqrt(G.BRANCH_AT / G.FAME_UNIT)));
+  T += 3600e3; G.tick(); assert.ok((st().offline?.secs ?? 0) <= 3600, 'the first tick credits only the time since the branch');
+  assert.ok(!G.branch(), 'fame is per shop: branching again right away is refused');
+  // Perks: capped, finite in total, never bought past max or without fame.
+  let total = 0; for (const [k, p] of Object.entries(G.PERKS)) { assert.ok(p.max >= 1 && p.max <= 5, k); for (let l = 0; l < p.max; l++) total += p.base + l; }
+  assert.ok(total < 60, `maxing every perk takes ${total} 名气`);
+  st().branch.fame = 1e3; for (const k of Object.keys(G.PERKS)) { while (G.learnPerk(k)); assert.equal(G.perk(k), G.PERKS[k].max, `${k} stops at max`); }
+  assert.equal(st().branch.fame, 1e3 - total);
+  assert.equal(G.skillMax('luck'), G.SKILLS.luck.max + G.PERKS.luck.max);
+  assert.ok(G.rate() <= G.ARRIVAL * (1 + G.REG_STEP * G.PERKS.regulars.max) * G.crowdCap(), 'traffic stays under the capped ceiling');
+  assert.equal(st().branch.fame, 1e3 - total);
+  assert.ok(G.unlockAt('me05') > 0 && G.unlockAt('me05') < 250000, '门路 lowers the thresholds, never to zero');
+  st().earned.sealed = G.BRANCH_AT; G.branch();
+  assert.deepEqual([st().cash, G.lvl('racks'), G.lvl('depth'), G.lvl('clerk')], [G.START_CASH + G.SEED_STEP * G.PERKS.seed.max, G.PERKS.fit.max, G.PERKS.fit.max, 1], 'perks shape the new shop');
+  // Old saves (no branch key) load with an empty history and keep everything else.
+  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 5 }, earned: { sealed: 500, singles: 0 } });
+  const O = createGame(env); assert.deepEqual(O.state.branch, { n: 0, fame: 0, got: 0, life: 0, perks: {} }); assert.equal(O.revenue(), 500);
+  console.log(`ok 开分店: gate $${G.BRANCH_AT.toLocaleString('en-US')} → ${fame} 名气, perks cap at ${total} 名气, 欧气 record and ${n0} cards carried`);
+}
 // ---------- growth curve (scripts/autoplay.mjs plays the real game.ts on a fake clock) ----------
 {
   const { play } = await import('../scripts/autoplay.mjs');
@@ -440,6 +480,10 @@ console.log('ok luck percentile');
   assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 50, `late walk-ins are capped (${chase[20].rate}/min)`);
   assert.ok(chase[20].rate > chase[10].rate && chase[20].rate > plain[20].rate * 1.5, `still growing late (${chase[10].rate} → ${chase[20].rate}/min)`);
   assert.ok(chase[20].perMin > chase[10].perMin && chase[20].perMin < chase[10].perMin * 2.5, `income grows, not a money machine ($${chase[10].perMin} → $${chase[20].perMin}/min)`);
+  // 开分店: a player who branches at the gate reaches it again sooner in the second shop than in the first.
+  const br = play({ hours: 16, openShare: 0.01, pct: 0.9, log: 1800, branch: G0.BRANCH_AT }), at = n => br.findIndex(r => r.shop === n) * 0.5;
+  assert.ok(at(2) > 0 && at(3) > 0 && at(3) - at(2) < at(2) * 0.7, `second shop reaches the gate faster (${at(2)}h, then ${at(3) - at(2)}h)`);
+  console.log(`ok 开分店 curve: first shop ${at(2)}h to the gate, second ${at(3) - at(2)}h`);
   console.log(`ok long game: master sets at 3h/6h/10h = ${masters(3)}/${masters(6)}/${masters(10)}; walk-ins ${plain[10].rate} → ${chase[10].rate}/min (${chase[20].rate} at 20h); net at 10h $${chase[10].net} vs $${plain[10].net}`);
 }
 
