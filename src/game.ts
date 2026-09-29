@@ -24,7 +24,7 @@ export interface State {
   shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
-  offline: { secs: number; sales: number; revenue: number; lost: number } | null;
+  offline: { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number } | null; // bills / borrowed: paid to 九姐 / borrowed while away
   ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
   branch: Branch;
   // 债务 (GAMEPLAY.md): owe = what is left of the opening debt (paid in weekly installments, no interest), loan = what was
@@ -136,7 +136,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
     talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
     crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300 * COST_X, grow: 1.75, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
-    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
+    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久（要先雇店员，没店员一律 1 小时）', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
     apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
 
@@ -522,6 +522,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
+      for (const e of pending) { if (e.type === 'bill_paid') o.bills = (o.bills || 0) + e.amount!; if (e.type === 'loan_taken') o.borrowed = (o.borrowed || 0) + e.amount!; }
       log(`打烊期间卖出 ${sales} 件`, 'gain', revenue);
     }
     const rescued = bailout();

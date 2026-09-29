@@ -6,7 +6,8 @@ import { card, logo } from '../assets.ts';
 
 export const G = createGame();
 export const $ = (id: string) => document.getElementById(id)!;
-export const money = (v: number) => '$' + (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
+// Big sums shorten: $123.4K from $100,000, $1.23M from a million (the debt, late revenue); below that, whole dollars from $1,000.
+export const money = (v: number): string => v < 0 ? '−' + money(-v) : '$' + (v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e5 ? `${(v / 1e3).toFixed(1)}K` : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
 export const imgUrl = (c: { set: string; n: string }, size = 'low') => card(c.set, c.n, size);
 export const logoUrl = (id: string) => logo(id);
 // Level as a row of pips (成长 tab): filled up to lv, one per level.

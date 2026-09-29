@@ -102,20 +102,20 @@ export function branchClick() {
 
 // 开分店 (prestige): how far this shop is from the gate, what branching now would pay, what carries over, and the 名气 perks.
 function renderBranch() {
-  const b = G.state.branch, rev = G.revenue(), at = G.BRANCH_AT, can = G.canBranch(), fame = G.fameFor();
+  const b = G.state.branch, rev = G.revenue(), d0 = G.debt0(), paid = Math.max(0, Math.min(1, 1 - G.state.debt / d0)), can = G.canBranch(), fame = G.fameFor();
   const nextAt = (fame + 1) ** 2 * G.FAME_UNIT, perks = Object.entries(G.PERKS), pts = (v: number) => `${v} 名气`;
-  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店 · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把这家店做到营业额 $100k，就能去新街口从头开一家'}</small></h2>
+  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店 · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把欠九姐的钱还清，这家店就是你的；她会出本钱让你去新街口再开一家'}</small></h2>
     <div class="br-now">
       <div class="br-prog">
-        <p><span>本店营业额</span> <b>${money(rev)}</b> <small>/ ${money(at)}</small></p>
-        <span class="gh-bar" role="img" aria-label="${Math.round(Math.min(1, rev / at) * 100)}%"><i style="--p:${Math.min(1, rev / at)}"></i></span>
-        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame)}</b>；多做 ${money(nextAt - rev)} 营业额就是 ${pts(fame + 1)}（名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')})，越往后越慢）。`
-          : html`还差 <b>${money(at - rev)}</b>。到了能拿 ${pts(G.fameFor(at))}，做得越多拿得越多。`}</p>
+        <p><span>这家店的债</span> <b>${can ? '还清了' : `还欠 ${money(G.state.debt)}`}</b> <small>/ ${money(d0)}</small></p>
+        <span class="gh-bar" role="img" aria-label="已还 ${Math.round(paid * 100)}%"><i style="--p:${paid}"></i></span>
+        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame)}</b>（本店营业额 ${money(rev)}）；多做 ${money(nextAt - rev)} 营业额就是 ${pts(fame + 1)}（名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')})，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。`
+          : html`按现在的营业额（${money(rev)}），还清时能带走至少 ${pts(fame)}。破产的店一点名气都没有。`}</p>
       </div>
-      <div class="br-go">
+    <div class="br-go">
         <p class="br-keep"><b>带走</b>卡册和展示柜里的卡、图鉴、成就、欧气检测的全部记录、名气</p>
         <p class="br-keep"><b>留下</b>现金、仓库和货架上的包、店铺升级、技能、营业额（后面的系列要重新解锁）</p>
-        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? `开分店（营业额到 ${money(at)}）` : Date.now() - armed < 3000 ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame)}`}</button>
+        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : Date.now() - armed < 3000 ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame)}`}</button>
       </div>
     </div>
     ${b.got ? html`<h3 class="br-h">名气 <small>永久加成，每家新店都有 · 手上 ${pts(b.fame)}</small></h3>
