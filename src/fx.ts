@@ -84,3 +84,5 @@ document.addEventListener('pointerout', e => {
 
 export const muted = () => silent;
 export function setMuted(v: boolean) { silent = !!v; try { localStorage.setItem('ptcg.mute', v ? '1' : '0'); } catch (e) { /* ignore */ } if (!v) unlock(); }
+// 成就 stamp coming down on the card: a dull rubber thud and the paper's slap.
+export const stamp = () => { tone(110, 0, .18, { gain: .28, to: 45 }); noise(0, .06, { gain: .1, from: 1200, to: 300, q: .6 }); };

@@ -17,8 +17,9 @@ export function boot(seed = 1) {
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
 // off = minutes of every hour the player is away (the shop runs on its own; a clerk, if hired, restocks).
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
-export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, log = 600 } = {}) {
+export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), st = G.state, rows = []; let spent = 0, pot = 0, rev = 0;
+  const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
   const pctOf = id => typeof pct === 'number' ? pct : pct[id] ?? 1;
   const baseLeft = id => G.dexTotal(id) - G.dexCount(id) - G.missing(id).length; // C/U/R still to pull
   const wants = k => k !== 'watch' && (k !== 'luck' || (luck ?? (openShare > 0 || masterShare > 0)));
@@ -56,6 +57,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
       }
     }
     if (!hold) for (const set of SETS) { const n = Math.floor(G.shelfQty(set.id) * openShare); if (n > 0) { G.unshelve(set.id, n); G.open(set.id, n); } }
+    each?.(t);
     if (t % log === 0) rows.push(row(t));
   }
   function row(t) {
