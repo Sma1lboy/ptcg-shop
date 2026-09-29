@@ -37,6 +37,7 @@ export interface State {
   clerkRound?: { at: number; need: number; spent: number };
   debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
   overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
+  bought?: { k: string; cost: number; week: number }[]; // upgrades / skills bought this shop, newest last (退回: see refundable)
 }
 // secs = seconds the shop traded (up to offlineCap), sales = paying visits; bills / borrowed: paid to 九姐 / borrowed meanwhile
 export interface Receipt { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number }
@@ -475,9 +476,37 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const cost = skillCost(k);
     if (cost == null || state.cash < cost || !canLearn(k)) return false;
     const r0 = rate();
-    state.cash -= cost; state.skills[k] = skill(k) + 1;
+    state.cash -= cost; state.skills[k] = skill(k) + 1; bought(k, cost);
     log(`技能：${SKILLS[k].name} Lv${skill(k)}（${SKILLS[k].fx(skill(k))}${walkIns(r0)}）`, '', -cost);
     emit(); return true;
+  }
+  // 闲钱: cash left once the bill 九姐 collects next (or the overdue one) is set aside. The 成长 badge and 下一步 only count what this
+  // covers: a first-timer who spends the till on growth before the first bill borrows every week after and never clears the debt
+  // (autoplay 冲动新手, GAMEPLAY.md §8). Game setting.
+  const REFUND = 1 - LOAN_RATE;
+  const spare = () => Math.max(0, state.cash - (state.overdue?.amount ?? nextBill()?.amount ?? 0));
+  const bought = (k: string, cost: number) => { (state.bought ||= []).push({ k, cost, week: state.week }); };
+  // 退回 (game setting): a level bought in the week whose bill the till now can't cover goes back for REFUND of its price — the way
+  // back for buying before the bill. Only the top level of each, only while short. REFUND = 1 − LOAN_RATE: buying after a bill and
+  // returning before the next costs what borrowing that week would, so it is never a free rental (at full price autoplay did it
+  // every week), yet unlike a loan nothing compounds.
+  function refundable() {
+    const o = state.overdue, b = nextBill(), short = o ? state.cash < o.amount : !!b && state.cash < b.amount;
+    if (!short) return [];
+    const wk = o?.week ?? state.week, top = new Map<string, { k: string; cost: number; week: number }>();
+    for (const x of state.bought || []) top.set(x.k, x); // the last buy of each k is its top level
+    return [...top.values()].filter(x => x.week >= wk);
+  }
+  function refund(k: string) {
+    const x = refundable().find(x => x.k === k); if (!x) return false;
+    const o = k in UPGRADES ? state.up : state.skills, got = cents(x.cost * REFUND); o[k]--;
+    state.bought!.splice(state.bought!.lastIndexOf(x), 1); state.cash += got;
+    if (k === 'racks') for (const sh of state.shelves.splice(racks())) if (sh.id) state.stock[sh.id] = (state.stock[sh.id] || 0) + sh.qty; // back room may go past WAREHOUSE; buying waits
+    if (k === 'depth') for (const sh of state.shelves) if (sh.id && sh.qty > depth()) { state.stock[sh.id] = (state.stock[sh.id] || 0) + sh.qty - depth(); sh.qty = depth(); }
+    if (k === 'case') for (const c of state.shown.splice(slots())) { const { key, pct, ...card } = c; (state.singles[key] ||= { ...card, count: 0 }).count++; }
+    log(`退回：${(UPGRADES[k] || SKILLS[k]).name} Lv${o[k] + 1}，扣一成`, 'gain', got);
+    if (state.overdue && state.cash >= state.overdue.amount) settle(state.overdue);
+    if (!flush()) emit(); return true;
   }
   const canUpgrade = (k: string) => k !== 'expand' || crowdRaw() > CROWD_KNEE; // 扩建 only lifts a cap the shop has reached
   // fn() as if upgrade or skill k were one level higher, state untouched afterwards: the 成长 page shows what a level really does
@@ -493,7 +522,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const cost = upgradeCost(k);
     if (cost == null || state.cash < cost || !canUpgrade(k)) return false;
     const r0 = rate();
-    state.cash -= cost; state.up[k] = lvl(k) + 1;
+    state.cash -= cost; state.up[k] = lvl(k) + 1; bought(k, cost);
     if (k === 'clerk' && lvl(k) === 1) for (const s of SETS) if (shelves().some(o => o.id === s.id) || state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
     log(`升级：${UPGRADES[k].name} Lv${lvl(k)}${walkIns(r0)}`, '', -cost);
     emit(); return true;
@@ -835,7 +864,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
