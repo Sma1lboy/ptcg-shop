@@ -3,6 +3,7 @@
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $ } from './common.ts';
+import { growCount } from './upgrades.ts';
 
 const PAGES = ['open', 'shelf', 'case', 'luck', 'grow', 'ach'];
 // a view that lives on another page's section: #case is 货柜's 展示柜 view (index.html data-view), the nav lamp stays on 货柜
@@ -40,14 +41,10 @@ function shelfDot() {
   render(html`${n || ''}<span class="visually-hidden">${n ? ` 位顾客没买到` : ' 有顾客嫌贵走了'}</span>`, el);
 }
 
-// 成长 badge: how many upgrades / skills 闲钱 (cash beyond the next bill, G.spare) can buy right now (the incremental loop's nudge),
-// plus 开分店 once the debt is paid (it costs nothing, and 成长's 下一步 names it then). Counting bare cash beckoned first-timers
-// into spending the first bill's money on growth.
+// 成长 badge: how many things on 成长 are yellow right now (upgrades.ts growCount: levels 闲钱 covers — cash beyond the next bill,
+// counting bare cash beckoned first-timers into spending the first bill's money — perks the 名气 on hand covers, and 开分店).
 export function renderTabs() {
-  const cash = G.spare(), el = $('grow-n');
-  const n = Object.keys(G.UPGRADES).filter(k => { const c = G.upgradeCost(k); return c != null && G.canUpgrade(k) && cash >= c; }).length
-    + Object.keys(G.SKILLS).filter(k => { const c = G.skillCost(k); return c != null && G.canLearn(k) && cash >= c; }).length
-    + (G.canBranch() ? 1 : 0);
+  const n = growCount(), el = $('grow-n');
   el.hidden = !n; render(html`${n}<span class="visually-hidden"> 项买得起</span>`, el);
   shelfDot();
 }
