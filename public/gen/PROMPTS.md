@@ -102,3 +102,21 @@ BW 风格的像素画：三张训练家式半身立绘（阿豆、九姐、店�
 ### shop.webp
 
 > the inside of a small bankrupt trading-card shop at night seen from behind the counter: empty metal shelves on the back wall, a dusty glass display case, a counter with a worn play mat, a few plain sealed booster packs in blank silver foil, cardboard boxes, one hanging lamp casting a warm cone of light, cobwebs, dim navy shadows.
+
+# 店里走动的像素小人（public/gen/walk/，src/ui/walk.ts）
+
+八个人各一条 4 帧横条（站、迈步、站、另一步，朝右；页面上朝左时镜像）：店主、店员、九姐、阿豆和四类顾客（拆包玩家、找卡的、收藏党、倒爷）。两张 sheet，每张 4 行 × 3 帧，`gpt-image-2 --size 1024x1024`，纯品红底。长相和剧情立绘、像素图标对上：店主绿围裙、店员蓝围裙（同 u-clerk）、拆包玩家绿毛线帽灰围巾（同 i-customer）。草稿 `--quality low` 两张都出过，人物对，但像素边缘软、格距找不准；定稿 high 的像素硬。草稿没提交。
+
+**切法**（`cut3.py`，没进仓库）：按品红间隙找人（先找行带、再在每行里找三帧），不按固定格子切——高个子会越过四分之一线；整张用同一个格距 6 px（模型按 32 格画，一个人约 190 px 高；边缘自动反推会落到半格 4.5，所以写死）；每行三帧共用一个高度框，脚和头对齐，每帧按自己的框居中；每格取中间一半的前景中位色，漏过色键的品红边色丢掉；拼成 站-迈-站-迈 四帧，无损 webp（2.4–7.6 KB）。帧尺寸写在 `walk.ts` 的 `SPRITE` 表里。
+
+## 模板
+
+> Original pixel-art overworld character sprites in the style of 2010 handheld monster-collecting RPG town maps (Nintendo DS era): original characters, not copied from any existing game, not resembling any official character, no logos, no text, no ball-shaped objects, no creatures. True pixel art: every pixel a crisp solid square scaled up with hard nearest-neighbour edges, no anti-aliasing, no gradients, no blur. A sprite sheet with exactly 4 rows and 3 columns on a flat pure magenta #FF00FF background, wide magenta gaps between cells, nothing else on the sheet. Each row is one character; the three cells of a row are that same character walking to the RIGHT, seen from the side (profile facing right): column 1 standing, column 2 mid-step with the front leg forward, column 3 mid-step with the other leg forward. Every sprite is drawn on a 32 by 32 pixel grid in chibi proportions (big head about 40% of the height), a 1-pixel charcoal #262B33 outline, flat cel shading with two tones per material, light from the upper-left, feet on the same baseline in every cell. Shared palette: charcoal #262B33, off-white #F4F6F9, greys #C8CED8 #8C97A8 #59606D, sky blue #52B6F2, deep blue #2A74D0, navy #1D3F86, leaf green #3EC06E, coral red #E8483A, dark red #9A2A20, skin #F2C9A0 #D9A27A, dark hair #3A3030, brown hair #7A5238; no purple, no gold.
+
+### sheet-a → w-owner w-clerk w-jiu w-adou
+
+> Rows: Row 1: the shopkeeper, a young adult with messy short brown hair, a green shop apron over a white t-shirt, dark trousers. Row 2: a shop clerk, a young adult with short black hair, a blue apron over a white shirt, grey trousers. Row 3: Jiu-jie, a stern woman in her late forties, sharp black bob with one grey streak, a long navy coat over a dark turtleneck, dark trousers, small red earrings. Row 4: A-Dou, a very large burly young man, buzz cut, small round sunglasses pushed up on his forehead, a navy tracksuit with white side stripes, a burlap sack over one shoulder.
+
+### sheet-b → w-opener w-seeker w-collector w-flipper
+
+> Rows: Row 1: a pack-opening player, a teenager in a green knit beanie and a grey scarf, a dark grey jacket, jeans. Row 2: a card seeker, a young woman with round glasses, a red hoodie and a small blue backpack, holding a card list. Row 3: a collector, an older man with grey hair, a grey knitted vest over a white shirt, holding a thick blue binder under one arm. Row 4: a reseller, a man in a dark grey bucket hat and a black windbreaker carrying a big bulging navy duffel bag.

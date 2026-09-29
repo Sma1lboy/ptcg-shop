@@ -55,6 +55,8 @@
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
 | `src/fx.ts` | 全部声音的合成（WebAudio，不用音频文件）：开包、店里（风铃/收银/倒爷/催账/锤子/卷帘门…）、界面按键、循环的环境声；总线、音量、静音、环境声开关（localStorage `ptcg.mute` `ptcg.vol` `ptcg.amb`）。还有稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `src/ui/sound.ts` | 什么时候出声：订阅 `G.on`（顾客走 `state.recent`，债务走 `debt.ts`）、翻页、按键、剧情的 `ptcg:line`；同类声音限频，开包演出和剧情时店里不出声；页脚「声音」弹层。规矩见 DESIGN.md「声音」 |
+| `src/ui/menu.ts` | 键盘菜单：方向键在最上面那一层里移 ▶ 光标到最近的控件，Enter/空格/Z 确认，Esc/X 退出；声音走 `ptcg:ui`。规矩见 DESIGN.md「菜单与光标」 |
+| `src/ui/walk.ts` | 货柜页顶上的店面地板：店主、店员、每位进店顾客（按 `state.recent`）和收账的九姐阿豆是像素小人，走进来、头顶冒 ♪ … ? 气泡、走出去。纯演出，只读状态。规矩见 DESIGN.md「店里的人」 |
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
 | `index.html` | 外壳，Vite 入口：顶栏（含四页导航）、四页（开包 / 货柜 / 欧气 / 成长）、页脚。面板容器的 id 就是各面板 `render()` 的目标 |
