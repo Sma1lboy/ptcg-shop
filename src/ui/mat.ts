@@ -129,7 +129,8 @@ const on3D = {
     const cap = document.getElementById('s3-cap'); if (cap) { cap.className = `s3-cap t${rar(c).t}`; cap.innerHTML = `<b class="s3-name">${none ? `${mat.packs.length} 包一张好卡都没有 · ` : ''}${esc(c.name)}</b>${capHTML(c)}`; }
     if (!mat.quiet) FX.flip(rar(c).t);
   },
-  onDone() { hint3D('done'); const cap = document.getElementById('s3-cap'); if (cap) cap.innerHTML = ''; finish(); },
+  onHold() { const cap = document.getElementById('s3-cap'); if (cap) cap.innerHTML = ''; },
+  onDone() { on3D.onHold(); hint3D('done'); finish(); },
   onLost() {
     table = null; mat.m3d = false; renderMat();
     if (batch()) revealBatch(mat); else if (mat.cards && mat.up.size === mat.cards.length) finish();

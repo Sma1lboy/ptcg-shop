@@ -1,9 +1,10 @@
 // Opening mat as a live three.js scene: a foil booster on a rubber playmat, tear the crimp, the stack slides out,
 // slide the front card aside to uncover the next, foil shaders on the cards, a show scaled to the pull's rarity.
-// Pure presentation: it renders exactly the cards it is handed (one pack from G.open), in that order, and
+// Pure presentation: it renders exactly the cards it is handed (one pack, or up to ten plus which of their cards to show), and
 // reports progress through callbacks. It never reads the game or src/sim.ts and has no say in what a pack contains.
 // Plain JS (tsconfig allowJs, not type-checked). Interface, used by src/ui/mat.ts:
-//   mountTable(el, { onTear, onFlip(i, card), onDone, onLost?, reducedMotion }) → { showPack(set, cards), flip(i), flipAll(), resize(), dispose() } | null
+//   mountTable(el, { onTear, onFlip(i, card), onDone, onLost?, onHold?, reducedMotion }) → { showPack(set, cards), showBatch(set, packs, picks), flip(i), flipAll(), resize(), dispose() } | null
+//   (onHold: a batch's best card is being lifted face down, the caption of the previous one should go)
 // three.js: node_modules in dev, the import map vite.config.ts injects in builds (CDN, same pinned version). mountTable returns
 // null while three is still loading, if it failed to load, or without WebGL; mat.ts then keeps the 2D mat.
 import * as fx from './fx.ts';
@@ -801,7 +802,7 @@ async function flipPick(run, i) {
 async function flipBest(run, i) {
   const m = run.cards[i], t = run.tiers[i], f = camBasis().f, P = run.fan.poses[i];
   const at = camera.position.clone().addScaledVector(f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6), q = camera.quaternion.clone();
-  mood('hush', 500); FX().slide();
+  mood('hush', 500); FX().slide(); opts.onHold?.();
   await flyTo(m, at, faceDown(q), 600, 2); if (R !== run) return;
   FX().swell(1700);
   await tween(900, e => { m.position.copy(at); m.position.x += Math.sin(e * 70) * .035 * e; m.position.y += Math.sin(e * 53) * .025 * e; }, E.lin); // the face-down pause trembles a little
