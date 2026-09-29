@@ -95,7 +95,7 @@ export function renderLog() {
     const t = hhmm(r.at), time = html`<time>${i && hhmm(rows[i - 1].at) === t ? '' : t}</time>`;
     if (r.vs) { const vs = r.vs, v = vs[0], n = vs.length, gain = vs.reduce((a, x) => a + (x.gain || 0), 0);
       const to = spotOf(vs);
-      return html`<li class="r-${v.r} ${to ? 'go' : ''}" tabindex=${to ? 0 : nothing} title=${to ? '点一下，看墙上那一格' : nothing}
+      return html`<li class="r-${v.r} ${to ? 'go' : ''}" role=${to ? 'link' : nothing} tabindex=${to ? 0 : nothing} title=${to ? '点一下，看墙上那一格' : nothing}
           @click=${to ? () => go(to) : null} @keydown=${to ? (e: KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(to); } } : null}>${time}<b>${G.TYPES[v.t].name}${n > 1 ? html` <small>×${n}</small>` : ''}</b><span>${n > 1 ? merged(vs) : said(v)}</span>${amt(gain)}</li>`; }
     const l = r.l!; return html`<li class="shop ${l.tone}">${time}<span>${l.text}</span>${amt(l.amt)}</li>`;
   }), $('log'));

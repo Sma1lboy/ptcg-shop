@@ -134,6 +134,11 @@ function gaps(rec: Visit[]) {
   const src = (id: string) => {
     if (!id) return '哪个系列的都行：卡本里这一档有就卖得掉';
     const set = G.setById(id), racked = racks.some(r => r.id === id), stock = s.stock[id] || 0;
+    if (racked && !G.shelfQty(id)) { // sold out: nobody buys its packs, so nobody tears them open at the counter
+      const fill = restock(id), up = stock > (G.lvl('clerk') && s.auto[id] ? G.CLERK_KEEP : 0);
+      return html`<b>货架卖空了</b>：没人买这个系列的包，柜台上也就没人拆${up ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="999">补满</button>`
+        : fill.n ? html`<button type="button" data-act="buy" data-id="${id}" data-n="${fill.n}" title="${fill.title}">${fill.text}</button>` : ''}`;
+    }
     if (racked) {
       const sellers = rec.filter(v => v.offer && v.set === id), took = sellers.reduce((a, v) => a + (v.took || 0), 0), low = sellers.filter(v => v.sell === 'low').length;
       const hard = G.SEEK[2].reduce((a, k) => a + (set.rates[k] || 0), 0);
@@ -194,7 +199,7 @@ function showcase(rec: Visit[]) {
         ...byCard, broke ? `${broke} 人看中了但钱不够` : '',
       ].filter(Boolean);
       if (!big && !notes.length) return '';
-      return html`<li><div class="c-row"><b>${label}</b><span class="c-n">${tally([['来了', vs.length], ['买走', count(vs, 'sold')], ['带走卡', took > count(vs, 'sold') ? took : 0], ['嫌贵', dear.length + broke], ['没找到', count(vs, 'none')]])}</span></div>
+      return html`<li><div class="c-row"><b>${label}</b><span class="c-n">${tally([['来了', vs.length], ['买走', count(vs, 'sold')], ['带走卡', took > count(vs, 'sold') ? took : 0], ['嫌贵', dear.length + broke], ['没找到', big ? none : 0]])}</span></div>
           ${notes.length ? html`<p class="c-note">${notes.map((n, i) => html`${i ? '；' : ''}${n}`)}。${have && free > 0 ? html`<button type="button" data-act="list" data-key="${have[0]}">上柜</button>` : have && moves ? html`<button type="button" data-act="fillcase">换上大卡（${moves} 张）</button>` : ''}</p>` : ''}</li>`;
     })}</ul>${counter}`;
 }
