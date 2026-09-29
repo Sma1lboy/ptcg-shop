@@ -1,15 +1,18 @@
-// The "while you were closed" report after an absence, laid out as the register's end-of-day receipt. The torn paper is its own
-// box (.paper) so the printer slot on #notice (style.css) isn't cut by the paper's torn-edge mask.
+// The "while you were closed" report after an absence, laid out as the register's end-of-day receipt. It prints out of the
+// shared slot (#pops, style.css) above any achievement labels.
 import { html, render } from 'lit-html';
 import { G, $, money } from './common.ts';
 
 // On a phone the receipt first shows only its tear-off stub (style.css): one line under the top bar with the hours and the net,
 // so it doesn't cover or push down what the player came back to press; tapping the stub prints the whole receipt.
-let unrolled = false;
+let unrolled = false, ro: ResizeObserver | null = null;
 
 // o.sales counts paying visits, not packs: a scalper who clears a shelf is one 成交
 export function renderNotice() {
   const o = G.state.offline, el = $('notice');
+  // phones reserve the receipt's height above the page (style.css --notice-h): the stub, or the whole receipt once unrolled
+  ro ||= new ResizeObserver(() => document.documentElement.style.setProperty('--notice-h', `${el.offsetHeight}px`));
+  ro.observe(el);
   if (!o) { el.hidden = true; unrolled = false; return; }
   const h = o.secs >= 3600 ? `${(o.secs / 3600).toFixed(1)} 小时` : `${Math.round(o.secs / 60)} 分钟`;
   el.hidden = false;

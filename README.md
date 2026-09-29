@@ -15,7 +15,7 @@ npm run dev                     # http://localhost:5173
 - 开包概率：TCGplayer 实开统计（每个系列 1,200–8,500 包），模拟结果由 `npm test` 校验落在其 95% 置信区间内。
 - 单卡价格：TCGplayer 市价，经 TCGdex API 抓取（`node scripts/fetch-data.mjs`）。
 - 整包价格：PriceCharting 散包价（`node scripts/fetch-packs.mjs` 刷新到 `data/packs.json`）。
-- 欧气检测：拿你开出的总市值，和开了同样包数的 400 个模拟玩家比，给出百分位。
+- 欧气检测：拿你开出的总市值，和 4,000 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比，给出百分位；模拟玩家按卡表逐个槽位直接抽，不从固定样本池重抽，开 50 包和开 9 万包都没有系统偏差，只有 ±1.5 个百分点以内的抽样误差。
 - 口径：欧气检测按当前单卡市价重算你开出的每张卡，再和模拟玩家比；期望市值只有整包标价的四成多，原因和没建模的神包见页脚「价格口径」。
 
 单文件版：`npm run pen` 生成 `dist/pen.html`（CSS/JS/数据全部内联，three.js 从 jsdelivr 加载；可直接粘进 CodePen 的 HTML 面板）。
