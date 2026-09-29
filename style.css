@@ -83,6 +83,8 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
+/* fetch the pressed-key bases up front, so the first press doesn't show the flat fallback while they load */
+html::after { content: url(gen/btn-secondary-dn.webp) url(gen/btn-primary-dn.webp) url(gen/btn-danger-dn.webp); position: absolute; width: 0; height: 0; overflow: hidden; visibility: hidden; }
 /* the room behind the counter: the page colour under a faint grain and the lamp's pool of light from above (inline SVG noise,
    no download; overlay keeps it working on both the white and the navy page) */
 body { background: radial-gradient(ellipse 80% 50% at 50% 0, color-mix(in oklab, var(--lamp) 14%, transparent), transparent 70%) fixed,
@@ -121,8 +123,8 @@ small { font-size: var(--fs-cap); }
 .sub dd { margin: 0; font: 700 var(--fs-h)/1.2 var(--font-tag); color: var(--ink); }
 .sub div { align-items: center; }
 .sub div::before { content: ""; width: 18px; height: 18px; flex: none; background: var(--i) center / contain no-repeat; }
-.sub div:nth-child(1) { --i: url(gen/i-shelf.webp); } .sub div:nth-child(2) { --i: url(gen/i-pack.webp); } .sub div:nth-child(3) { --i: url(gen/i-customer.webp); }
-.sub div:nth-child(4) { --i: url(gen/i-receipt.webp); } .sub div:nth-child(5) { --i: url(gen/i-card.webp); }
+[data-k="shelf"] { --i: url(gen/i-shelf.webp); } [data-k="stock"] { --i: url(gen/i-pack.webp); } [data-k="rate"] { --i: url(gen/i-customer.webp); }
+[data-k="sales"] { --i: url(gen/i-receipt.webp); } [data-k="held"] { --i: url(gen/i-card.webp); }
 
 /* nav = the main menu: each page a tab plate (gen/tab.webp); the current one is raised under the lamp (gen/tab-on.webp) with a
    warm-white light line — lamp light, not yellow: yellow stays for things to press. Docked to the bottom on phones */
@@ -130,6 +132,12 @@ small { font-size: var(--fs-cap); }
 .nav a { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 76px; height: 40px; padding: 0 14px;
   border: 2px solid var(--trim); border-image: url(gen/tab.webp) 26 30 fill / 9px 11px / 0 stretch; background: #111C36 padding-box;
   font: 900 var(--fs-h)/1 var(--font-display); letter-spacing: .08em; color: var(--muted); text-decoration: none; transition: color .15s, filter .15s; }
+/* each tab carries its HUD badge (same icon sheet as the readouts): pack / shelf / card / rank chevrons / trophy. Dimmed on
+   idle tabs, full under the lamp on the current one */
+.nav a::before { content: ""; width: 20px; height: 20px; margin-right: 6px; flex: none; background: var(--i) center / contain no-repeat; opacity: .6; transition: opacity .15s; }
+.nav a[href="#open"] { --i: url(gen/i-pack.webp); } .nav a[href="#shelf"] { --i: url(gen/i-shelf.webp); } .nav a[href="#luck"] { --i: url(gen/i-card.webp); }
+.nav a[href="#grow"] { --i: url(gen/i-rank.webp); } .nav a[href="#ach"] { --i: url(gen/i-trophy.webp); }
+.nav a:is(:hover, [aria-current="page"])::before { opacity: 1; }
 .nav a:hover { color: var(--ink); filter: brightness(1.15); }
 .nav a[aria-current="page"] { color: #fff; border-image-source: url(gen/tab-on.webp); background: #243966 padding-box;
   box-shadow: 0 3px 0 -1px var(--lamp); text-shadow: 0 0 10px var(--lamp-glow); filter: drop-shadow(0 0 8px rgba(255, 236, 206, .22)); }
@@ -167,6 +175,19 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
 .page-luck > #dex { grid-column: 1 / -1; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
+/* the five tabs and five readouts share one bar: below 1600 the readouts drop their names (icon + tooltip name them, as on phones) */
+@media (max-width: 1599px) { .sub dt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); } .sub div { gap: 6px; } }
+/* narrower, the readouts leave in reverse order of how much they tell you what to do next (all of them are on 货柜 too);
+   货架 and 仓库 stay down to phones */
+@media (max-width: 1419px) { .sub [data-k="held"] { display: none; } }
+@media (max-width: 1299px) { .sub [data-k="sales"] { display: none; } }
+@media (max-width: 1199px) { .sub [data-k="rate"] { display: none; } }
+@media (min-width: 780px) and (max-width: 1099px) {
+  .top { gap: 12px; }
+  .brand { width: 48px; overflow: hidden; white-space: nowrap; text-indent: 60px; padding: 0; } /* the crest's fanned cards stay as the mark */
+  .nav a { min-width: 0; padding: 0 10px; }
+}
+@media (min-width: 780px) and (max-width: 939px) { .nav a::before { display: none; } }
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
 }
@@ -184,8 +205,14 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 }
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) button:not(.pack, :disabled):active {
-  transform: translateY(1px); filter: brightness(.86); }
+/* pressed: its own base (gen/btn-*-dn.webp) — the key pushed flush into the rim, lower lip gone, the rim's shadow on the face.
+   The 1px sink stays underneath, and without the images the darker face alone says "down" */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+  --face: url(gen/btn-secondary-dn.webp); border-image-slice: 34 44 34 44 fill; border-image-width: 9px 12px;
+  background-color: color-mix(in oklab, var(--btn-face) 82%, black); transform: translateY(1px); filter: none; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
+  --face: url(gen/btn-primary-dn.webp); background-color: color-mix(in oklab, var(--sticker) 90%, black); }
+#reset:active { --face: url(gen/btn-danger-dn.webp); background-color: color-mix(in oklab, var(--danger-face) 85%, black); }
 /* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary {
   --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
@@ -687,6 +714,9 @@ button:disabled { cursor: not-allowed; }
 .grow-head { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 20px 56px; align-items: end; }
 .gh-lv p, .gh-goal p { margin: 0; }
 .gh-lv p { display: flex; align-items: baseline; gap: 10px; }
+/* the level and the achievement count wear their badges: rank chevrons, trophy */
+.gh-lv p::before { content: ""; align-self: center; width: 52px; height: 52px; flex: none; background: url(gen/i-rank.webp) center / contain no-repeat; }
+.page-ach .gh-lv p::before { background-image: url(gen/i-trophy.webp); }
 .gh-lv span { font-size: var(--fs-body); color: var(--muted); }
 .gh-lv b { font: 900 56px/1 var(--font-display); }
 .gh-lv small { font-size: var(--fs-h); color: var(--muted); }
@@ -782,14 +812,21 @@ button:disabled { cursor: not-allowed; }
   .cash { padding: 2px 10px 2px 6px; min-height: 36px; }
   .cash .k { width: 18px; height: 18px; }
   .cash b { font-size: 24px; }
-  .sub div { padding: 3px 8px; }
-  .sub { gap: 14px; justify-content: flex-start; }
-  .stats { justify-content: space-between; }
+  /* a 390 bar holds the crest, two readouts and the till: the crest drops its name (the fanned cards stay as the shop's mark),
+     and only the two readouts that tell you what to do next stay — shelf empty → stock it, back room empty → buy.
+     Walk-ins, sales and singles value are on the 货柜 page */
+  .brand { width: 42px; overflow: hidden; white-space: nowrap; text-indent: 60px; padding: 0; }
+  .sub div { padding: 3px 8px; gap: 5px; }
+  .sub div:not([data-k="shelf"], [data-k="stock"]) { display: none; }
+  .sub { gap: 6px; overflow: visible; }
+  .stats { gap: 8px; }
   .nav { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
     align-items: center; gap: 4px; padding-inline: 6px; background: linear-gradient(#1A2A4E, var(--hud) 45%); border-top: 3px solid var(--trim);
     box-shadow: inset 0 1px 0 rgba(174, 184, 200, .45), 0 -6px 18px rgba(4, 8, 14, .35); }
-  .nav a { flex: 1; min-width: 0; height: 44px; padding: 0 2px; font-size: 15px; letter-spacing: 0; white-space: nowrap; }
-  .nav .tab-n { margin-left: 2px; }
+  /* docked: icon over the name, like a game's bottom menu; the badges ride the plate's top-right corner */
+  .nav a { flex: 1; min-width: 0; height: 48px; padding: 0 2px; flex-direction: column; gap: 1px; font-size: 13px; letter-spacing: .04em; white-space: nowrap; }
+  .nav a::before { width: 22px; height: 22px; margin: 0; }
+  .nav .tab-n { position: absolute; top: 2px; right: 4px; margin: 0; }
   main { padding-top: 12px; }
   .page, .page-open, .page-shelf, .page-luck { grid-template-columns: minmax(0, 1fr); }
   .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1);
