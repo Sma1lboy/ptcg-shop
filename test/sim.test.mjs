@@ -6,6 +6,8 @@ import { SETS as PTCG_SETS, DATA as PTCG_DATA } from '../src/sets.ts';
 import * as S from '../src/sim.ts';
 import { createGame } from '../src/game.ts';
 import * as A from '../src/achievements.ts';
+import * as ST from '../src/story.ts';
+import * as D from '../src/debt.ts';
 
 const N = 200000;
 for (const set of PTCG_SETS) {
@@ -481,4 +483,29 @@ console.log('ok luck percentile');
     assert.ok(st.miss[id].every(t => t >= since - 20_000), 'old misses are dropped');
   }
   console.log(`ok 顾客 window: ${rec.length} walk-ins, 没买到 ${G.missed('sv08')}/${G.missed('sv10')} over the same ${G.MISS_WINDOW / 60} minutes`);
+}
+
+// 剧情: every scene has lines, every line renders to text (debt lines with and without a bill; milestones always get their card/set); debt beats degrade to nothing
+// on a game without the economy, map each event to its scene once per week, and a paid week after the first plays the short line.
+{
+  for (const [id, scenes] of Object.entries(ST.SCENES)) for (const sc of scenes) {
+    assert.ok(sc.lines.length, `story ${id}: empty scene`);
+    for (const l of sc.lines) for (const c of [...(['bigpull', 'unlock'].includes(id) ? [] : [{}]), { bill: '$12.00', week: 2, card: 'X', price: '$1', set: 'Y' }]) {
+      const t = typeof l.t === 'string' ? l.t : l.t(c); assert.ok(t && !t.includes('undefined'), `story ${id}: "${t}"`);
+    }
+  }
+  const g = createGame({ now: () => 0, random: S.rng(1), storage: { getItem: () => null, setItem() {} } });
+  if (!g.nextBill) assert.equal(D.bill(g), null); // no economy yet: nothing to read
+  assert.equal(D.debtBeat(undefined, g), null); assert.equal(D.debtBeat({ open: [] }, g), null);
+  const fake = Object.assign(Object.create(g), { nextBill: () => ({ week: 3, amount: 120, dueAt: 9 }) });
+  const due = D.debtBeat({ type: 'bill_due' }, fake);
+  assert.deepEqual([due.kind, due.key, due.week, due.amount], ['due', 'due:3', 3, 120]);
+  assert.equal(ST.sceneFor(due, {}), 'due'); assert.equal(ST.sceneFor(due, { 'due:3': 1 }), null);
+  const paid = w => D.debtBeat({ type: 'bill_paid', week: w }, fake);
+  assert.equal(ST.sceneFor(paid(1), {}), 'paid1'); assert.ok(['paid', 'paid2'].includes(ST.sceneFor(paid(2), { paid1: 1 })));
+  assert.equal(ST.sceneFor(D.debtBeat({ type: 'bankrupt' }, fake), { bankrupt: 1 }), 'bankrupt'); // a bankruptcy always plays
+  assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'nope' }, fake), {}), null);
+  assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'loan' }, fake), {}), 'loan');
+  for (const k of ['due', 'paid1', 'paid', 'paid2', 'missed', 'loan', 'bankrupt']) assert.ok(ST.SCENES[k], `no scene ${k}`);
+  console.log('ok story beats');
 }

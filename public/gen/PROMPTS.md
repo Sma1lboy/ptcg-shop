@@ -38,3 +38,45 @@ UI 皮肤素材（DESIGN.md「皮肤」）。全部由 `gpt-image-2`（`--qualit
 
 > a single horizontal shop sign crest plate about 3:1, centered with transparent space around it: a navy anodized aluminium plaque with chamfered corners and a raised bevelled aluminium border, two small fanned blank trading cards (navy card backs with a plain aluminium border, no symbols) tucked behind its left end, and a thin lemon-yellow (#FFD500) enamel pinstripe running just inside the border like the yellow frame of a card. The plaque face is flat, dark and empty, reserved for a shop name to be added later. Lit by the warm shop lamp from above.
 
+
+### f-buttons-dn（1024x1536，编辑模式）→ btn-primary-dn / btn-secondary-dn / btn-danger-dn（vertical split, ×0.5）
+
+按下态。为了和平时的底逐像素对齐，走编辑模式：把三张 `btn-*.webp` 放大 2 倍、竖排在 1024x1536 透明画布上（各自中心在 y = 256 / 768 / 1280）当 `-i` 参照，`--quality high --background transparent`。草稿 low 出过一版：参照图上的黄被压成了芥末黄（读成金卡），定稿提示词里给每个键面写死了颜色。九宫格 slice 量出来上下都是 34（没有下唇），写在 style.css 的 `:active` 里。
+
+> （模板）+ Redraw exactly these three buttons in their PRESSED state, same size, same position, same rim, same screws, same outline as the reference: the enamel key is pushed down into the aluminium rim. The coloured lower lip strip under each button is gone (the key sits flush, no visible thickness). Each enamel face keeps its hue and is only slightly darker and flatter: button 1 stays clean lemon yellow (#EBC400, never mustard or gold), button 2 deep navy lacquer (#172647), button 3 dark oxide red (#5E1915). A thin dark inner shadow runs along the top and left inner edges of each face where the rim now overhangs it; no bright highlight on the face. The aluminium rim is unchanged. Empty flat face for a label. Fully transparent background, no checkerboard.
+
+### i-rank / i-trophy（来自落选皮肤 #1，分支 ui-skin-card-shop-hud）
+
+那一轮的 3×3 图标 sheet（1024²，切成 72²），材质同是铝 + 深蓝珐琅浮雕，和上面 f-icons 放在一起看不出两套，所以直接拿来用，没有重出。提示词：
+
+> a 3 by 3 grid of nine separate small game HUD icons, evenly spaced with generous empty space between them, each icon the same size, same material (brushed steel emboss with navy enamel inlay and a thin dark outline): 1 a stack of coins, 2 a sealed foil trading-card booster pack, 3 a person silhouette bust, 4 a small store shelf rack, 5 a storage crate box, 6 a handshake, 7 a single trading card in a sleeve (blank face), 8 an upward chevron rank badge, 9 a trophy cup. No text.
+
+# 剧情插画（public/gen/story/，src/ui/story.ts）
+
+开场剧情和债主上门用的两张场景、两张立绘（DESIGN.md「剧情」）。全是原创角色，不像真人，不出现宝可梦的角色、卡面和 logo。同一段模板 + 各自的 SUBJECT；两张立绘前面再加一句 PORTRAIT，让两个人的线条和光一致。草稿（`--quality low`，模板相同）验证了画风和构图后出 high 定稿，草稿没提交。转换：场景 `cwebp -q 62 -resize 1280 0`，立绘 `--background transparent` 出 PNG 再 `cwebp -q 72 -alpha_q 80 -resize 0 900`。
+
+## 模板
+
+> Original noir-comedy graphic-novel illustration for a cutscene in an original trading-card-shop game. Bold confident ink brush linework, flat cel shading in two tones, fine halftone dots in the shadows. Palette strictly limited to card-back navy blues (#0E1A33 to #2A3F6E), warm shop-lamp white (#FFF3E4), desaturated paper grey, and one muted oxide-red accent (#6E1E1E); no purple, no neon, no gold. Single warm lamp key light from the upper-left, deep navy shadows. Slightly exaggerated comedic proportions, expressive, stylized adults, clearly drawn not photorealistic, not resembling any real person. No text, no letters, no numbers, no logos, no signage lettering, no Pokémon or any existing franchise characters or card art, no watermark.
+
+PORTRAIT：
+
+> Both character portraits in this game share one style: thick uniform black ink outlines, flat two-tone cel shading, halftone dots in the shadows, same line weight and same lighting from the upper-left.
+
+## SUBJECT
+
+### street.webp（landscape 1536x1024，high）
+
+> rainy night, a narrow old East Asian city side street: small shop fronts with blank unlettered signboards, air-conditioner units and tangled overhead wires, one small card shop with its rolling steel shutter pulled half down and a dim light inside, a dark unmarked van parked at the curb with headlights on and its side door slid open, puddles reflecting one streetlamp, wet asphalt, no people, wide establishing shot, the middle of the frame calm and uncluttered.
+
+### shop.webp（landscape，high）
+
+> interior of a small bankrupt trading-card shop at night, seen from behind the counter at eye level: empty metal shelves on the back wall, a dusty glass display case with navy aluminium trim, a counter with a worn rubber play mat, a few plain sealed booster packs in blank silver foil with no artwork, cardboard boxes, one hanging lamp over the counter casting a warm cone with dust floating in it, cobwebs, no people, the center of the frame left open for characters to stand in.
+
+### jiu.webp 九姐（portrait 1024x1536，high，透明底，站右边）
+
+> Half-body character portrait of Jiu-jie, an original loan-shark boss woman in her late forties, stern and dry rather than glamorous: sharp black bob haircut with one grey streak, faint crow's feet, minimal makeup, oversized navy double-breasted coat draped over her shoulders, dark turtleneck, holding a small old desk calculator in one hand, thin unimpressed half-smile, half-lidded eyes, three-quarter view turned toward the left of the frame, cut at the waist, isolated on a fully transparent background.
+
+### adou.webp 阿豆（portrait，high，透明底，站左边）
+
+> Half-body character portrait of A-Dou, an original loan-shark henchman in his twenties: very large and burly, buzz cut, small round sunglasses pushed up on his forehead, tight navy tracksuit, an empty burlap sack slung over one shoulder, a clear rigid card sleeve with a blank card peeking out of his chest pocket, a gentle worried expression that contradicts his size, three-quarter view turned toward the right of the frame, cut at the waist, isolated on a fully transparent background.
