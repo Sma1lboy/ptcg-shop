@@ -1,4 +1,4 @@
-// Share images: the 欧气鉴定 card (欧气 page) and the per-pack poster (开包 table), both a graded-card slab, shown in one <dialog>. Both are drawn on a canvas with the page's own tokens.
+// Share images: the 欧气鉴定 card (欧气 page) and the per-pack poster (开包 table), both drawn on a canvas in the Black/White DS look and shown in one <dialog>. The card is the page's trainer card (sky-blue face, blue title band, the facts on white strips, the verdict word, the owner's portrait, barcode and ID) with BW windows under it (the distribution, the priciest card); the pack poster is one BW window titled with the set. Pixel type at weight 400 with a hard shadow, the White theme's colours whatever theme the viewer has on.
 import { card } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
@@ -56,19 +56,18 @@ const roundRect = (x: CanvasRenderingContext2D, px: number, y: number, w: number
 // card.ts's blank stock when the scan can't load (loadArt). The face-down card is card.ts's back, drawn the same way.
 function drawArt(x: CanvasRenderingContext2D, img: HTMLImageElement | null, px: number, py: number, w: number) {
   const h = w * 88 / 63, r = w * .0508;
-  x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, r); x.fillStyle = css('--stock-rim'); x.fill(); x.restore();
+  x.save(); x.shadowColor = 'rgba(38,43,51,.3)'; x.shadowBlur = 0; x.shadowOffsetX = 4; x.shadowOffsetY = 6; roundRect(x, px, py, w, h, r); x.fillStyle = css('--stock-rim'); x.fill(); x.restore(); // a hard drop shadow, like the pixel text's
   x.save(); roundRect(x, px, py, w, h, r); x.clip();
   if (img) x.drawImage(img, px, py, w, h);
   x.restore();
   return h;
 }
 
-// ---------- the slab: both share images are a graded-card slab lying on the playmat (DESIGN.md「评级标签」) ----------
 // Canvas text falls back to a system face without a word if its font isn't loaded yet, and fonts.ready resolves even when a face
-// never loaded. The CJK display face comes in unicode-range slices, so ask for the exact text it will print.
+// never loaded. The pixel face is subset by glyphs (and the CDN copy is Latin only), so ask for the exact text it will print.
 async function fonts(text: string) {
   if (!document.fonts) return;
-  await Promise.all([`900 64px ${css('--font-display')}`, `600 40px ${css('--font-tag')}`].map(f => document.fonts.load(f, text).catch(() => null)));
+  await document.fonts.load(`400 24px ${css('--font-pixel')}`, text).catch(() => null);
 }
 // Longest start of s that fits in w at the current font, with an ellipsis if cut.
 function fit(x: CanvasRenderingContext2D, s: string, w: number) {
@@ -76,130 +75,211 @@ function fit(x: CanvasRenderingContext2D, s: string, w: number) {
   let n = s.length; while (n > 1 && x.measureText(s.slice(0, n) + '…').width > w) n--;
   return s.slice(0, n) + '…';
 }
-interface Label { k: string; what: string; short?: string; best?: string; price?: string; cert?: string; bars?: number[]; grade: string; gradeF: string; sub: string }
-// Clear acrylic case: body and shadow, the seam where the two halves meet, the label with its inset navy frame, the card in its well,
-// and one soft glare across the front. Returns the slab's bottom edge.
-function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, art: HTMLImageElement | null, L: Label) {
-  const pad = 32, lh = 212, ch = cw * 88 / 63, sw = Math.max(cw + pad * 2 + 28, 600), sx = (W - sw) / 2, sh = pad + lh + 40 + ch + pad + 20, cy = top + pad + lh + 40;
-  const body = () => roundRect(x, sx, top, sw, sh, 30);
-  x.save(); x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 70; x.shadowOffsetY = 30; body(); x.fillStyle = css('--mat'); x.fill(); x.restore();
-  body(); x.fillStyle = 'rgba(255,255,255,.07)'; x.fill(); x.lineWidth = 2; x.strokeStyle = 'rgba(255,255,255,.45)'; x.stroke();
-  roundRect(x, sx + 12, top + 12, sw - 24, sh - 24, 20); x.strokeStyle = 'rgba(255,255,255,.14)'; x.stroke();
-  // label
-  const lx = sx + pad, ly = top + pad, lw = sw - pad * 2, ink = css('--paper-ink'), muted = css('--paper-muted');
-  roundRect(x, lx, ly, lw, lh, 4); x.fillStyle = css('--paper'); x.fill();
-  roundRect(x, lx + 9, ly + 9, lw - 18, lh - 18, 2); x.strokeStyle = ink; x.lineWidth = 3; x.stroke();
-  const tx = lx + 34, rx = lx + lw - 34;
-  x.textBaseline = 'alphabetic'; x.textAlign = 'right'; x.fillStyle = ink;
-  // the grade word as big as it can be while the header line beside it still fits
-  x.font = `700 26px ${css('--font-body')}`; const kw = x.measureText(L.k).width;
-  let fs = 72; do { x.font = `900 ${fs}px ${L.gradeF}`; } while (fs > 44 && lw - 96 - x.measureText(L.grade).width < kw && (fs -= 4));
-  const gw = x.measureText(L.grade).width; x.fillText(L.grade, rx, ly + 116);
-  x.font = `600 26px ${css('--font-body')}`; x.fillText(L.sub, rx, ly + 162);
-  const room = lw - 68 - Math.max(gw, x.measureText(L.sub).width) - 28;
-  x.textAlign = 'left';
-  x.font = `700 26px ${css('--font-body')}`; x.fillText(fit(x, L.k, room), tx, ly + 58);
-  x.font = `24px ${css('--font-body')}`; x.fillText(fit(x, L.short && x.measureText(L.what).width > room ? L.short : L.what, room), tx, ly + 96);
-  if (L.best) {
-    x.font = `600 30px ${css('--font-tag')}`; const pw = L.price ? x.measureText(L.price).width + 12 : 0;
-    x.font = `24px ${css('--font-body')}`; const nm = fit(x, L.best, room - pw); x.fillText(nm, tx, ly + 132);
-    if (L.price) { const nw = x.measureText(nm).width; x.font = `600 30px ${css('--font-tag')}`; x.fillText(L.price, tx + nw + 12, ly + 132); }
-  }
-  if (L.cert && L.bars) {
-    // barcode + number end at least a character (28 px) short of the grade's sub line: narrower bars first, then a shorter number
-    x.font = `20px ${css('--font-body')}`; const units = L.bars.reduce((a, b) => a + b, 0), fits = (t: string) => units * 1.5 + 14 + x.measureText(t).width <= room;
-    const no = [`No. ${L.cert}`, L.cert.replace(' ', ''), ''].find(t => !t || fits(t))!;
-    const u = Math.max(1.5, Math.min(3, (room - 14 - x.measureText(no).width) / units)); let bx = tx; L.bars.forEach((w, i) => { if (!(i % 2)) { x.fillStyle = ink; x.fillRect(bx, ly + 150, w * u, 30); } bx += w * u; });
-    x.fillStyle = muted; if (no) x.fillText(no, bx + 14, ly + 173);
-  }
-  // card in its well
-  const cx = (W - cw) / 2;
-  roundRect(x, cx - 14, cy - 14, cw + 28, ch + 28, 14); x.fillStyle = 'rgba(0,0,0,.3)'; x.fill(); x.strokeStyle = 'rgba(255,255,255,.1)'; x.lineWidth = 2; x.stroke();
-  drawArt(x, art, cx, cy, cw);
-  // glare
-  x.save(); body(); x.clip();
-  const g = x.createLinearGradient(sx, top, sx + sw * .9, top + sh * .6);
-  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(.34, 'rgba(255,255,255,0)'); g.addColorStop(.4, 'rgba(255,255,255,.09)'); g.addColorStop(.47, 'rgba(255,255,255,.02)'); g.addColorStop(.6, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(sx, top, sw, sh); x.restore();
-  return top + sh;
+// ---------- the BW look: both share images are printed like the page's own windows (DESIGN.md「题材」「训练家卡」) ----------
+// The page's White-theme tokens, hardcoded on purpose: the share image is a printed object and must look the same whichever theme the
+// viewer has on, and css() would return the dark theme's greys in dark mode. Same values as the :root block in style.css.
+const BW = { bg: '#E9ECF0', panel: '#FFFFFF', frame: '#3A4150', frameIn: '#C3CAD6', ink: '#262B33', muted: '#59606D', inkShadow: '#CDD3DC', tcard: '#BFE0F6', band: '#2A74D0', bandShadow: '#16305C',
+  gain: '#C8261C', loss: '#56698F', hud: '#252A33', hudInk: '#F2F4F7', hudShadow: '#0B0D10' };
+// All short text is the pixel face at weight 400 (canvas fakes bold and smears the pixels), sizes in whole multiples of 12 so the 12 px grid
+// lands on device pixels, with the BW hard shadow: the string drawn once offset in the shadow colour, then in ink.
+// Long Chinese sentences (the method line, the best-card line, the pack's rank sentence) are the body font (`plain`, system sans) at 26–30 px:
+// in pixel type they run past the window.
+const pixel = (size: number) => `400 ${size}px ${css('--font-pixel')}`;
+const plain = (size: number) => `400 ${size}px ${css('--font-body')}`;
+function text(x: CanvasRenderingContext2D, s: string, px: number, py: number, size: number, color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow) {
+  x.font = pixel(size); x.textAlign = align; x.textBaseline = 'alphabetic';
+  if (shadow) { const d = Math.max(2, Math.round(size / 32) * 2); x.fillStyle = shadow; x.fillText(s, px + d, py + d); }
+  x.fillStyle = color; x.fillText(s, px, py);
 }
-// The playmat the slab lies on: same dark mat as the page (both themes), lit from above.
-function mat(x: CanvasRenderingContext2D, W: number, H: number) {
-  x.fillStyle = css('--mat'); x.fillRect(0, 0, W, H);
-  const g = x.createRadialGradient(W / 2, H * .38, 60, W / 2, H * .38, H * .62); g.addColorStop(0, 'rgba(255,255,255,.12)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = g; x.fillRect(0, 0, W, H);
+// The largest of `sizes` at which s fits in w (the smallest if none does).
+function pixelFit(x: CanvasRenderingContext2D, s: string, w: number, sizes: number[]) {
+  for (const z of sizes) { x.font = pixel(z); if (x.measureText(s).width <= w) return z; }
+  return sizes[sizes.length - 1];
+}
+// A pixel line that shrinks through `sizes` to fit w, and is cut with an ellipsis only at the smallest.
+function line(x: CanvasRenderingContext2D, s: string, px: number, py: number, w: number, sizes: number[], color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow) {
+  const z = pixelFit(x, s, w, sizes); x.font = pixel(z); text(x, fit(x, s, w), px, py, z, color, align, shadow);
+}
+// Body-font text broken into lines of at most w (Chinese breaks anywhere).
+function wrap(x: CanvasRenderingContext2D, s: string, w: number) {
+  const out: string[] = []; let cur = '';
+  for (const ch of s) { if (cur && x.measureText(cur + ch).width > w) { out.push(cur); cur = ch; } else cur += ch; }
+  if (cur) out.push(cur);
+  return out;
+}
+// Diagonal stripes (CSS `repeating-linear-gradient(135deg, transparent 0 p, color p 2p)` at 2×), clipped to the box by the caller.
+function stripes(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: number, p: number, color: string) {
+  const s = p * Math.SQRT2; x.fillStyle = color;
+  for (let c = X + Y - h; c < X + Y + w + h; c += 2 * s) { const a = c + s, b = c + 2 * s; x.beginPath(); x.moveTo(a, Y); x.lineTo(b, Y); x.lineTo(b - h, Y + h); x.lineTo(a - h, Y + h); x.fill(); }
+}
+// The DS bottom screen behind everything: --bg under the body's faint ink stripe.
+function screen(x: CanvasRenderingContext2D, W: number, H: number) {
+  x.fillStyle = BW.bg; x.fillRect(0, 0, W, H);
+  stripes(x, 0, 0, W, H, 12, 'rgba(38,43,51,.04)');
+}
+// A BW window at 2×: --frame rim, a gap of white, the --frame-in rule; with a title, its dark title bar (the panel h2). Returns the top of the content.
+function win(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: number, title?: string) {
+  roundRect(x, X, Y + 8, w, h, 20); x.fillStyle = 'rgba(0,0,0,.08)'; x.fill();
+  roundRect(x, X, Y, w, h, 20); x.fillStyle = BW.frame; x.fill();
+  roundRect(x, X + 6, Y + 6, w - 12, h - 12, 14); x.fillStyle = BW.panel; x.fill();
+  roundRect(x, X + 13, Y + 13, w - 26, h - 26, 8); x.strokeStyle = BW.frameIn; x.lineWidth = 2; x.stroke();
+  if (!title) return Y + 6;
+  x.beginPath(); x.roundRect(X + 6, Y + 6, w - 12, 68, [14, 14, 0, 0]); x.fillStyle = BW.hud; x.fill();
+  x.fillStyle = 'rgba(0,0,0,.25)'; x.fillRect(X + 6, Y + 68, w - 12, 6);
+  line(x, title, X + 36, Y + 54, w - 72, [36, 24], BW.hudInk, 'left', BW.hudShadow);
+  return Y + 74;
+}
+// A small text box (a card's plate): rim, white, rule.
+function box(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: number, r: number) {
+  roundRect(x, X, Y, w, h, r); x.fillStyle = BW.frame; x.fill();
+  roundRect(x, X + 4, Y + 4, w - 8, h - 8, r - 4); x.fillStyle = BW.panel; x.fill();
+  roundRect(x, X + 9, Y + 9, w - 18, h - 18, Math.max(2, r - 9)); x.strokeStyle = BW.frameIn; x.lineWidth = 2; x.stroke();
+}
+// The barcode from its bar/gap widths (cert()), squeezed to w.
+function bars(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: number, b: number[]) {
+  const u = w / b.reduce((a, c) => a + c, 0); let bx = X; x.fillStyle = BW.ink;
+  b.forEach((n, i) => { if (!(i % 2)) x.fillRect(Math.round(bx), Y, Math.max(1, Math.round(n * u)), h); bx += n * u; });
 }
 
-// ---------- share card: the 欧气鉴定 label on a slab holding the priciest card ever pulled ----------
+// ---------- share card: the trainer card, then what a stranger needs to read the score, then the priciest card ----------
+// The trainer card is the page's `.tcard` (luck.ts card()) drawn at 2×: rounded rim + white inner line, sky-blue striped face, blue title
+// band, the facts on white strips, the verdict word big with 超过 N% under it, the owner's portrait, barcode and ID at the foot.
+function tcard(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: number, g: Grade, who: HTMLImageElement | null) {
+  const r = 28, L = g.L;
+  roundRect(x, X, Y + 8, w, h, r); x.fillStyle = 'rgba(0,0,0,.12)'; x.fill(); // the card's 0 4px 0 drop shadow
+  roundRect(x, X, Y, w, h, r); x.fillStyle = BW.ink; x.fill(); // the 3px rim
+  const fx = X + 6, fy = Y + 6, fw = w - 12, fh = h - 12, fr = r - 6;
+  roundRect(x, fx, fy, fw, fh, fr); x.fillStyle = BW.tcard; x.fill();
+  x.save(); roundRect(x, fx, fy, fw, fh, fr); x.clip();
+  stripes(x, fx, fy, fw, fh, 16, 'rgba(255,255,255,.28)');
+  if (who) x.imageSmoothingEnabled = false, x.drawImage(who, X + w - 30 - who.width * 2, Y + h - 6 - who.height * 2, who.width * 2, who.height * 2); // 2× the page's 1×, whole pixels
+  x.restore();
+  roundRect(x, fx + 3, fy + 3, fw - 6, fh - 6, fr - 3); x.strokeStyle = BW.tcard; x.lineWidth = 6; x.stroke(); // inset 3px of card colour over the stripes
+  roundRect(x, fx + 7, fy + 7, fw - 14, fh - 14, fr - 7); x.strokeStyle = '#fff'; x.lineWidth = 2; x.stroke(); // and the 1px white line
+  // title band
+  x.beginPath(); x.roundRect(X + 14, Y + 14, w - 28, 68, [18, 18, 0, 0]); x.fillStyle = BW.band; x.fill();
+  text(x, '训练家卡', X + 42, Y + 60, 36, '#fff', 'left', BW.bandShadow);
+  text(x, '欧气鉴定', X + w - 42, Y + 60, 36, '#fff', 'right', BW.bandShadow);
+  // the facts: 店 / 开了 / 最贵, on white strips beside the portrait
+  const rx = X + 38, rw = w - 38 - 30 - (who ? who.width * 2 : 0) - 24, best = g.best;
+  const rows: [string, string, string?][] = [['店', `欧气卡铺 · 第 ${G.state.branch.n + 1} 家`], ['开了', g.what, g.short]];
+  if (best) rows.push(['最贵', best.name, money(g.bestNow)]);
+  rows.forEach(([k, v, alt], i) => {
+    const ry = Y + 100 + i * 56;
+    roundRect(x, rx, ry, rw, 48, 12); x.fillStyle = 'rgba(255,255,255,.78)'; x.fill();
+    text(x, k, rx + 20, ry + 33, 24, BW.band, 'left', null);
+    const vx = rx + 20 + 72 + 16; let room = rw - (vx - rx) - 20;
+    x.font = pixel(24);
+    if (best && i === 2) { const pw = x.measureText(alt!).width; text(x, fit(x, v, room - pw - 16), vx, ry + 33, 24, BW.ink, 'left', null); const nw = x.measureText(fit(x, v, room - pw - 16)).width; text(x, alt!, vx + nw + 16, ry + 33, 24, BW.ink, 'left', null); return; }
+    text(x, fit(x, alt && x.measureText(v).width > room ? alt : v, room), vx, ry + 33, 24, BW.ink, 'left', null);
+  });
+  // the verdict word, then how far above the simulated players it stands
+  const pctS = `超过 ${pctText(g.pct!)}%`, gap = 24;
+  x.font = pixel(36); const pw = x.measureText(pctS).width, gz = pixelFit(x, L.title, rw - pw - gap, [96, 72, 48]); // the word as big as it can be with 超过 N% beside it
+  x.font = pixel(gz); const gw = x.measureText(L.title).width;
+  text(x, L.title, rx, Y + 100 + 172 + 92, gz, BW.ink, 'left');
+  text(x, pctS, rx + gw + gap, Y + 100 + 172 + 92, 36, BW.ink, 'left');
+  // barcode and ID at the foot
+  bars(x, rx, Y + h - 58, 184, 28, g.bars);
+  text(x, `ID No. ${g.cert}`, rx + 184 + 16, Y + h - 34, 24, BW.muted, 'left', null);
+}
+
 // Where the player's total sits among the simulated players (S.luckSamples, the draws luckPercentile counts): one bar per slice of a
-// log money axis (totals are right-skewed; one big card is a long way right), bars the player beat filled in ink, the rest muted.
+// log money axis (totals are right-skewed; one big card is a long way right), bars the player beat filled in ink, the rest pale,
+// like the page's distribution.
 function spread(x: CanvasRenderingContext2D, px: number, py: number, w: number, h: number, sims: Float64Array, you: number, exp: number) {
-  const mi = css('--mat-ink'), mm = css('--mat-muted'), num = css('--font-tag'), B = S.luckBins(sims, you, exp), top = Math.max(...B.bins), bw = w / B.bins.length, yx = px + B.you * w;
+  const B = S.luckBins(sims, you, exp), top = Math.max(...B.bins), bw = w / B.bins.length, yx = px + B.you * w;
   B.bins.forEach((c, i) => {
     if (!c) return;
     const bh = Math.max(3, c / top * h), bx = px + i * bw;
-    x.fillStyle = B.beat(i) ? mi : mm; x.globalAlpha = B.beat(i) ? .8 : .32; x.fillRect(bx + 1, py + h - bh, bw - 2, bh);
+    x.fillStyle = B.beat(i) ? BW.ink : BW.frameIn; x.fillRect(bx + 1, py + h - bh, bw - 2, bh);
   });
-  x.globalAlpha = 1; x.fillStyle = mm; x.fillRect(px, py + h, w, 2);
+  x.fillStyle = BW.muted; x.fillRect(px, py + h, w, 2);
   const ex = px + B.exp * w; x.fillRect(ex - 1, py + h, 2, 12);
-  x.textAlign = 'center'; x.font = `22px ${css('--font-body')}`; x.fillText(`期望 ${money(exp)}`, Math.min(px + w - 70, Math.max(px + 70, ex)), py + h + 36);
-  x.fillStyle = mi; x.fillRect(yx - 2, py - 14, 4, h + 14);
-  x.font = `600 28px ${num}`; x.textAlign = yx > px + w - 90 ? 'right' : yx < px + 90 ? 'left' : 'center'; x.fillText(`你 ${money(you)}`, yx, py - 22);
+  const el = `期望 ${money(exp)}`; x.font = pixel(24); const ew = x.measureText(el).width / 2;
+  text(x, el, Math.min(px + w - ew, Math.max(px + ew, ex)), py + h + 40, 24, BW.muted, 'center', null);
+  x.fillStyle = BW.ink; x.fillRect(yx - 2, py - 10, 4, h + 10);
+  const yl = `你 ${money(you)}`, al = yx > px + w - 90 ? 'right' : yx < px + 90 ? 'left' : 'center';
+  text(x, yl, yx, py - 18, 36, BW.ink, al);
 }
 async function drawCard() {
-  const g = grade(), L = g.L, best = g.best, pct = pctText(g.pct!), sims = S.luckSamples(G.state.packsBy), bestLine = g.bestLine;
-  await fonts(L.title + '欧气卡铺鉴定' + g.head + g.method + bestLine + hits().flat().join('') + `你期望${money(L.value)}${money(L.expected)}`);
-  const art = best ? await loadArt(best) : await loadOne(back()); // no hit yet: the card lies face down
+  const g = grade(), L = g.L, best = g.best, sims = S.luckSamples(G.state.packsBy), bestLine = g.bestLine, hitList = hits().map(([n, c]) => `${n} ×${c}`), hitsLine = hitList.join(' · ');
+  await fonts(L.title + '欧气卡铺鉴定训练家卡店开了最贵超过期望你战利品分布' + g.what + g.head + hitsLine + `ID No. ${g.cert}` + `第${G.state.branch.n + 1}家` + '卡价市价概率实开统计 · ' + money(L.value) + money(L.expected) + (best ? best.name + money(g.bestNow) : ''));
+  const [art, who] = await Promise.all([best ? loadArt(best) : loadOne(back()), loadOne('gen/story/owner.webp')]); // no hit yet: the card lies face down
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
-  const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
-  mat(x, W, H);
-  const y = slab(x, W, 40, 460, art, { k: '欧气卡铺 · 欧气鉴定', what: g.what, short: g.short, best: best?.name, price: best ? money(g.bestNow) : '', cert: g.cert, bars: g.bars,
-    grade: L.title, gradeF: css('--font-display'), sub: `超过 ${pct}%` });
-  // under the slab, what a stranger needs to read the grade: against whom, how sure, and why
-  x.textAlign = 'center'; x.fillStyle = mi; x.font = `600 34px ${body}`;
-  x.fillText(g.head, W / 2, y + 54);
-  spread(x, 130, y + 112, W - 260, 96, sims, L.value, L.expected);
-  x.textAlign = 'center'; x.fillStyle = mm; x.font = `22px ${body}`;
-  x.fillText(g.method, W / 2, y + 284);
-  x.fillStyle = mi; x.font = `28px ${body}`; x.fillText(fit(x, bestLine, W - 120), W / 2, y + 330);
-  const hitsLine = hits().map(([n, c]) => `${n} ×${c}`).join('  ·  ');
-  x.fillStyle = mm; x.font = `24px ${body}`; if (hitsLine) x.fillText(hitsLine, W / 2, y + 368);
-  x.font = `20px ${body}`; x.fillText('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 22);
+  const x = c.getContext('2d')!, X = 48, CW = W - 96;
+  screen(x, W, H);
+  tcard(x, X, 48, CW, 442, g, who);
+  // window 1: against whom, how sure. The head is a pixel line while it fits; the method is a long sentence, so it is body-font text
+  let y = 48 + 442 + 8 + 26, top = win(x, X, y, CW, 424, '欧气分布');
+  line(x, g.head, X + 40, top + 52, CW - 80, [36, 24], BW.ink);
+  spread(x, X + 60, top + 130, CW - 120, 80, sims, L.value, L.expected);
+  x.font = plain(26); x.fillStyle = BW.muted; x.textAlign = 'left';
+  const parts = g.method.split(' · '); // two clauses of one line each when they split cleanly, so 「±1.3」 never breaks across lines
+  (parts.length === 2 ? parts : wrap(x, g.method, CW - 80)).slice(0, 2).forEach((s, i) => x.fillText(s, X + 40, top + 210 + 82 + i * 34));
+  // window 2: the priciest card, and the tally of big hits
+  y += 424 + 26; top = win(x, X, y, CW, 375, '战利品');
+  const aw = 180, ax = X + CW - 40 - aw, ay = top + 24; drawArt(x, art, ax, ay, aw);
+  x.font = plain(30); x.fillStyle = BW.ink; x.textAlign = 'left';
+  const room = ax - 40 - (X + 40), lines = wrap(x, bestLine, room); lines.slice(0, 4).forEach((s, i) => x.fillText(s, X + 40, ay + 34 + i * 44));
+  // the tally is as many pixel lines as it takes, entries kept whole, ending at the card's foot
+  const tally: string[] = []; x.font = pixel(24);
+  for (const h of hitList) { const last = tally.length - 1; if (last >= 0 && x.measureText(`${tally[last]} · ${h}`).width <= room) tally[last] += ` · ${h}`; else tally.push(h); }
+  tally.forEach((s, i) => text(x, s, X + 40, ay + aw * 88 / 63 - 8 - (tally.length - 1 - i) * 36, 24, BW.muted, 'left'));
+  text(x, '卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 26, 24, BW.muted, 'center');
   return c.toDataURL('image/png');
 }
 
-// One pack or one batch, straight from the mat: the best card in a slab, graded by where the pack ranks among packs of its set.
+// One pack or one batch, straight from the mat: a window titled with the set, the pack's rank among packs of its set and what it
+// opened to, the best card on a plate, and the profit or loss.
 async function drawPack(d: ShareSpec) {
   // bottom half reads from the bottom: a 5th-percentile pack is 后 5%, not a boastful 前 95%
   const top = d.pct >= .995 ? '前 0.5%' : d.pct >= .5 ? `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%` : `后 ${Math.max(1, Math.round(d.pct * 100))}%`;
-  // A batch with more than one hit lays out what the table shows after it (table3d.js): the dearest in the slab, the next few RR-and-up
+  // A batch with more than one hit lays out what the table shows after it (table3d.js): the dearest big, the next few RR-and-up
   // cards in a row under it, each on a plate with name, rarity and price, and the rest as one line 「另 N 张 · 合计 $x」.
   const row = d.n > 1 ? d.front.filter(c => c !== d.best).slice(0, 4) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
-  await fonts(top + d.set + d.best.name + row.map(c => c.name + rarLabel(c.kind)).join('') + '另张合计');
+  const sub = d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里', what = d.n > 1 ? `${d.n} 包共开出` : '这包开出', diff = d.value - d.cost;
+  const gain = `${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, rank = d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank;
+  await fonts(top + d.set + d.best.name + row.map(c => c.name + rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计欧气卡铺 · ');
   const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
-  const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body'), tag = css('--font-tag');
-  mat(x, W, H);
-  let y = slab(x, W, row.length ? 36 : 48, row.length ? 360 : 580, art, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
-    best: d.best.name, price: money(d.best.price), ...cert(`${d.set}|${d.n}|${Math.round(d.value * 100)}|${d.best.n}`), grade: top, gradeF: css('--font-tag'), sub: d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里' });
+  const x = c.getContext('2d')!, X = 48, CW = W - 96, WB = H - 96;
+  screen(x, W, H);
+  const t = win(x, X, 48, CW, WB - 48, d.set), rt = X + CW - 44;
+  // header: the rank big on the left, the value on the right
+  text(x, top, X + 44, t + 120, 96, BW.ink, 'left');
+  text(x, sub, X + 44, t + 164, 24, BW.muted, 'left', null);
+  text(x, what, rt, t + 60, 24, BW.muted, 'right', null);
+  text(x, money(d.value), rt, t + 120, pixelFit(x, money(d.value), 420, [72, 48]), BW.ink, 'right');
+  x.fillStyle = BW.frameIn; x.fillRect(X + 44, t + 190, CW - 88, 2);
+  // the best card, then the row of the next ones
+  const aw = row.length ? 200 : 480, ay = t + 216, ah = drawArt(x, art, X + (CW - aw) / 2, ay, aw);
+  let y = ay + ah + 24;
+  const plate = (cx: number, py: number, pw: number, cd: { name: string; kind: string; price: number }, big: boolean) => {
+    box(x, cx, py, pw, 112, 12);
+    if (!big) { // narrow plate: name, rarity and price on a line each
+      line(x, cd.name, cx + pw / 2, py + 44, pw - 24, [24], BW.ink, 'center', null);
+      x.font = pixel(24); const rl = rarLabel(cd.kind); // the full name when it fits, else the code printed on the card (SIR)
+      text(x, x.measureText(rl).width <= pw - 24 ? rl : cd.kind, cx + pw / 2, py + 74, 24, BW.muted, 'center', null);
+      line(x, money(cd.price), cx + pw / 2, py + 100, pw - 24, [24], BW.ink, 'center', null);
+      return;
+    }
+    line(x, cd.name, cx + pw / 2, py + 52, pw - 24, [36, 24], BW.ink, 'center', null);
+    text(x, rarLabel(cd.kind), cx + 20, py + 92, 24, BW.muted, 'left', null);
+    line(x, money(cd.price), cx + pw - 20, py + 92, pw - 40 - 96, [36], BW.ink, 'right', null);
+  };
+  plate(X + (CW - Math.max(aw, 560)) / 2, y, Math.max(aw, 560), d.best, true); y += 112 + 26;
   if (row.length) {
-    const cw = 160, gap = 28, rw = row.length * cw + (row.length - 1) * gap, ry = y + 32;
-    row.forEach((cd, i) => {
-      const cx = (W - rw) / 2 + i * (cw + gap), ch = drawArt(x, arts[i], cx, ry, cw), py = ry + ch + 10;
-      roundRect(x, cx - 6, py, cw + 12, 96, 6); x.fillStyle = 'rgba(0,0,0,.34)'; x.fill(); x.strokeStyle = 'rgba(255,255,255,.14)'; x.lineWidth = 1.5; x.stroke();
-      x.textAlign = 'center'; x.fillStyle = mi; x.font = `600 21px ${body}`; x.fillText(fit(x, cd.name, cw), cx + cw / 2, py + 28);
-      x.fillStyle = mm; x.font = `17px ${body}`; x.fillText(fit(x, rarLabel(cd.kind), cw), cx + cw / 2, py + 54);
-      x.fillStyle = mi; x.font = `600 26px ${tag}`; x.fillText(money(cd.price), cx + cw / 2, py + 84);
-    });
-    y = ry + cw * 88 / 63 + 106;
-    x.textAlign = 'center'; x.fillStyle = mm; x.font = `24px ${body}`; x.fillText(`另 ${rest} 张 · 合计 ${money(restV)}`, W / 2, y + 36);
-    y += 26;
+    const cw = 150, gap = 32, rw = row.length * cw + (row.length - 1) * gap, ry = y;
+    row.forEach((cd, i) => { const cx = X + (CW - rw) / 2 + i * (cw + gap), ch = drawArt(x, arts[i], cx, ry, cw); plate(cx - 10, ry + ch + 12, cw + 20, cd, false); });
+    y = ry + cw * 88 / 63 + 12 + 112;
+    text(x, `另 ${rest} 张 · 合计 ${money(restV)}`, X + CW / 2, y + 36, 24, BW.muted, 'center', null);
   }
-  const diff = d.value - d.cost;
-  x.textAlign = 'center';
-  x.font = `30px ${body}`; x.fillStyle = mi; x.fillText(d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank, W / 2, y + (row.length ? 56 : 76));
-  x.font = `28px ${body}`; x.fillStyle = diff >= 0 ? css('--mat-gain') : css('--mat-loss');
-  x.fillText(`${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, W / 2, y + (row.length ? 102 : 130));
-  x.font = `22px ${body}`; x.fillStyle = mm; x.fillText('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 30);
+  // the outcome sits at the foot of the window: gain red, loss slate
+  const wb = 48 + WB - 48;
+  x.fillStyle = BW.frameIn; x.fillRect(X + 44, wb - 150, CW - 88, 2);
+  x.font = plain(30); x.fillStyle = BW.ink; x.textAlign = 'center'; x.fillText(rank, X + CW / 2, wb - 96);
+  line(x, gain, X + CW / 2, wb - 46, CW - 88, [36, 24], diff >= 0 ? BW.gain : BW.loss, 'center');
+  text(x, '卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 26, 24, BW.muted, 'center');
   return c.toDataURL('image/png');
 }
 

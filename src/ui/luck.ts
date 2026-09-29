@@ -62,7 +62,7 @@ export function renderLuck() {
   render(html`<h2 id="luck-h">欧气检测</h2>
       <div class="lk-a">${card(g)}
       ${pct == null ? html`<p class="verdict-sub">拿你开出的总市值，和 ${S.LUCK_TRIALS} 个开了同样这些包（同系列、同包数、同概率）的模拟玩家比。</p>` : html`
-      <p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>分享图印的是这份鉴定和下面这张分布</small></p>
+      <p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>分享图印的就是这张训练家卡和下面这张分布</small></p>
       <p class="dist-head">${g.head}</p>
       ${dist(g)}
       <p class="dist-note">${g.method}</p>
