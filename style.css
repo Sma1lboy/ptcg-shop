@@ -540,9 +540,11 @@ button:disabled { cursor: not-allowed; }
 .coach:is([data-side="right"], [data-side="left"])::before { left: auto; top: calc(var(--ay, 50%) - 16px); width: 9px; height: 16px; }
 .coach[data-side="right"]::before { left: -17px; clip-path: polygon(0 50%, 100% 0, 100% 100%); }
 .coach[data-side="left"]::before { right: -17px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
-/* phones, on the mat: a strip under the button, the step's text and its button side by side, no heading (guide.ts place()) */
+/* phones: on the mat a strip under the button, the step's text and its button side by side, no heading; over the bottom tabs
+   (the step is on another page) just the heading and the button (guide.ts place()) */
 .coach[data-strip]:popover-open { display: flex; align-items: center; gap: 10px; width: calc(100vw - 16px); padding: 6px 10px; line-height: 1.5; }
-.coach[data-strip] :is(.co-k, h3) { display: none; }
+.coach[data-strip="mat"] :is(.co-k, h3) { display: none; }
+.coach[data-strip="tab"] p { display: none; } .coach[data-strip="tab"] h3 { flex: 1; margin: 0; } /* just 「测欧气：到「欧气」页」 */
 .coach[data-strip] .co-btns { flex: none; margin: 0; }
 .coach .co-k { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
 .coach h3 { margin: 2px 0 4px; font-size: var(--fs-h); }

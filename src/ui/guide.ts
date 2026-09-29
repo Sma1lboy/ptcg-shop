@@ -59,8 +59,10 @@ let seek = 0; // until when a new step may still scroll its button into view
 function place() {
   const pop = $('coach');
   if (!pop.matches(':popover-open') || !anchor) return;
-  const onMat = !!anchor.closest('#mat');
-  pop.toggleAttribute('data-strip', onMat && phone()); // before measuring: the strip is shorter, the side popover wider
+  const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav');
+  // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
+  // 「测欧气：到「欧气」页」: the full text over the bottom tabs covered what the player was reading (成长's 借款额度)
+  if (phone() && (onMat || tab)) pop.dataset.strip = onMat ? 'mat' : 'tab'; else delete pop.dataset.strip;
   if (onMat && !phone()) pop.dataset.side = 'right';
   const a = anchor.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight, gap = 12, vw = innerWidth, vh = floor();
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -68,7 +70,7 @@ function place() {
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
   if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in)')) {
-    const need = pop.hasAttribute('data-strip') ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
+    const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
     else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }
