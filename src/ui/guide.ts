@@ -10,7 +10,7 @@ export function renderGuide() {
   if (n >= 3) { el.hidden = true; return; }
   const cur = n ? 2 : stock ? 1 : 0;
   const steps = [
-    ['进货', `你有 ${money(s.cash)}。点「进 10 包」，再点「全上架」，顾客才买得到。`],
+    ['进货', `你有 ${money(s.cash)}。点「进 10 包」，再点「摆上空货架」，顾客才买得到。`],
     ['开包', '点「开 1 包」撕开，一张张翻，或按空格。'],
     ['测欧气', '开完看「欧气检测」：你的运气在几千个模拟玩家里排第几。可以生成分享图。'],
   ];
