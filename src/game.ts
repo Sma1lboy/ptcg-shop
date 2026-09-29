@@ -587,7 +587,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return { packs, spent };
   }
   // What the clerk's last round left unbought for lack of cash (0 = he filled every shelf), while the shelves still lack it.
-  const clerkShort = () => { const r = state.clerkRound; return r && lvl('clerk') ? Math.min(r.need - r.spent, clerkNeed()) : 0; };
+  const clerkShort = () => { const r = state.clerkRound; return r && lvl('clerk') ? Math.max(0, Math.min(r.need - r.spent, clerkNeed())) : 0; };
   // What a round takes to fill the shelves: now, or what the last round needed if more (right after a round the shelves are full,
   // but they sell down again by the next one). The 成长 page's buy buttons warn when a buy leaves less than this.
   const clerkBudget = () => lvl('clerk') ? Math.max(clerkNeed(), state.clerkRound?.need || 0) : 0;
@@ -595,7 +595,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function clerkNow() {
     if (!lvl('clerk')) return 0;
     const b = clerkBuy(); if (!b.packs) return 0;
-    if (state.clerkRound) state.clerkRound.spent = cents(state.clerkRound.need - clerkNeed());
+    if (state.clerkRound) state.clerkRound.spent = cents(state.clerkRound.spent + b.spent);
     log(`店员提前补货 ${b.packs} 包`, '', -b.spent);
     emit(); return b.packs;
   }
