@@ -112,7 +112,7 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .face { transform: rotateY(180deg); background: var(--foil-3); }
 .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .energy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; background: var(--foil-2); color: var(--back-2); font-size: 11px; }
-.energy b { font: 400 40px/1 var(--font-display); }
+.energy svg { width: 62%; margin: 0 auto; }
 /* foil sheen on reverse holos and hits; SIR/HR get a gold edge */
 .t1 .face::after, .t2 .face::after, .t3 .face::after, .t4 .face::after, .t5 .face::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .28;

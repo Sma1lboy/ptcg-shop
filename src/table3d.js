@@ -199,8 +199,7 @@ function puff(x, y) {
   const sx = 1 - smooth(PW / 2 - .8, PW / 2 - .04, Math.abs(x)), sy = smooth(CRIMP, CRIMP + 1.5, PH / 2 - Math.abs(y));
   return PUFF * Math.sqrt(sx * sy) * (1 + .05 * Math.sin(x * 1.7 + y * .6));
 }
-const COLS = 60;
-function sheet(yA, yB, jA, jB, side, rows) {
+function sheet(yA, yB, jA, jB, side, rows, COLS) {
   const pos = [], uv = [], idx = [];
   for (let r = 0; r <= rows; r++) for (let c = 0; c <= COLS; c++) {
     const x = -PW / 2 + PW * c / COLS, a = yA + jA(c), b = yB + jB(c), y = a + (b - a) * r / rows;
@@ -214,12 +213,13 @@ function sheet(yA, yB, jA, jB, side, rows) {
   geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx); geo.computeVertexNormals(); return geo;
 }
-function buildPack(setId) {
-  const mats = packArt(setId), pack = new T.Group(), strip = new T.Group(), ph = Math.random() * 9;
-  const teeth = c => (c % 2 ? .09 : 0), tearJ = c => .06 * Math.sin(c * .9 + ph) + .04 * Math.sin(c * 2.3 + ph * 2), zero = () => 0;
+// cols/rows: mesh density. A pack held up to the camera gets 60×64; the ten packs of a batch, small on screen, far less.
+function buildPack(setId, cols = 60, rows = 64) {
+  const mats = packArt(setId), pack = new T.Group(), strip = new T.Group(), ph = Math.random() * 9, f = 60 / cols;
+  const teeth = c => (c % 2 ? .09 : 0), tearJ = c => .06 * Math.sin(c * f * .9 + ph) + .04 * Math.sin(c * f * 2.3 + ph * 2), zero = () => 0;
   const SC = (TEAR + PH / 2) / 2, stripGeos = [];
   for (const side of [1, -1]) {
-    const body = sheet(-PH / 2, TEAR, teeth, tearJ, side, 64), top = sheet(TEAR, PH / 2, tearJ, c => -teeth(c), side, 10);
+    const body = sheet(-PH / 2, TEAR, teeth, tearJ, side, rows, cols), top = sheet(TEAR, PH / 2, tearJ, c => -teeth(c), side, Math.max(4, rows / 6 | 0), cols);
     top.translate(0, -SC, 0); stripGeos.push({ geo: top, orig: top.attributes.position.array.slice() });
     for (const [geo, parent] of [[body, pack], [top, strip]]) {
       const outer = new T.Mesh(geo, side > 0 ? mats.front : mats.back); outer.castShadow = true;
@@ -232,10 +232,11 @@ function buildPack(setId) {
 }
 // Tear progress p (0..1) runs the tear front from left to right; the loose end behind it swings up about the front
 // (more the further back, so the flap curls) and lifts off the pack a little.
-function setTear(run, p) {
-  run.tear = p;
-  const ty = run.pack.userData.tearY, xf = -PW / 2 + p * PW;
-  for (const { geo, orig } of run.pack.userData.stripGeos) {
+function setTear(run, p) { run.tear = p; tearPack(run.pack, p); }
+function tearPack(pack, p) {
+  pack.userData.tear = p;
+  const ty = pack.userData.tearY, xf = -PW / 2 + p * PW;
+  for (const { geo, orig } of pack.userData.stripGeos) {
     const a = geo.attributes.position.array;
     for (let i = 0; i < a.length; i += 3) {
       const x = orig[i], y = orig[i + 1], z = orig[i + 2], k = clamp((p - (x + PW / 2) / PW) / .3, 0, 1), th = -k * k * .6, dx = x - xf, dy = y - ty;
@@ -320,17 +321,48 @@ function backCanvas() {
   x.beginPath(); x.arc(W / 2, H / 2, 26, 0, Math.PI * 2); x.fill(); x.fillStyle = ring; x.beginPath(); x.arc(W / 2, H / 2, 15, 0, Math.PI * 2); x.fill();
   return c;
 }
-// Energy has no card art in the data: paint a basic energy card in its type colour.
-const ETYPE = { 草: '#3E9B4F', 火: '#D8492C', 水: '#2F7FC9', 雷: '#E7B521', 超: '#8C52B3', 斗: '#B4622F', 恶: '#2E4652', 钢: '#8996A5' };
+// Energy has no card art in the data: paint a basic energy card around its type mark, the way the printed card is
+// recognised: leaf, flame, drop, bolt, eye, fist, crescent, triangle, white on the type colour. Not a character in a
+// display face (「火」 in the display font read as 「活」). Marks are our own drawings on a 100×100 box; `cut` is drawn
+// over `d` in the circle colour. ui/mat.ts draws the same paths as inline SVG on the 2D mat. Print colours, same in both themes.
+export const ENERGY = {
+  草: { col: '#3E9B4F', rot: -32, d: 'M50 16C67 27 75 45 70 62C66 75 58 81 50 81C42 81 34 75 30 62C25 45 33 27 50 16ZM48.6 81H51.4V92H48.6Z',
+    cut: 'M48.8 30H51.2V80H48.8ZM50 46L61 38L62 40L50 49ZM50 60L64 51L65 53L50 63ZM50 52L38 44L37 46L50 55ZM50 66L36 58L35 60L50 69Z' },
+  火: { col: '#D8492C', d: 'M50 14C55 30 72 37 72 57C72 72 62 83 50 83C38 83 28 72 28 57C28 46 34 38 40 32C40 41 43 46 47 48C44 36 45 25 50 14Z',
+    cut: 'M50 57C55 62 58 66 57 72C56 77 53 79 50 79C47 79 44 77 43 72C42 66 45 62 50 57Z' },
+  水: { col: '#2F7FC9', d: 'M50 14C58 30 73 44 73 60C73 73 63 84 50 84C37 84 27 73 27 60C27 44 42 30 50 14Z', cut: 'M37 60C37 68 42 74 49 76C44 72 41 67 41 60Z' },
+  雷: { col: '#E7B521', d: 'M57 12L28 55H46L39 88L72 41H54L63 12Z' },
+  超: { col: '#8C52B3', d: 'M14 50C26 30 74 30 86 50C74 70 26 70 14 50Z', cut: 'M64 50A14 14 0 1 0 36 50A14 14 0 1 0 64 50Z', dot: [50, 50, 7] },
+  斗: { col: '#B4622F', d: 'M27 40A6 6 0 0 1 39 40V46H40V36A6 6 0 0 1 52 36V46H53V36A6 6 0 0 1 65 36V46H66V40A6 6 0 0 1 78 40V64C78 75 70 82 60 82H43C33 82 27 75 27 66Z',
+    cut: 'M38.7 37H40.3V50H38.7ZM51.7 33H53.3V50H51.7ZM64.7 37H66.3V50H64.7ZM27 55H55C60 55 63 58 63 62C63 66 60 68 55 68H44V65.5H55C58 65.5 60 64 60 62C60 60 58 58 55 58H27Z' },
+  恶: { col: '#2E4652', d: 'M72 32A28 28 0 1 0 72 68A23 23 0 1 1 72 32Z' },
+  钢: { col: '#8996A5', d: 'M50 16L82 74H18Z', cut: 'M50 40L64 66H36Z' },
+};
+const typeOf = name => (name.slice(2, 3) in ENERGY ? name.slice(2, 3) : '钢');
+function energyMark(x, t, cx, cy, r) { // the round type mark, r = radius in canvas px
+  const e = ENERGY[t], k = r / 50;
+  x.save(); x.translate(cx - r, cy - r); x.scale(k, k);
+  x.fillStyle = e.col; x.beginPath(); x.arc(50, 50, 50, 0, Math.PI * 2); x.fill();
+  if (e.rot) { x.translate(50, 50); x.rotate(e.rot * Math.PI / 180); x.translate(-50, -50); }
+  x.fillStyle = '#FFFFFF'; x.fill(new Path2D(e.d));
+  if (e.cut) { x.fillStyle = e.col; x.fill(new Path2D(e.cut)); }
+  if (e.dot) { x.fillStyle = '#FFFFFF'; x.beginPath(); x.arc(...e.dot, 0, Math.PI * 2); x.fill(); }
+  x.restore();
+}
 function energyCanvas(c) {
-  const W = 512, H = Math.round(W * CH / CW), cv = canvasOf(W, H), x = cv.getContext('2d'), t = c.name.slice(2, 3), col = ETYPE[t] || '#8996A5';
-  x.fillStyle = '#C9CED6'; x.fillRect(0, 0, W, H);
-  const gr = x.createRadialGradient(W / 2, H * .42, 40, W / 2, H / 2, H * .6); gr.addColorStop(0, '#FFFFFF'); gr.addColorStop(1, rgba(col, .55));
-  x.fillStyle = gr; x.beginPath(); x.roundRect(22, 22, W - 44, H - 44, 14); x.fill();
-  x.fillStyle = col; x.beginPath(); x.arc(W / 2, H * .44, 150, 0, Math.PI * 2); x.fill();
-  x.strokeStyle = 'rgba(255,255,255,.9)'; x.lineWidth = 10; x.stroke();
-  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `400 190px ${DISP()}`; x.fillText(t, W / 2, H * .44 + 66);
-  x.fillStyle = '#1F2833'; x.font = `600 46px ${BODY()}`; x.fillText(c.name, W / 2, H * .8);
+  const W = 512, H = Math.round(W * CH / CW), cv = canvasOf(W, H), x = cv.getContext('2d'), t = typeOf(c.name), col = ENERGY[t].col;
+  x.fillStyle = '#C9CED6'; x.fillRect(0, 0, W, H); // silver border
+  x.save(); x.beginPath(); x.roundRect(22, 22, W - 44, H - 44, 14); x.clip();
+  const gr = x.createRadialGradient(W / 2, H * .44, 30, W / 2, H * .44, H * .7); gr.addColorStop(0, '#FFFFFF'); gr.addColorStop(.45, rgba(col, .35)); gr.addColorStop(1, col);
+  x.fillStyle = gr; x.fillRect(0, 0, W, H);
+  x.translate(W / 2, H * .44); x.fillStyle = 'rgba(255,255,255,.16)'; // printed rays behind the mark
+  for (let i = 0; i < 24; i++) { x.rotate(Math.PI / 12); x.beginPath(); x.moveTo(0, 0); x.lineTo(H, -26); x.lineTo(H, 26); x.fill(); }
+  x.restore();
+  x.fillStyle = 'rgba(255,255,255,.95)'; x.beginPath(); x.arc(W / 2, H * .44, 166, 0, Math.PI * 2); x.fill();
+  energyMark(x, t, W / 2, H * .44, 154);
+  x.fillStyle = 'rgba(255,255,255,.88)'; x.beginPath(); x.roundRect(60, H * .74, W - 120, 84, 42); x.fill();
+  x.textAlign = 'center'; x.fillStyle = '#1F2833'; x.font = `600 44px ${BODY()}`; x.fillText(c.name, W / 2, H * .74 + 57);
+  x.font = `500 24px ${BODY()}`; x.fillStyle = rgba('#1F2833', .6); x.textAlign = 'left'; x.fillText('基础能量', 44, 66);
   return cv;
 }
 function placeholder(c) {
@@ -341,7 +373,7 @@ function placeholder(c) {
   x.font = `400 26px ${BODY()}`; x.fillStyle = '#5A6371'; x.fillText('卡图没加载出来', W / 2, H * .7); return cv;
 }
 async function loadFace(c) {
-  if (c.r === 'E') { await fonts(); return canvasTex(energyCanvas(c)); }
+  if (c.r === 'E') return canvasTex(energyCanvas(c));
   for (const size of ['high', 'low']) {
     const img = await loadImg(ASSETS.card(c.set, c.n, size));
     if (img) { const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; renderer.initTexture(t); return t; }
@@ -471,6 +503,7 @@ function onTable(nx, ny, st) {
   return probe.position.clone().addScaledVector(v, -probe.position.y / v.y);
 }
 const FOCUS = () => new V3(0, 7, 0);
+const GLOW0 = () => FOCUS().add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6));
 const stages = () => ({ pack: { t: FOCUS(), p: PITCH, d: fit(PW / .62, PH / .66) }, reveal: { t: FOCUS(), p: PITCH, d: fit(CW / .56, CH / .58) } });
 function camTo(st, ms, ease = E.io) {
   const a = { t: cam.t.clone(), p: cam.p, d: cam.d };
@@ -575,13 +608,15 @@ async function reveal(run, i) {
 // The show, by rarity tier (0 bulk … 5 SIR/HR). It starts only once the card is fully uncovered.
 function celebrate(run, i, t) {
   const card = run.cards[i], at = card.getWorldPosition(tmpV()), silver = css('--fx-silver'), gold = css('--fx-gold');
-  if (t === 0) { mood('base', 300); camD(stages().reveal.d, 400); return 40; }
-  run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] };
-  if (t === 1) { mood('base', 300); camD(stages().reveal.d, 400); return 160; }
-  if (t === 2) { mood('lift', 300); halo(card, silver, .5); burst(at, 50, silver, 14); camD(stages().reveal.d * .96, 500); return 420; }
-  if (t === 3) { mood('silver', 400); halo(card, silver, .7); burst(at, 110, silver, 18); quake(.18, 380); camD(stages().reveal.d * .88, 700); embers(run, card, silver, 1400); return 900; }
+  const push = (k, ms) => { if (!run.look) camD((run.batch ? run.shot.d : stages().reveal.d) * k, ms); }; // a card held to the eye stays put
+  if (run.batch) L.glow.position.copy(at).addScaledVector(camBasis().f, 6);
+  if (t === 0) { mood('base', 300); push(1, 400); return 40; }
+  run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1) };
+  if (t === 1) { mood('base', 300); push(1, 400); return 160; }
+  if (t === 2) { mood('lift', 300); halo(card, silver, .5); burst(at, 50, silver, 14); push(.96, 500); return 420; }
+  if (t === 3) { mood('silver', 400); halo(card, silver, .7); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
   mood('gold', 450).then(() => wait(1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
-  halo(card, gold, .9); burst(at, 170, gold, 22); quake(.32, 520); camD(stages().reveal.d * .84, 800);
+  halo(card, gold, .9); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
   embers(run, card, gold, t === 5 ? 4200 : 2600);
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
   return t === 5 ? 1700 : 1300;
@@ -641,11 +676,172 @@ async function look(run, card) {
   run.busy = false;
 }
 
+// ---------- ten packs at once ----------
+// The packs are dealt onto the mat; one tap rips them all left to right (or drag across them: each one tears as the
+// finger passes). Only the picks ui/mat.ts hands over (the hits, cheapest first) slide out of their packs and fly
+// face-down into a fan at the front; bulk cards never leave the packs. Each tap turns the next pick where it lies; the
+// last (best) one is lifted to the eye face-down and held a beat before it turns, the same wait for every batch.
+const BATCH_PITCH = 1.05, FAN_R = 34, FAN_Z = 1;
+const qY = a => new T.Quaternion().setFromAxisAngle(new V3(0, 1, 0), a);
+const faceDown = q => q.clone().multiply(qY(Math.PI));
+function packGrid(n) {
+  const cols = Math.min(5, n), rows = Math.ceil(n / cols);
+  const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, gz = PH + 1.5, over = gx < PW + .3, zc = -18;
+  const pos = [], col = [];
+  for (let k = 0; k < n; k++) { // dealt by hand: not quite on the grid
+    const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), j = () => (Math.random() - .5) * (over ? .5 : 1.1);
+    pos.push(new V3((c - (inRow - 1) / 2) * gx + j(), PUFF + .05 + (over ? c * .45 + r * .1 : 0), zc + (r - (rows - 1) / 2) * gz + j())); col.push(c);
+  }
+  const w = (cols - 1) * gx + PW, h = (rows - 1) * gz + PH;
+  const box = [w * 1.12, h * Math.sin(BATCH_PITCH) * 1.12 + 3];
+  return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p: BATCH_PITCH, d: fit(...box), box } };
+}
+// The fan: an arc whose pivot is toward the player, cheapest on the left, the best on top at the right. Few picks lie
+// side by side; many overlap, the fan never gets wider than the view.
+function fanOf(n) {
+  const wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, 46 * wide);
+  const sp = n > 1 ? 2 * Math.asin(clamp((avail - CW) / (2 * FAN_R), 0, 1)) : 0, poses = [];
+  for (let i = 0; i < n; i++) {
+    const a = n > 1 ? (i / (n - 1) - .5) * sp : 0;
+    poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, FAN_Z + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
+  }
+  const sag = FAN_R * (1 - Math.cos(sp / 2)), p = 1.08, box = [avail + 4, (CH + sag) * Math.sin(p) + 12];
+  return { poses, cam: { t: new V3(0, 0, FAN_Z + sag / 2 - 1.2), p, d: fit(...box), box } }; // fan a little below centre: the packs show above it
+}
+function buildBatch(set, packs, picks) {
+  const grid = packGrid(packs.length), data = picks.map(([p, i]) => packs[p][i]);
+  const run = { batch: true, data, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, fan: fanOf(data.length) };
+  run.shot = run.grid.cam;
+  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24); p.visible = false; p.userData.col = grid.col[k]; p.userData.yaw = (Math.random() - .5) * .2; scene.add(p); return p; });
+  const inPack = {};
+  run.cards = picks.map(([p, i]) => {
+    const m = cardMesh(packs[p][i]), k = inPack[p] = (inPack[p] || 0) + 1;
+    m.position.set(0, -.6, .05 - k * .06); m.quaternion.copy(qY(Math.PI)); run.packs[p].add(m); // inside, back up
+    return m;
+  });
+  run.faces = Promise.all(run.cards.map(m => m.userData.ready));
+  return run;
+}
+async function enterBatch(run) {
+  camTo(run.grid.cam, 700);
+  await Promise.all(run.packs.map((p, k) => wait(k * 60).then(() => {
+    if (R !== run) return;
+    const home = run.grid.pos[k], q = flatQ(p.userData.yaw), from = home.clone().add(new V3((Math.random() - .5) * 4, 15, 7));
+    const q0 = q.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(.5, -.35, .6)));
+    p.visible = true; p.position.copy(from); p.quaternion.copy(q0);
+    if (k % 3 === 0) FX().slide();
+    return tween(520, e => { p.position.lerpVectors(from, home, e); p.position.y += Math.sin(e * Math.PI) * 2; p.quaternion.slerpQuaternions(q0, q, e); }, E.out);
+  })));
+  if (R !== run) return;
+  run.stage = 'pack';
+  if (run.wantTear) tearAll(run);
+}
+// Drag progress g (0..1 across the whole grid) tears column c while the finger is over it.
+function zipTear(run, g) { run.tear = g; for (const p of run.packs) tearPack(p, clamp(g * run.grid.cols - p.userData.col, 0, 1)); }
+async function tearAll(run) {
+  if (run.stage !== 'pack') { if (run.stage === 'enter') run.wantTear = true; return; }
+  run.stage = 'tearing'; opts.onTear();
+  await Promise.all(run.packs.map(p => wait(p.userData.col * 75).then(async () => {
+    if (R !== run) return;
+    const t0 = p.userData.tear || 0; if (t0 < .9) FX().crinkle();
+    await tween(300 * (1 - t0) + 40, e => tearPack(p, t0 + (1 - t0) * e), E.in); if (R !== run) return;
+    const s = p.userData.strip, to = s.getWorldPosition(tmpV()).add(new V3((Math.random() - .5) * 8, 9, -34));
+    flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, 3, Math.PI * 3).then(() => { s.visible = false; });
+  })));
+  if (R === run) extractBatch(run);
+}
+async function extractBatch(run) {
+  run.stage = 'extract';
+  await Promise.race([run.faces, wait(1500)]); if (R !== run) return;
+  run.shot = run.fan.cam; camTo(run.shot, 1000);
+  const step = Math.min(160, 1100 / Math.max(1, run.n));
+  await Promise.all(run.cards.map((m, i) => wait(200 + i * step).then(async () => {
+    if (R !== run) return;
+    FX().slide();
+    const y0 = m.position.y;
+    await tween(240, e => { m.position.y = y0 + e * CH * .8; }, E.out); if (R !== run) return; // out through the torn top
+    const P = run.fan.poses[i];
+    await flyTo(m, P.p, faceDown(P.q), 640, 6);
+  })));
+  if (R !== run) return;
+  run.stage = 'cards';
+  if (run.skip) revealRest(run);
+}
+// Turn pick i over where it lies: lifted off the mat by half its width so the edge never cuts through it.
+const turnOver = (run, i, ms, onHalf) => {
+  const m = run.cards[i], P = run.fan.poses[i]; let half = false;
+  return tween(ms, e => {
+    m.position.copy(P.p); m.position.y += Math.sin(e * Math.PI) * CW * .56;
+    m.quaternion.copy(P.q).multiply(qY(Math.PI * (1 - e)));
+    if (!half && e >= .5) { half = true; onHalf?.(); }
+  }, E.io);
+};
+function flipNext(run) {
+  if (run.stage !== 'cards' || run.busy) return false;
+  const i = run.cur + 1;
+  if (i >= run.n) { batchSpread(run); return true; }
+  run.busy = true; run.cur = i;
+  (i === run.n - 1 ? flipBest : flipPick)(run, i);
+  return true;
+}
+async function flipPick(run, i) {
+  const t = run.tiers[i];
+  mood('base', 250);
+  await turnOver(run, i, t >= 2 ? 520 : 360, () => opts.onFlip(i, run.data[i]));
+  if (R !== run) return;
+  await wait(Math.min(celebrate(run, i, t), 700)); if (R !== run) return;
+  run.busy = false;
+  if (run.skip) revealRest(run);
+}
+async function flipBest(run, i) {
+  const m = run.cards[i], t = run.tiers[i], f = camBasis().f, P = run.fan.poses[i];
+  const at = camera.position.clone().addScaledVector(f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6), q = camera.quaternion.clone();
+  mood('hush', 500); FX().slide();
+  await flyTo(m, at, faceDown(q), 600, 2); if (R !== run) return;
+  FX().swell(1700);
+  await tween(900, e => { m.position.copy(at); m.position.x += Math.sin(e * 70) * .035 * e; m.position.y += Math.sin(e * 53) * .025 * e; }, E.lin); // the face-down pause trembles a little
+  if (R !== run) return;
+  let half = false;
+  await tween(760, e => { m.quaternion.copy(q).multiply(qY(Math.PI * (1 - e))); if (!half && e >= .5) { half = true; opts.onFlip(i, run.data[i]); } }, E.io);
+  if (R !== run) return;
+  run.look = { card: m, p: P.p, q: P.q, up: true, base: q };
+  const lock = celebrate(run, i, t);
+  await wait(lock); if (R !== run) return;
+  run.busy = false;
+  if (run.skip) return batchSpread(run);
+  await wait(t >= 4 ? 2400 : t >= 2 ? 1500 : 1000);
+  if (R === run && run.stage === 'cards' && !run.busy) batchSpread(run);
+}
+// 全部翻开: whatever is still face down turns over at once, quietly; a step in progress finishes first.
+function revealRest(run) {
+  run.skip = true;
+  if (run.stage !== 'cards' || run.busy) return;
+  const from = run.cur + 1; run.busy = true; run.cur = run.n - 1;
+  for (let i = from; i < run.n; i++) { opts.onFlip(i, run.data[i]); wait((i - from) * 70).then(() => { if (R === run) turnOver(run, i, 380); }); }
+  wait((run.n - from) * 70 + 420).then(() => { if (R === run) { run.busy = false; batchSpread(run); } });
+}
+async function batchSpread(run) {
+  if (run.stage === 'spread') return;
+  run.stage = 'spread'; run.busy = true; run.show = null; run.embers = null; drag = null;
+  mood('base', 700); opts.onDone();
+  const L0 = run.look; run.look = null;
+  camTo(run.shot, 700);
+  if (L0) await flyTo(L0.card, L0.p, L0.q, 560, 2); // the best card goes back on top of the fan
+  if (R !== run) return;
+  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .45); });
+  run.busy = false; tags(run);
+}
+
 // ---------- input on the canvas ----------
 function setPtr(e) {
   const r = canvas.getBoundingClientRect();
   ptr.x = clamp((e.clientX - r.left) / r.width * 2 - 1, -1, 1); ptr.y = clamp(1 - (e.clientY - r.top) / r.height * 2, -1, 1);
   ptr.in = e.pointerType === 'mouse' || !!drag;
+}
+// On-screen width of a row of objects, in CSS px: for a drag across all ten packs.
+function spanW(objs) {
+  const xs = objs.map(o => o.getWorldPosition(tmpV()).project(camera).x);
+  return Math.max(80, (Math.max(...xs) - Math.min(...xs)) / 2 * canvas.clientWidth + screenW(objs[0], PW));
 }
 function screenW(obj, w) {
   const a = obj.localToWorld(new V3(-w / 2, 0, 0)).project(camera), b = obj.localToWorld(new V3(w / 2, 0, 0)).project(camera);
@@ -661,12 +857,12 @@ function onMove(e) {
   if (!drag || e.pointerId !== drag.id || !R) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y, run = R;
   if (!drag.mode && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-    drag.mode = run.stage === 'pack' ? 'tear' : run.stage === 'cards' && !run.busy && run.cur < run.n - 1 ? 'slide' : 'none';
-    if (drag.mode !== 'none') { canvas.setPointerCapture?.(e.pointerId); drag.w = screenW(drag.mode === 'tear' ? run.pack : run.cards[run.cur], drag.mode === 'tear' ? PW : CW); drag.c = 0; }
+    drag.mode = run.stage === 'pack' ? 'tear' : run.stage === 'cards' && !run.batch && !run.busy && run.cur < run.n - 1 ? 'slide' : 'none';
+    if (drag.mode !== 'none') { canvas.setPointerCapture?.(e.pointerId); drag.w = run.batch ? spanW(run.packs) : screenW(drag.mode === 'tear' ? run.pack : run.cards[run.cur], drag.mode === 'tear' ? PW : CW); drag.c = 0; }
     if (drag.mode === 'slide') { run.dragging = true; if (run.cur + 1 >= run.n - 3) { mood('hush', 400); camD(stages().reveal.d * .93, 800); } }
   }
   if (drag.mode === 'tear') {
-    const p = clamp(dx / (drag.w * .95), 0, 1); setTear(run, p);
+    const p = clamp(dx / (drag.w * .95), 0, 1); if (run.batch) zipTear(run, p); else setTear(run, p);
     if (Math.abs(p - drag.c) > .12) { drag.c = p; FX().crinkle(); }
   }
   if (drag.mode === 'slide') { run.slide = clamp(dx / (drag.w * 1.1), 0, 1.15); slideFront(run.cards[run.cur], run.slide); }
@@ -676,8 +872,8 @@ function onUp(e) {
   const d = drag, run = R; drag = null; ptr.in = e.pointerType === 'mouse';
   if (!run) return;
   if (d.mode === 'tear') {
-    if (run.tear >= .5) autoTear(run);
-    else { const p0 = run.tear; tween(220, k => setTear(run, p0 * (1 - k)), E.out); }
+    if (run.tear >= .5) { if (run.batch) tearAll(run); else autoTear(run); }
+    else { const p0 = run.tear; tween(220, k => (run.batch ? zipTear : setTear)(run, p0 * (1 - k)), E.out); }
   } else if (d.mode === 'slide') {
     run.dragging = false;
     if (run.slide >= .45) uncover(run);
@@ -688,12 +884,12 @@ function onCancel(e) {
   if (!drag || e.pointerId !== drag.id) return;
   const d = drag, run = R; drag = null;
   if (!run) return;
-  if (d.mode === 'tear') setTear(run, 0);
+  if (d.mode === 'tear') (run.batch ? zipTear : setTear)(run, 0);
   if (d.mode === 'slide') { run.dragging = false; run.slide = 0; slideFront(run.cards[run.cur], 0); mood('base', 300); }
 }
 function tap(e) {
   const run = R;
-  if (run.stage === 'pack' || run.stage === 'enter') return autoTear(run);
+  if (run.stage === 'pack' || run.stage === 'enter') return run.batch ? tearAll(run) : autoTear(run);
   if (run.stage === 'cards') return advance(run);
   if (run.stage === 'spread') {
     const r = canvas.getBoundingClientRect(), ray = new T.Raycaster();
@@ -705,7 +901,8 @@ function tap(e) {
 
 // ---------- frame ----------
 function frame(t) {
-  raf = 0;
+  raf = -1; // truthy while the frame runs: a wake() from inside it (particles spawned by a show) must not queue a second one
+  renderer.info.reset();
   const dt = Math.min(.05, Math.max(0, (t - last) / 1000)); last = t; now = t;
   stepTweens();
   const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
@@ -726,7 +923,7 @@ function frame(t) {
   }
   if (run && run.embers) run.embers();
   parts.update(dt);
-  if (run && run.stage === 'cards' && moodNow.rays > .01) { // god rays stay behind the card being shown
+  if (run && run.stage === 'cards' && run.cur >= 0 && moodNow.rays > .01) { // god rays stay behind the card being shown
     const c = run.cards[run.cur], f = camBasis().f; rays.position.copy(c.getWorldPosition(tmpV())).addScaledVector(f, -1.2); rays.quaternion.copy(camera.quaternion);
   }
   applyMood();
@@ -736,10 +933,10 @@ function frame(t) {
   composer.render(dt);
   if (run && run.stage === 'spread' && run.tagEls) placeTags(run);
   frames++;
-  if (busy || now < awake || breath > .002) raf = requestAnimationFrame(frame);
+  raf = busy || now < awake || breath > .002 ? requestAnimationFrame(frame) : 0;
 }
 let frames = 0; // drawn frames, for the dev probe below
-function park() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+function park() { if (raf > 0) cancelAnimationFrame(raf); raf = 0; }
 function resize() {
   if (!host) return;
   const w = Math.max(1, host.clientWidth), h = Math.max(1, host.clientHeight);
@@ -747,7 +944,8 @@ function resize() {
   camera.aspect = w / h; camera.updateProjectionMatrix();
   parts.mat.uniforms.uScale.value = h * renderer.getPixelRatio() / (2 * TAN);
   if (R && !tws.length) { // settle the camera for the new shape (mid-animation the next tween does it)
-    if (R.stage === 'pack') cam.d = stages().pack.d;
+    if (R.batch) { const st = R.stage === 'cards' || R.stage === 'spread' ? R.shot : R.grid.cam; st.d = fit(...st.box); cam.d = st.d; }
+    else if (R.stage === 'pack') cam.d = stages().pack.d;
     else if (R.stage === 'cards') cam.d = stages().reveal.d;
     else if (R.stage === 'spread') Object.assign(cam, gridOf(R.n).cam);
   }
@@ -782,6 +980,7 @@ function init() {
   V3 = T.Vector3;
   renderer = new T.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, small() ? 1.5 : 2));
+  renderer.info.autoReset = false; // frame() resets it once per frame, so the counts cover every pass (the probe reads them)
   renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.NeutralToneMapping; renderer.toneMappingExposure = 1;
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.VSMShadowMap;
   canvas = renderer.domElement; canvas.className = 's3-canvas';
@@ -798,7 +997,7 @@ function init() {
   key.shadow.radius = 9; key.shadow.blurSamples = 16; key.shadow.intensity = .8;
   key.shadow.camera.near = 20; key.shadow.camera.far = 120;
   const rim = new T.DirectionalLight(css('--lamp-rim'), .7); rim.position.set(8, 16, -30);
-  const glow = new T.PointLight(0xFFFFFF, 0, 0, 2); glow.position.copy(FOCUS()).add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6)); // in front of the held card
+  const glow = new T.PointLight(0xFFFFFF, 0, 0, 2); glow.position.copy(GLOW0()); // in front of the held card
   scene.add(hemi, key, key.target, rim, glow);
   L = { hemi, key, rim, glow };
 
@@ -857,24 +1056,27 @@ function init() {
 }
 
 // ---------- teardown ----------
+const packsOf = run => (run.batch ? run.packs : [run.pack]);
 function dispose(run) {
   for (const c of run.cards) { c.material[0].dispose(); c.userData.face?.dispose(); if (c.userData.halo) { c.userData.halo.geometry.dispose(); c.userData.halo.material.dispose(); } }
-  run.pack.traverse(o => { if (o.isMesh) o.geometry.dispose(); });
+  for (const p of packsOf(run)) for (const o of [p, p.userData.strip]) o.traverse(m => { if (m.isMesh && m.geometry !== shared.cardGeo) m.geometry.dispose(); }); // the strip may have flown off the pack
 }
 function clearRun(run, animate) {
   run.tagEls?.forEach(e => e.remove());
-  const objs = [run.pack, run.pack.userData.strip, ...run.cards];
+  const objs = [...packsOf(run).flatMap(p => [p, p.userData.strip]), ...run.cards];
   if (!animate) { objs.forEach(o => o.removeFromParent()); dispose(run); return; }
   const old = new T.Group(); scene.add(old); objs.forEach(o => old.attach(o));
   tween(520, k => { old.position.x = -60 * k; }, E.in).then(() => { old.removeFromParent(); dispose(run); });
 }
 
 function advance(run) {
+  if (run?.batch) return flipNext(run);
   if (!run || run.stage !== 'cards' || run.busy || run.dragging) return false;
   if (run.cur >= run.n - 1) toSpread(run); else uncover(run);
   return true;
 }
 function revealAll(run) {
+  if (run?.batch) { if (run.stage === 'tearing' || run.stage === 'extract') run.skip = true; else if (run.stage === 'cards') revealRest(run); return; }
   if (!run || run.stage === 'spread' || run.stage === 'pack' || run.stage === 'enter' || run.stage === 'tearing') return;
   if (run.stage === 'extract') { run.skip = true; return; }
   for (let i = run.cur + 1; i < run.n; i++) opts.onFlip(i, run.data[i]);
@@ -890,6 +1092,10 @@ function mountTable(el, o) {
   opts = o; speed = o.reducedMotion ? 0 : 1; host = el;
   ro.observe(el); io.observe(el); el.prepend(canvas); resize();
   for (const k in moodNow) moodNow[k] = MOODS.base[k];
+  const fresh = () => {
+    tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0());
+    if (R) clearRun(R, true);
+  };
   const shut = () => {
     if (opts !== o) return;
     park(); tws = []; drag = null; parts.clear();
@@ -900,14 +1106,20 @@ function mountTable(el, o) {
   return {
     showPack(set, cards) { // a new pack drops in; the last one's cards slide off the mat
       if (opts !== o) return;
-      tws = []; parts.clear(); drag = null;
-      if (R) clearRun(R, true);
+      fresh();
       R = build(set, cards); enter(R);
+    },
+    // Ten packs (or however many the stock allowed) at once. picks: [packIndex, cardIndex] of the cards that fly to the
+    // front, in the order they turn over (cheapest first). onFlip(k, card) then counts picks, not cards.
+    showBatch(set, packs, picks) {
+      if (opts !== o) return;
+      fresh();
+      R = buildBatch(set, packs, picks); enterBatch(R);
     },
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {
       const run = R; if (opts !== o || !run) return false;
-      if (run.stage === 'enter' || run.stage === 'pack') { autoTear(run); return true; }
+      if (run.stage === 'enter' || run.stage === 'pack') { if (run.batch) tearAll(run); else autoTear(run); return true; }
       return i > run.cur && advance(run);
     },
     flipAll() { if (opts === o) revealAll(R); },
