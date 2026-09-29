@@ -7,8 +7,9 @@ export type Who = 'jiu' | 'adou' | 'you' | ''; // '' = narration
 export type Bg = 'street' | 'shop' | 'dark';
 // Context the ui fills in before playing, already formatted: bill = the next bill's amount, week = its week, card/price = a pull, set = a set name;
 // for 还清 / 开分店: bills = bills paid in this shop, fame = 名气 branching now would take, debt = what the (next) shop owes, shop = its number (1-based),
+// short / rate = how much the till is short of an overdue bill and the loan's weekly interest (filled when the scene starts);
 // street / streetSay = that shop's street and what is different about it (no streetSay on 老街, where the numbers are the first shop's)
-export interface Ctx { bill?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string }
+export interface Ctx { bill?: string; short?: string; rate?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string }
 export interface Line { who: Who; t: string | ((c: Ctx) => string) }
 export interface Scene { bg: Bg; lines: Line[] }
 
@@ -52,23 +53,23 @@ export const SCENES: Record<string, Scene[]> = {
     L('jiu', terms),
     L('jiu', '好好干。你干得越好，我越放心。'),
   ] }],
-  due: [{ bg: 'shop', lines: [
-    L('jiu', '路过，看看货架。'),
-    L('jiu', c => (c.bill ? `这周的账 ${c.bill}，别让我白跑一趟。` : '这周的账，别让我白跑一趟。')),
-    L('adou', '九姐说「路过」的时候，一般不是路过。'),
-  ] }],
+  // the first bill paid: 九姐 in person, once. Every later week that the till covers is a receipt out of the printer slot (SLIP)
   paid1: [{ bg: 'shop', lines: [
     L('jiu', '（按了两下计算器）准时。'),
     L('jiu', '我喜欢准时的人。他们活得久。'),
     L('adou', '这是在夸你。'),
+    L('', '往后付得上的周，九姐不进门了：收银机出一张收据就算收过。付不上的那周，她会进来。'),
   ] }],
-  paid: [{ bg: 'shop', lines: [L('jiu', '收到。下周见。')] }],
-  paid2: [{ bg: 'shop', lines: [L('adou', '（数完钞票）一张不少。九姐让我跟你说声辛苦。'), L('adou', '……她原话是「还行」。')] }],
+  // a bill the till could not cover: the one heavy beat of the week. It plays only while the bill is still overdue (ui/story.ts);
+  // no minutes in the text, since a pack reveal can hold it back — the red chip in the top bar is the live countdown
   missed: [{ bg: 'shop', lines: [
-    L('adou', '九姐让我带句话。'),
-    L('adou', '……还让我带了把锤子。'),
+    L('', '有人在柜台上敲了三下。'),
+    L('jiu', '路过，看看货架。'),
+    L('jiu', c => (c.bill ? `这周的账 ${c.bill}。${c.short ? `收银机里还差 ${c.short}。` : ''}` : '这周的账，收银机里凑不齐。')),
+    L('adou', '九姐让我带句话。……还让我带了把锤子。'),
     L('jiu', '锤子是用来钉新价签的。这次是。'),
-    L('jiu', '这周的账我记着。你也记着。'),
+    L('jiu', '我在门口等一会儿。凑齐了，我就当没来过。'),
+    L('', c => `顶栏的红牌子在倒数：到点前卖货凑齐，账自动付掉；到点还差的，九姐记成借款${c.rate ? `（每周 ${c.rate} 利息）` : '（每周计息）'}；借不到，店就收走。「成长」页的账本现在就能借、能付。`),
   ] }],
   loan: [{ bg: 'shop', lines: [
     L('jiu', '又借？好说。'),
@@ -148,15 +149,24 @@ export const SCENES: Record<string, Scene[]> = {
 };
 
 // the last line's button: what the player does next (default: back to the shop)
-export const END: Record<string, string> = { opening: '开张', branch: '开张', debt_cleared: '这店是我的了', bankrupt: '走吧' };
+export const END: Record<string, string> = { missed: '去凑钱', opening: '开张', branch: '开张', debt_cleared: '这店是我的了', bankrupt: '走吧' };
 
 export const BIG_PULL = 100; // a card at least this much (market) is the first 大货 阿豆 comes over for
 
 export type Seen = Record<string, number>;
 // Which scene a debt beat plays, or null (already played, or nothing to say). Marks nothing: the ui marks `key` when it plays.
-export function sceneFor(b: DebtBeat | null, seen: Seen): string | null {
+// 'due' has no scene: a covered week is a slip, a short one is 'missed' (emitted right after it). late = this bill was missed first
+// (paid in the grace, or by the forced loan): never 「准时」, so it is a slip and the first on-time bill still gets paid1.
+export function sceneFor(b: DebtBeat | null, seen: Seen, late = false): string | null {
   if (!b || (b.key && seen[b.key])) return null;
   if (b.kind === 'story') return b.id && SCENES[b.id] ? b.id : null;
-  if (b.kind === 'paid') return seen.paid1 ? (b.week ?? 0) % 2 ? 'paid' : 'paid2' : 'paid1';
+  if (b.kind === 'paid') return seen.paid1 || late ? null : 'paid1';
+  if (b.kind === 'due') return null;
   return b.kind;
 }
+// A paid bill after the first one: a receipt in the printer slot instead of a scene
+export const slipFor = (b: DebtBeat | null, seen: Seen, late = false) => !!b && b.kind === 'paid' && (!!seen.paid1 || late) && !(b.key && seen[b.key]);
+// the line 九姐 (or 阿豆) scribbles on it, by week; a bill paid late (SLIP_LATE) or with a forced loan gets no pleasantry
+export const SLIP_NOTES = ['收到。下周见。', '一张不少。九姐说「还行」。——阿豆', '准时。准时的人活得久。', '货架别空着。下周见。'];
+export const SLIP_LOAN = '宽限到了，差的记在借款上。';
+export const SLIP_LATE = '晚了，但凑齐了。下周别让我等。';

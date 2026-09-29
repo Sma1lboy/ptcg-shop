@@ -28,7 +28,7 @@
   --mat-gold: #F0A333;
   --mat-line: rgba(238, 241, 247, .14);
   --paper: #FFFFFF;       /* thermal receipt paper (the closing report): a light object in both themes, as the mat is a dark one */
-  --paper-ink: #14203A; --paper-muted: #58627A; --paper-gain: #C8261C;
+  --paper-ink: #14203A; --paper-muted: #58627A; --paper-gain: #C8261C; --paper-loss: #56698F; /* the light theme's --loss: dark theme's is pale, for dark grounds */
   --fx-silver: #DDE3EC;   /* sparkle colours on the dark mat, same in both themes */
   --fx-gold: #F6A533;
   --stock-rim: #C9CED6;   /* blank card stock (DESIGN.md「卡面」): the silver border, the paper, the print, the cut edge. A printed object, same in */
@@ -491,22 +491,27 @@ button:disabled { cursor: not-allowed; }
   border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
   animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
 /* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
-.notice { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
-.notice[hidden] { display: none; }
+:is(.notice, .slip) { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --loss: var(--paper-loss); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
+:is(.notice, .slip)[hidden] { display: none; }
 /* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 350 = the
    tray's 300 width + 24 inset + the slot's 10px overhang + a gap. Phones reserve the stub's height above the view instead (below) */
 @media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
-.notice .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
+:is(.notice, .slip) .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
   mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
   animation: print .9s .22s steps(18, jump-end) backwards; } /* stepped: a thermal printer feeds in jerks, not a glide */
 @keyframes slot { from { opacity: 0; transform: translateY(-14px) scaleX(.85); } }
 @keyframes print { from { clip-path: inset(0 0 100% 0); translate: 0 -16px; } to { clip-path: inset(0 0 -20px 0); } }
-.notice h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
-.notice dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
-.notice dt { color: var(--muted); } .notice dd { margin: 0; text-align: right; font-weight: 600; }
+:is(.notice, .slip) h2 { font-size: var(--fs-body); letter-spacing: .12em; text-align: center; margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
+:is(.notice, .slip) dl { margin: 0 0 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; }
+:is(.notice, .slip) dt { color: var(--muted); } :is(.notice, .slip) dd { margin: 0; text-align: right; font-weight: 600; }
 .notice button { width: 100%; }
+/* the weekly bill's receipt (notice.ts): the same paper, shorter — 九姐's scribble at the foot instead of a button; tap to put it away */
+.slip { cursor: pointer; }
+.slip .paper { padding-bottom: 20px; }
+.slip dl { margin-bottom: 8px; }
+.slip .note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line-strong); color: var(--muted); font-size: var(--fs-cap); text-align: right; }
 /* the tear-off stub (phones only, see the phone block): the receipt's first line on the same thermal paper, a button */
 .notice .stub { display: none; position: relative; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 0;
   background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12)); }
@@ -634,6 +639,7 @@ button:disabled { cursor: not-allowed; }
 #share-pop:focus-visible { outline: none; } /* focus lands on the dialog while the image renders; its buttons keep their ring */
 #share-pop img { display: block; width: 100%; height: auto; border-radius: var(--r); }
 #share-pop .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+#share-pop .pop-hint { margin: 8px 0 0; font-size: var(--fs-cap); }
 
 /* pack-opening feel: fast bulk cards, card slides off, drag-to-rip pack, swipe (ui.js) */
 .stage { touch-action: pan-y; }
@@ -756,7 +762,7 @@ button:disabled { cursor: not-allowed; }
 .s3-cap:empty { display: none; }
 .s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
 .s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 20px var(--font-tag); color: var(--mat-ink); } /* market price, never gold or yellow (DESIGN.md「价签」) */
-.s3-tags { position: absolute; inset: 0; pointer-events: none; z-index: 1; }
+.s3-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; } /* a tag whose card is off the canvas stays off it */
 /* under each card in the spread: card.ts's tray caption (mark + market price), the same as the 2D mat's */
 .s3-tag { position: absolute; left: 0; top: 0; background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
 .s3-tag .cf-cap { flex-wrap: nowrap; }
@@ -764,6 +770,19 @@ button:disabled { cursor: not-allowed; }
 .hand-new { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 2px; background: var(--lamp); color: var(--sticker-ink); font: 900 11px/16px var(--font-display); font-style: normal; vertical-align: 1px; }
 .s3-tag .hand-new { float: left; margin: 2px 4px 0 -2px; }
 .slot figcaption:has(> .hand-new) { display: flex; align-items: baseline; }
+/* the finished batch's front row (table3d.js haulOf): under each of the best few, a plate as wide as the card with its name,
+   rarity and market price (the same as the caption of the card in hand); the dearest one's price a size up. Never gold or yellow. */
+.s3-tag.s3-top { box-sizing: border-box; padding: 4px 6px 5px; white-space: normal; text-align: center; background: linear-gradient(rgba(26, 42, 78, .92), rgba(10, 18, 38, .92));
+  box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(174, 184, 200, .35), 0 6px 14px rgba(0, 0, 0, .35); }
+.s3-top .s3-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 18px; color: var(--mat-ink); }
+.s3-top .hand-new { float: none; margin: 0 4px 0 0; }
+.s3-top .cf-cap { flex-wrap: wrap; justify-content: center; }
+.s3-top .cf-rar { font-size: var(--fs-cap); }
+.s3-top .cf-price { font-size: 20px; }
+.s3-top.best .cf-price { font-size: 26px; }
+.s3-tag.s3-sum { font-size: var(--fs-cap); line-height: 18px; color: var(--mat-muted); }
+@media (max-width: 779px) { .s3-top .cf-rar { display: none; } .s3-top .cf-price { font-size: 17px; } .s3-top.best .cf-price { font-size: 20px; } .s3-top .s3-name { font-size: 12px; line-height: 15px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; } /* two lines rather than 「Black …」 */
+  .s3-top .hand-new { position: absolute; left: 3px; top: -19px; } /* on the card's corner: the name gets the plate's whole width */ }
 .mat.m3d .summary { padding: 14px 18px 16px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
   /* one row in every state: a head that wrapped as the running total grew (or 全部翻开 came and went) resized the scene
