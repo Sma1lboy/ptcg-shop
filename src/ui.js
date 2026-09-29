@@ -4,8 +4,8 @@
   const $ = id => document.getElementById(id);
   const money = v => '$' + (v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  const imgUrl = (c, size = 'low') => `https://assets.tcgdex.net/en/sv/${c.set}/${c.n}/${size}.webp`;
-  const logoUrl = id => `https://assets.tcgdex.net/en/sv/${id}/logo.png`;
+  const imgUrl = (c, size = 'low') => PTCG_ASSETS.card(c.set, c.n, size);
+  const logoUrl = id => PTCG_ASSETS.logo(id);
 
   // Rarity symbols as printed on SV cards; `jp` is the name Chinese/Japanese players use.
   const RAR = {

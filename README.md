@@ -2,7 +2,7 @@
 
 宝可梦卡牌开包模拟器 + 卡店放置经营 + 欧气检测器。
 
-打开 `index.html` 即可（需要联网加载卡图）。
+先 `node scripts/fetch-images.mjs` 把卡图镜像到本地（约 90 MB，只需一次），再 `python3 -m http.server 8765` 后打开 http://127.0.0.1:8765 。直接双击 `index.html` 也能玩，但卡图会走 TCGdex CDN。
 
 - 开包概率：TCGplayer 实开统计（每个系列 1,200–8,000 包），模拟结果由 `node test/sim.test.mjs` 校验落在其 95% 置信区间内。
 - 单卡价格：TCGplayer 市价，经 TCGdex API 抓取（`node scripts/fetch-data.mjs`）。

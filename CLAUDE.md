@@ -13,7 +13,7 @@
   - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.js` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
 - **改完必须跑** `node test/sim.test.mjs`（20 万包/系列，每个稀有度都要落在 TCGplayer 95% 置信区间内）。改了模拟逻辑就在这个文件里加断言，不要另起测试框架。
 - 视觉：颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对；强调色只有价格贴纸橙，稀有度用银/金（对应卡面上的银星/金星），盈亏用 gain/loss 语义色。别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
-- 卡图/Logo 外链 `assets.tcgdex.net`，不要下载进仓库。
+- **卡图和 Logo 从本地服务器出，不要直连 TCGdex**（用户要求：别把 API 打爆）。`node scripts/fetch-images.mjs` 把全部卡图（low/high webp）和 logo 镜像到 `assets/tcg/`（约 90 MB，gitignored；新 worktree 由 `.rove/init.sh` 软链到主仓库的镜像）。代码里一律用 `PTCG_ASSETS.card(set, n, size)` / `PTCG_ASSETS.logo(set)`（`src/assets.js`），不要自己拼 URL。只有 `file://` 打开和 CodePen 版（`PTCG_REMOTE_ASSETS`）会退回 CDN；CDN 地址不许带 query string。本地同源的图做 canvas / WebGL 贴图没有 CORS 问题，所以要看 3D/分享效果请用 http 打开（`python3 -m http.server 8765`）。
 
 ## 文件分工（并行 worker 按这个认领，动别人的文件要在报告里说明）
 
@@ -26,7 +26,8 @@
 | `src/fx.js` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `style.css` | 全部样式与 token |
 | `index.html` | 外壳和脚本加载顺序 |
-| `scripts/` | 数据抓取、打包成单文件 pen 等工具 |
+| `src/assets.js` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
+| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、打包单文件 pen（pack-pen）、自动玩家（autoplay） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

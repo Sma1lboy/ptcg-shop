@@ -7,6 +7,8 @@ const rd = f => readFileSync(join(root, f), 'utf8');
 const html = rd('index.html')
   .replace(/<link rel="stylesheet" href="(?!http)([^"]+)">/g, (_, f) => `<style>\n${rd(f)}\n</style>`)
   .replace(/<script src="([^"]+)"><\/script>/g, (_, f) => `<script>\n${rd(f).replace(/<\/script/gi, '<\\/script')}\n</script>`);
+// CodePen can't reach assets/tcg/, so the pen loads art from the TCGdex CDN (see src/assets.js).
+const pen = html.replace('</head>', '<script>window.PTCG_REMOTE_ASSETS = true</script>\n</head>');
 mkdirSync(join(root, 'dist'), { recursive: true });
-writeFileSync(join(root, 'dist/pen.html'), html);
-console.log(`dist/pen.html ${(html.length / 1024).toFixed(0)} KB`);
+writeFileSync(join(root, 'dist/pen.html'), pen);
+console.log(`dist/pen.html ${(pen.length / 1024).toFixed(0)} KB`);

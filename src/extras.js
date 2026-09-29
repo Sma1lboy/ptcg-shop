@@ -23,14 +23,10 @@
   }
 
   // ---------- card art for share images ----------
-  // assets.tcgdex.net answers with access-control-allow-origin: *, so a CORS-mode load keeps the canvas exportable.
-  // ui.js loads card art with crossorigin="anonymous", so the cached copy passes CORS. No query string here:
-  // assets.tcgdex.net answers query-string URLs with a doubled Access-Control-Allow-Origin, which browsers reject.
-  // The CDN sometimes sends the CORS header twice for a given card/format, which browsers reject, so try other formats before giving up.
+  // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
   const loadOne = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url; });
-  async function loadArt(url) {
-    const base = url.replace(/\/(high|low)\.webp$/, '');
-    for (const f of ['high.webp', 'high.png', 'low.webp', 'low.png']) { const i = await loadOne(`${base}/${f}`); if (i) return i; }
+  async function loadArt(c) {
+    for (const size of ['high', 'low']) { const i = await loadOne(PTCG_ASSETS.card(c.set, c.n, size)); if (i) return i; }
     return null;
   }
   const roundRect = (x, px, y, w, h, r) => { x.beginPath(); x.roundRect(px, y, w, h, r); };
@@ -52,7 +48,7 @@
   async function drawCard() {
     await (document.fonts && document.fonts.ready);
     const L = G.luck(), t = G.state.tally, best = G.state.hits[0];
-    const art = best ? await loadArt(`https://assets.tcgdex.net/en/sv/${best.set}/${best.n}/high.webp`) : null;
+    const art = best ? await loadArt(best) : null;
     const W = 1080, H = 1330, c = document.createElement('canvas'); c.width = W; c.height = H;
     const x = c.getContext('2d'), pct = L.pct * 100;
     const ink = css('--ink'), muted = css('--muted'), line = css('--line');
@@ -90,7 +86,7 @@
   // One pack or one batch, straight from the mat: the best card is the poster.
   async function drawPack(d) {
     await (document.fonts && document.fonts.ready);
-    const art = await loadArt(d.img), W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const art = await loadArt(d.best), W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
     const x = c.getContext('2d'), ink = css('--ink'), muted = css('--muted'), line = css('--line'), gold = css('--mat-gold'), loss = css('--mat-loss'), gain = css('--mat-gain');
     const disp = css('--font-display'), num = css('--font-num'), body = css('--font-body');
     const T = (s, px, y, o = {}) => { x.font = `${o.w || 400} ${px}px ${o.f || body}`; x.fillStyle = o.c || ink; x.textAlign = o.a || 'left'; x.fillText(s, o.a === 'right' ? W - 80 : o.a === 'center' ? W / 2 : 80, y); };
