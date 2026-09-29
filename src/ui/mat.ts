@@ -14,7 +14,7 @@ import { bill } from '../debt.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
-// m3d: this pack is on the 3D table; quiet: 全部翻开 on the 3D table, no flip sound per card.
+// m3d: this pack is on the 3D table; quiet: a 连开 round, no flip sound per card (全部翻开 on the 3D table: the table's onFlip quiet flag).
 // Batch on the 3D table: picks = [pack, card] of the cards that fly to the front (cheapest first), up = which picks are face up, torn = packs ripped.
 // news: indexes into picks of the cards this batch pulled by hand for the first time (亲手开出).
 interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; picks: [number, number][]; news: number[]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean; m3d?: boolean; quiet?: boolean; torn?: boolean }
@@ -143,10 +143,11 @@ const on3D = {
     FX.tear(); head3D(); hint3D(run ? 'run' : batch() ? 'batchCards' : 'cards');
     if (run) table!.flipAll(); // 连开: the picks turn over together as soon as they're out, no tap per card
   },
-  onFlip(i: number, c: Pull) {
+  onFlip(i: number, c: Pull, quiet = false) {
     mat.up.add(i); mat.cur = i;
     const pg = document.getElementById('mat-prog'); if (pg && !run) pg.textContent = prog();
     const none = batch() && !mat.picks.some(([p, k]) => S.HITS.includes(mat.packs[p][k].kind)); // a batch without a single hit flies its best card instead
+    if (quiet) return; // turned in a sweep with others (table3d.js): the last of the sweep speaks for them
     if (!run) caption(c, none ? `${mat.packs.length} 包一张好卡都没有 · ` : '', batch() && mat.news.includes(i)); // 连开 turns them all at once: the new card gets its caption when it's held up (showNew)
     if (!mat.quiet) FX.flip(rar(c).t);
   },
@@ -379,12 +380,13 @@ export function startPack(id: string) {
   mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0, m3d: true } as Mat;
   renderMat();
 }
-// What flies to the front of the 3D table: every hit and every card new to 亲手开出, cheapest first (best last); a batch
-// with neither shows its best card. fresh: the new cards (first copy of each), from handNew() before the packs were opened.
+// What flies to the front of the 3D table: every hit and every card new to 亲手开出; a batch with neither shows its best
+// card. Plain ones (below RR) first, then the hits, each cheapest first (best last): the table turns the plain ones in one sweep. fresh: the new cards (first copy of each), from handNew() before the packs were opened.
 function pickOrder(packs: Pull[][], fresh: Set<Pull>) {
   const all = packs.flatMap((p, pi) => p.map((c, ci) => ({ c, at: [pi, ci] as [number, number] })));
   const hits = all.filter(x => S.HITS.includes(x.c.kind) || fresh.has(x.c));
-  return (hits.length ? hits : [all.reduce((a, b) => (b.c.price > a.c.price ? b : a))]).sort((a, b) => a.c.price - b.c.price).map(x => x.at);
+  const plain = (c: Pull) => (rar(c).t < 2 ? 0 : 1);
+  return (hits.length ? hits : [all.reduce((a, b) => (b.c.price > a.c.price ? b : a))]).sort((a, b) => plain(a.c) - plain(b.c) || a.c.price - b.c.price).map(x => x.at);
 }
 // The card numbers of a set already pulled by hand (state.dex keys are set|n|kind; energy isn't a card of the set).
 const handHave = (id: string) => new Set(Object.keys(G.state.dex).filter(k => k.startsWith(id + '|')).map(k => k.split('|')[1]));
@@ -405,7 +407,7 @@ export function openBatch(id: string, keep = false) {
 }
 export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }
 export function peek(i: number) { if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } }
-export function flipAll() { if (mat.m3d) { mat.quiet = true; table!.flipAll(); return; } mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
+export function flipAll() { if (mat.m3d) { table!.flipAll(); return; } mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
 export function toggleMute() { FX.setMuted(!FX.muted()); }
 document.addEventListener('ptcg:sound', () => document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; })); // also muted from the 声音 panel
 export function shareMat() { showPack(shareSpec()); }
