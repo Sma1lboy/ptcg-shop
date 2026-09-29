@@ -1164,7 +1164,7 @@ button:disabled { cursor: not-allowed; }
   .sound { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); } /* above the docked nav */
   /* phones: only the name and the prize, two lines */
   .ach-pop .grade.pop { padding-block: 10px; }
-  .ach-pop .grade.pop .g-id > p:not(.g-k, .a-name) { display: none; }
+  .ach-pop .grade.pop :is(.g-id > p:not(.g-k, .a-name), .a-shop) { display: none; }
   .nav a { padding: 0 2px; }
 }
 
