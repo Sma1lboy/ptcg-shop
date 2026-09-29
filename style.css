@@ -854,6 +854,42 @@ button:disabled { cursor: not-allowed; }
 .c-n { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
 .c-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); } .c-note b { color: var(--ink); font-weight: 600; }
 .c-note button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
+/* 缺货表 (goals.ts gaps): seekers who left empty-handed, a row per set they asked for, a column per rarity tier. Each cell is a
+   binder pocket: the bold number is who walked out, under it the cards of that tier the shop holds now. A pocket with none is the
+   binder's empty pocket (dashed, as the 卡册 prints a missing card); one with cards still losing people is solid. Under each row,
+   where that set's hits come from and the move that brings more. Hovering a cell lights those cards in the case and the binder */
+.gaps { width: 100%; border-collapse: separate; border-spacing: 4px; margin: 10px -4px 0; font-size: var(--fs-cap); table-layout: fixed; }
+.gaps thead th { font-weight: 600; color: var(--muted); text-align: center; white-space: nowrap; padding: 0 0 2px; }
+.gaps th:first-child { text-align: left; width: 34%; }
+.gaps tbody th { font-weight: 600; text-align: left; font-size: var(--fs-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gaps td.g { text-align: center; padding: 4px 2px 3px; border: 1px solid var(--line-strong); border-radius: var(--r); line-height: 1.15; cursor: default; }
+.gaps td.g b, .gaps td.g > span { display: block; font: 600 var(--fs-h)/1.1 var(--font-tag); }
+.gaps td.g > span { color: var(--muted); font-weight: 400; }
+.gaps td.g small { display: block; color: var(--muted); }
+.gaps td.gap { border: 1.5px dashed var(--ink); } .gaps td.gap small { color: var(--ink); font-weight: 600; }
+.gaps td.nil { border-color: transparent; }
+.gaps td.g:not(.nil):hover, .gaps td.g:focus-visible { background: var(--hover); }
+.gaps td.g:not(.nil, .gap) { cursor: pointer; }
+.gaps .g-src td { text-align: left; padding: 0 0 6px; color: var(--muted); line-height: 1.5; }
+.gaps .g-src b { color: var(--ink); font-weight: 600; }
+.gaps .g-src button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
+.gaps + .c-more { display: none; }
+@media (max-width: 779px) { /* phones: the three sets that lost the most seekers (two rows each: cells + source) */
+  .gaps tbody:not(.all) tr:nth-child(n+7) { display: none; }
+  .gaps + .c-more { display: block; margin: 4px auto 0; }
+  .gaps th:first-child { width: 28%; }
+}
+/* a 缺货表 cell pointed at: the case cubes and binder pockets holding a card that seeker would take, under the shop lamp */
+.v-slot.spot .v-cube, .sb-pk.spot .sb-card { box-shadow: 0 0 0 2px var(--lamp-glow), 0 0 18px 4px var(--lamp-glow); }
+.v-slot.spot .v-cube { filter: brightness(1.15); }
+/* 店内动态 → the wall (log.ts go): a customer line is a link to where they stood; the place flashes under the lamp once */
+.log li.go { cursor: pointer; border-radius: 2px; } .log li.go:hover, .log li.go:focus-visible { background: var(--hover); }
+[data-flash] { animation: spot-flash 1.8s ease-out; }
+[data-flash] { outline: 2px solid transparent; outline-offset: 3px; }
+@keyframes spot-flash { /* the lamp glow reads on the navy case and binder; the ink ring on the white page, in either theme */
+  0%, 40% { box-shadow: 0 0 0 2px var(--lamp-glow), 0 0 24px 8px var(--lamp-glow); outline-color: var(--ink); }
+  100% { box-shadow: 0 0 0 2px transparent, 0 0 0 0 transparent; outline-color: transparent; } }
+@media (prefers-reduced-motion: reduce) { [data-flash] { animation: none; outline-color: var(--ink); } }
 /* the price rail on the shelf edge, MIN_PCT…MAX_PCT of market in price steps: each customer is a dot stacked on the step of the most
    they would pay (ink = would buy at the tag as it is now), the flippers' zone is the darker low end of the rail, and your price tag
    is clipped on under it. --h (set inline) is the height of the tallest stack */

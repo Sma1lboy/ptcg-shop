@@ -7,9 +7,12 @@ import { repeat } from 'lit-html/directives/repeat.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
-import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
+import { G, $, money, toShelf, shelveLabel, lately, restock, rarLabel } from './common.ts';
 import { hold } from './mat.ts';
-import { point } from './shelf.ts';
+import { point, swapHint } from './shelf.ts';
+import { spot } from './case.ts';
+import { mark } from './card.ts';
+import { go } from './log.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
@@ -106,11 +109,69 @@ function packs(rec: Visit[]) {
     })}</ul>${rows.length > FEW ? html`<button type="button" class="c-more" aria-expanded="${allSets}" @click=${() => { allSets = !allSets; customers(); }}>${allSets ? `只看前 ${FEW} 个` : `再看 ${rows.length - FEW} 个系列`}</button>` : ''}`;
 }
 
+// 缺货表: seekers ask for one rarity tier (G.SEEK), of one set or any, and leave empty-handed when neither the case nor the
+// binder holds one. One row per set they asked for (plus 不挑系列), one cell per tier: who left with nothing in the window against
+// the cards of that tier the shop holds now (the seeker's own test: game.ts visit). A cell with none is an empty pocket (缺); one
+// with cards but walk-outs means they sell faster than they come in. The row ends with where that set's hits come from and the
+// move that brings more: a set on a shelf is torn open at the counter and sold to you at the 收卡价 (the rail below); a set on
+// no shelf reaches the shop only through your own packs, so 收卡价 cannot help it. Hovering a cell lights those cards (case.ts).
+const TIER = ['RR 档', 'IR 档', 'SIR 档'], TIER_MARK = ['RR', 'IR', 'SIR'];
+function gaps(rec: Visit[]) {
+  const s = G.state, seekers = rec.filter(v => v.t === 'seeker');
+  if (!seekers.some(v => v.r === 'none')) return '';
+  const held = [...s.shown.map(c => ({ c, n: 1 })), ...(hold ? [] : Object.values(s.singles).map(c => ({ c, n: c.count })))];
+  const have = (id: string, t: number) => held.reduce((a, { c, n }) => a + (G.SEEK[t].includes(c.kind) && (!id || c.set === id) ? n : 0), 0);
+  const racks = G.shelves(), free = racks.some(r => !r.id), swap = swapHint();
+  const rows = [...new Set(seekers.map(v => v.set || ''))].map(id => {
+    const mine = seekers.filter(v => (v.set || '') === id), cells = [0, 1, 2].map(t => {
+      const vs = mine.filter(v => v.tier === t);
+      return { t, came: vs.length, none: count(vs, 'none'), have: have(id, t) };
+    });
+    return { id, cells, none: cells.reduce((a, c) => a + c.none, 0) };
+  }).filter(r => r.none).sort((a, b) => +!a.id - +!b.id || b.none - a.none); // 不挑系列 last: its fix is every set's
+  // one short line under the row: only what changes the supply of that set's hits
+  let told = false; // 「提下面的收卡价」 once, on the first row that needs it
+  const src = (id: string) => {
+    if (!id) return '哪个系列的都行：卡本里这一档有就卖得掉';
+    const set = G.setById(id), racked = racks.some(r => r.id === id), stock = s.stock[id] || 0;
+    if (racked && !G.shelfQty(id)) { // sold out: nobody buys its packs, so nobody tears them open at the counter
+      const fill = restock(id), up = stock > (G.lvl('clerk') && s.auto[id] ? G.CLERK_KEEP : 0);
+      return html`<b>货架卖空了</b>：没人买这个系列的包，柜台上也就没人拆${up ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="999">补满</button>`
+        : fill.n ? html`<button type="button" data-act="buy" data-id="${id}" data-n="${fill.n}" title="${fill.title}">${fill.text}</button>` : ''}`;
+    }
+    if (racked) {
+      const sellers = rec.filter(v => v.offer && v.set === id), took = sellers.reduce((a, v) => a + (v.took || 0), 0), low = sellers.filter(v => v.sell === 'low').length;
+      const hard = G.SEEK[2].reduce((a, k) => a + (set.rates[k] || 0), 0);
+      return html`柜台上拆这个系列的卖给你 ${took} 张${low ? html` · <b>${low} 位嫌收得低</b>${told ? '' : (told = true, '，提下面的收卡价')}` : ''}${hard ? ` · SIR 档约 ${Math.round(100 / hard)} 包出一张` : ''}`;
+    }
+    const act = stock && free ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${toShelf(id)}">${shelveLabel(id, false)}</button>`
+      : swap?.id === id && (stock || G.lvl('clerk')) ? html`<button type="button" @click=${() => G.place(swap.i, id)}>换上货架</button>`
+      : stock ? html`<button type="button" data-act="open10" data-id="${id}" ?disabled=${hold}>自己开 ${Math.min(10, stock)} 包</button>`
+      : html`：<a href="#shelf">在货架上给它腾一个</a>`;
+    return html`<b>没上货架</b>：柜台上没人拆，收卡价帮不上${act}`;
+  };
+  return html`<table class="gaps" aria-label="找卡的：${lately()}空手走的，按系列和稀有度档">
+      <thead><tr><th scope="col">找卡的 · 空手走</th>${TIER.map((l, t) => html`<th scope="col" title="${G.SEEK[t].map(rarLabel).join('、')}">${mark({ r: TIER_MARK[t], kind: TIER_MARK[t] }, false)} ${l}</th>`)}</tr></thead>
+      <tbody class="${allGaps ? 'all' : ''}">${rows.map(({ id, cells }) => html`<tr>
+          <th scope="row">${id ? G.setById(id).name : '不挑系列'}</th>
+          ${cells.map(({ t, came, none, have }) => {
+            const k = `${id}:${t}`;
+            return html`<td class="g ${!came ? 'nil' : none ? (have ? 'thin' : 'gap') : ''}" data-spot="seek:${k}" tabindex="${came ? 0 : -1}"
+                @pointerenter=${() => spot(k)} @pointerleave=${() => spot(null)} @focusin=${() => spot(k)} @focusout=${() => spot(null)}
+                @click=${have ? () => go(['case', '.v-slot.spot, .sb-pk.spot']) : null} @keydown=${have ? (e: KeyboardEvent) => { if (e.key === 'Enter') go(['case', '.v-slot.spot, .sb-pk.spot']); } : null}
+                title="${came ? `${lately()}来找 ${came} 位，空手走 ${none} 位；柜里和卡本里现在有 ${have} 张${none ? (have ? '：卖得比补得快' : '：一张没有') : ''}${have ? '。点一下看是哪几张' : ''}` : '没人来找这一档'}">
+              ${came ? html`${none ? html`<b>${none}</b>` : html`<span>0</span>`}<small>${have ? `现在 ${have} 张` : '缺'}</small>` : ''}</td>`; })}
+        </tr><tr class="g-src"><td colspan="4">${src(id)}</td></tr>`)}</tbody></table>
+    ${rows.length > FEW ? html`<button type="button" class="c-more" aria-expanded="${allGaps}" @click=${() => { allGaps = !allGaps; customers(); }}>${allGaps ? `只看前 ${FEW} 个` : `再看 ${rows.length - FEW} 个`}</button>` : ''}`;
+}
+let allGaps = false;
+
 // The singles side: one rail for the 单卡标价 (seekers' and collectors' ceilings: every card is priced as a share of its own market
-// price, so one tag moves the case and the binder), a verdict on supply against demand, then what each rarity tier and the
-// collectors asked for; below, the counter sellers (GAMEPLAY §14) on the 收卡价 rail and what their cards cost.
+// price, so one tag moves the case and the binder), a verdict on supply against demand, the 缺货表 of what seekers asked for,
+// then the collectors and the price notes per tier; below, the counter sellers (GAMEPLAY §14) on the 收卡价 rail.
 function showcase(rec: Visit[]) {
   const s = G.state, free = G.slots() - s.shown.length, mine = Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind));
+  // a tier row only for its price notes now (who balked at what); who left empty-handed is the 缺货表's
   const rows = [...G.SEEK.map((kinds, tier) => ({ label: `找 ${kinds.join('/')}`, vs: rec.filter(v => v.t === 'seeker' && v.tier === tier), fit: (c: { kind: string; price: number }) => kinds.includes(c.kind) })),
     { label: `收藏党（$${G.BIG_CARD} 以上）`, vs: rec.filter(v => v.t === 'collector'), fit: (c: { kind: string; price: number }) => c.price >= G.BIG_CARD }].filter(r => r.vs.length)
     // collectors left empty-handed while the binder holds a card they would take go first: its 上柜 is the cheapest fix on the page
@@ -127,16 +188,18 @@ function showcase(rec: Visit[]) {
   return html`<p class="c-h">点是顾客最多肯出市价的几成：实的按现在的单卡标价会买。点轨上哪一档，展示柜和卡本的标价就改到哪一档</p>
     ${cards ? priceRail('', all, 0) : ''}
     <p class="c-note">${verdict}。${free > 0 ? `柜里空 ${free} 格${onHand ? '' : '，卡本里没有闪卡了'}` : `柜位满了（${G.slots()} 格）`}。${fill}</p>
+    ${gaps(rec)}
     <ul class="c-case">${rows.map(({ label, vs, fit }) => {
-      const none = count(vs, 'none'), dear = vs.filter(v => v.r === 'pricey' && v.why !== 'budget'), broke = count(vs, 'pricey', 'budget'), big = label.startsWith('收藏');
-      const have = none && big && moves ? mine.filter(([, c]) => fit(c)).sort((a, b) => b[1].price - a[1].price)[0] : undefined;
+      const big = label.startsWith('收藏'), none = big ? count(vs, 'none') : 0, dear = vs.filter(v => v.r === 'pricey' && v.why !== 'budget'), broke = count(vs, 'pricey', 'budget');
+      const have = none && moves ? mine.filter(([, c]) => fit(c)).sort((a, b) => b[1].price - a[1].price)[0] : undefined;
       const byCard = [...new Set(dear.map(v => v.card!))].map(card => { const d = dear.filter(v => v.card === card); return html`<b>${card}</b> 标 ${money(d[0].pct! * d[0].price!)}，${d.length} 人嫌贵，最多肯出 ${spread(d.map(v => v.max! * v.price!))}`; });
       const took = vs.filter(v => v.r === 'sold').reduce((a, v) => a + (v.n || 1), 0);
       const notes = [
-        none ? (have ? `柜里没有，卡本里有 ${have[1].name}（收藏党只看展示柜）` : big ? `没有 $${G.BIG_CARD} 以上的卡，只能等开包开出、或柜台上收到大卡` : '想要的系列和稀有度卡本里也没有') : '',
+        none ? (have ? `柜里没有，卡本里有 ${have[1].name}（收藏党只看展示柜）` : `没有 $${G.BIG_CARD} 以上的卡，只能等开包开出、或柜台上收到大卡`) : '',
         ...byCard, broke ? `${broke} 人看中了但钱不够` : '',
       ].filter(Boolean);
-      return html`<li><div class="c-row"><b>${label}</b><span class="c-n">${tally([['来了', vs.length], ['买走', count(vs, 'sold')], ['带走卡', took > count(vs, 'sold') ? took : 0], ['嫌贵', dear.length + broke], ['没找到', none]])}</span></div>
+      if (!big && !notes.length) return '';
+      return html`<li><div class="c-row"><b>${label}</b><span class="c-n">${tally([['来了', vs.length], ['买走', count(vs, 'sold')], ['带走卡', took > count(vs, 'sold') ? took : 0], ['嫌贵', dear.length + broke], ['没找到', big ? none : 0]])}</span></div>
           ${notes.length ? html`<p class="c-note">${notes.map((n, i) => html`${i ? '；' : ''}${n}`)}。${have && free > 0 ? html`<button type="button" data-act="list" data-key="${have[0]}">上柜</button>` : have && moves ? html`<button type="button" data-act="fillcase">换上大卡（${moves} 张）</button>` : ''}</p>` : ''}</li>`;
     })}</ul>${counter}`;
 }
