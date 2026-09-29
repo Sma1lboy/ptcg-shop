@@ -10,7 +10,7 @@ import { live } from 'lit-html/directives/live.js';
 import type { Shelf } from '../game.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, logoUrl, toShelf, shelveLabel, lately } from './common.ts';
+import { G, $, money, logoUrl, toShelf, shelveLabel, lately, restock } from './common.ts';
 import { hold } from './mat.ts';
 
 const FACES = 5; // pack faces per board; each face stands for DEPTH_STEP / FACES packs
@@ -57,7 +57,7 @@ export function renderShelf() {
   const s = G.state, shelves = G.shelves(), deep = G.depth(), free = shelves.some(r => !r.id);
   render(html`${wall()}<div class="shelf-head" aria-hidden="true"><span>系列 · 行情</span><span>仓库</span><span>货架</span><span>标价</span><span>开包</span></div>${SETS.map(set => {
     const w = G.wholesale(set.id), ev = S.packEV(S.rateKey(set.id, G.luckMult())), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
-    const room = G.WAREHOUSE - stock, can = (n: number) => room > 0 && s.cash >= w * Math.min(n, room), pct = G.pctOf(set.id);
+    const room = G.WAREHOUSE - stock, full = restock(set.id), can = (n: number) => room > 0 && s.cash >= w * Math.min(n, room), pct = G.pctOf(set.id);
     const own = shelves.filter(r => r.id === set.id).length, canShelve = !!stock && (own ? onShelf < own * deep : free), miss = G.missed(set.id);
     const heat = s.heat[set.id];
     const head = (tag?: string) => html`<div class="s-id"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
@@ -72,7 +72,8 @@ export function renderShelf() {
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>
-            <button type="button" class="${can(10) ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button></span>
+            <button type="button" class="${can(10) ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
+            ${full.n > 10 ? html`<button type="button" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>` : nothing}</span>
         </div>
         <div class="verb v-shelf" role="group" aria-label="${set.name} 货架">
           <span class="v-k">货架</span><span class="v-n">${own ? html`<b>${onShelf}</b>/${own * deep}${own > 1 ? html`<small>${own} 个货架</small>` : nothing}`
