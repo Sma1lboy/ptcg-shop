@@ -51,7 +51,7 @@ const arp = (notes: number[], step: number, o: Parameters<typeof tone>[3]) => no
 export function flip(t: number) {
   noise(0, .09, { gain: .11, from: 2600, to: 700 });
   if (t === 1) tone(A5, .03, .25, { type: 'triangle', gain: .05 });
-  if (t === 2) { tone(A5, 0, .5, { gain: .09 }); tone(E6, .09, .6, { gain: .08 }); }
+  if (t === 2) { tone(A5, 0, .5, { gain: .09 }); tone(E6, .09, .6, { gain: .08 }); noise(.12, .6, { gain: .03, from: 5000, to: 8000 }); } // the shimmer: the foil tilting into the lamp (table3d.js tilt)
   if (t === 3) { arp([C5, E5, G5, C6], .07, { type: 'triangle', gain: .1 }); noise(.1, .5, { gain: .05, from: 5000, to: 9000 }); }
   if (t >= 4) {
     arp([C5, E5, G5, C6, E6].concat(t === 5 ? [G6] : []), .075, { type: 'triangle', gain: .11 });

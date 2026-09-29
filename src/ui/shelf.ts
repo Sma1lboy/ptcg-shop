@@ -12,14 +12,21 @@ import { SETS, LOOK } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, logoUrl, imgUrl, toShelf, shelveLabel, lately, restock } from './common.ts';
 import { hold } from './mat.ts';
+import { packFront } from '../table3d.js';
 
 const FACES = 5; // pack faces per board: each face is the front of a row of DEPTH_STEP / FACES packs going back
 // A pack row: its front pack face-out, and up to three packs behind it peeking over its top (the row's depth); rows fill board by
 // board from the bottom, left to right. A full shelf is a wall of packs three deep, an emptying one thins to single packs, then bare back.
 const PEEK = 3;
 const row = (left: number, per: number) => left <= 0 ? '' : `pk d${Math.round((Math.min(left, per) - 1) / (per - 1) * PEEK)}`;
-// the pack's look on the 3D table (sets.ts LOOK): its three foil colours and the chase card's art, as custom properties for style.css
-const look = (id: string) => { const l = LOOK[id]; return l ? `--c0:${l.c[0]};--c1:${l.c[1]};--c2:${l.c[2]};--art:url("${imgUrl({ set: id, n: l.chase })}");` : ''; };
+// The pack's printed front, the very picture on the 3D pack (table3d.js packFront), once it's painted; until then, or where it
+// can't be read back (null: a CDN scan taints the canvas), style.css paints the same look from sets.ts LOOK (colours + chase art).
+const fronts: Record<string, string | null> = {};
+const look = (id: string) => { // same width as the 2D mat asks for, so each set is painted once
+  if (!(id in fronts)) { fronts[id] = null; packFront(id).then((u: string | null) => { if (u) { fronts[id] = u; draw(); } }); }
+  const l = LOOK[id], f = fronts[id];
+  return (l ? `--c0:${l.c[0]};--c1:${l.c[1]};--c2:${l.c[2]};--art:url("${imgUrl({ set: id, n: l.chase })}");` : '') + (f ? `--front:url("${f}");` : '');
+};
 
 function rack(r: Shelf, i: number, boards: number, deep: number) {
   // flippers who swept this set in the 顾客 window (the same one the 没买到 count uses): the player sees the packs gone and why

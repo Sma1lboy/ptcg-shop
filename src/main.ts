@@ -6,7 +6,7 @@ import { renderStats } from './ui/stats.ts';
 import { renderShelf } from './ui/shelf.ts';
 import { renderLog } from './ui/log.ts';
 import { renderLuck } from './ui/luck.ts';
-import { renderBinder } from './ui/binder.ts';
+import { renderBinder, initBinder } from './ui/binder.ts';
 import { renderSingles } from './ui/singles.ts';
 import { renderUpgrades } from './ui/upgrades.ts';
 import { renderSkills } from './ui/skills.ts';
@@ -43,5 +43,5 @@ initSlip();
 initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();
 
-initGoals();
+initGoals(); initBinder();
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

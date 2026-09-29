@@ -1,11 +1,165 @@
-// 战利品: the priciest hits ever pulled.
-import { html, render } from 'lit-html';
-import { G, $ } from './common.ts';
-import { face, cap } from './card.ts';
+// 卡册 (#dex on the 欧气 page): the shop's collection binder, one index tab per set (and 战利品, the priciest hits ever pulled, in
+// front). Each set is its card list in number order, nine pockets a page, two pages open on a wide screen and one on a phone:
+// a card pulled from a pack sits in its pocket, a card bought from a peer (补卡) sits there with an ink 「补」 tag, a card you don't
+// have is the empty pocket with its number, rarity mark and name printed. Under the tabs, the set's page map (one 3×3 per page)
+// jumps to a page. Tap a pocket for the card up close. 补卡 and 连开到出新卡 (moved here from goals.ts, unchanged) sit with the set.
+// Frozen while a pack is being revealed (a pocket filling would spoil the pull): main.ts renderAll skips it during hold.
+import { html, render, nothing } from 'lit-html';
+import { SETS, DATA } from '../sets.ts';
+import * as S from '../sim.ts';
+import { logo } from '../assets.ts';
+import { G, $, money, rarLabel } from './common.ts';
+import { face, cap, mark } from './card.ts';
+import { hold, huntable } from './mat.ts';
+
+const PER = 9, HITS = 'hits';
+type Pocket = { set: string; n: string; name: string; r: string; kind: string; price: number };
+let at = { tab: '', page: 0 }, zoom: Pocket | null = null;
+const wide = matchMedia('(min-width: 780px)'); // two pages open side by side
+const span = () => (wide.matches ? 2 : 1);
+
+// the card numbers of each set pulled by hand (state.dex keys are set|n|kind; energy is not a card of the set), with copies
+let handOf: Record<string, Map<string, number>> = {}, handKeys = -1;
+function hand(id: string) {
+  const d = G.state.dex, keys = Object.keys(d);
+  if (keys.length !== handKeys) {
+    handOf = {}; handKeys = keys.length;
+    for (const k of keys) { const [s, n] = k.split('|'); if (n === 'E') continue; const m = (handOf[s] ||= new Map()); m.set(n, (m.get(n) || 0) + d[k].c); }
+  }
+  return handOf[id] || new Map<string, number>();
+}
+const sets = () => SETS.filter(s => G.unlocked(s.id) || G.handCount(s.id) || G.dexCount(s.id));
+const pocketsOf = (tab: string): Pocket[] => tab === HITS ? G.state.hits
+  : DATA[tab].cards.map(c => ({ set: tab, n: c.n, name: c.name, r: c.r, kind: c.r, price: S.cardPrice(tab, c.n, c.r) ?? 0 }));
+const has = (c: Pocket, h: Map<string, number>) => G.state.dexSeen[`${c.set}|${c.n}`] ? (h.has(c.n) ? 'got' : 'bought') : 'none';
+
+// where a tab opens the first time: the first page with a gap (a set's gaps cluster at the end, in the secret rares)
+function open(tab: string) {
+  const h = hand(tab), i = tab === HITS ? 0 : pocketsOf(tab).findIndex(c => has(c, h) === 'none');
+  at = { tab, page: Math.max(0, Math.floor(i / PER)) };
+}
+
+function pocket(c: Pocket, st: string, i: number) {
+  const hits = at.tab === HITS;
+  if (st === 'none') return html`<li class="pk none"><button type="button" class="pk-slot" data-bk-zoom=${i} aria-label="${c.n} 号 ${c.name}，还没有">
+      <b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}<small>${c.name}</small></button><span class="cf-cap"><b class="cf-price">${money(c.price)}</b></span></li>`;
+  return html`<li class="pk ${st}"><button type="button" class="pk-card" data-bk-zoom=${i} aria-label="${hits ? '' : `${c.n} 号 `}${c.name}${st === 'bought' ? '，补的' : ''}">
+      ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}</button>${cap(c, 'show')}</li>`;
+}
+
+function spread(tab: string) {
+  const all = pocketsOf(tab), h = tab === HITS ? new Map() : hand(tab), pages = Math.max(1, Math.ceil(all.length / PER)), w = span();
+  at.page = Math.min(Math.floor(at.page / w) * w, Math.floor((pages - 1) / w) * w);
+  const pg = (p: number) => html`<ol class="bk-page" start=${p * PER + 1}>${Array.from({ length: PER }, (_, k) => {
+    const i = p * PER + k, c = all[i];
+    return c ? pocket(c, tab === HITS ? 'got' : has(c, h), i) : html`<li class="pk blank" aria-hidden="true"></li>`;
+  })}</ol>`;
+  const shown = Array.from({ length: w }, (_, k) => at.page + k).filter(p => p < pages || p === at.page);
+  const last = Math.min(at.page + w, pages);
+  return [html`<div class="bk-book" role="tabpanel" aria-label="第 ${at.page + 1} 页"><div class="bk-open">
+      <button type="button" class="bk-turn" data-bk-pg=${at.page - w} ?disabled=${at.page === 0} aria-label="上一页">‹</button>
+      <div class="bk-spread" data-n=${w}>${shown.map(pg)}</div>
+      <button type="button" class="bk-turn" data-bk-pg=${at.page + w} ?disabled=${at.page + w >= pages} aria-label="下一页">›</button>
+    </div></div>`,
+    pages > 1 ? html`<div class="bk-map" role="group" aria-label="翻到第几页">${Array.from({ length: pages }, (_, p) => {
+      const cs = all.slice(p * PER, p * PER + PER), got = cs.filter(c => tab === HITS || has(c, h) !== 'none').length;
+      return html`<button type="button" class="bk-mm ${p >= at.page && p < last ? 'on' : ''}" data-bk-pg=${p} aria-label="第 ${p + 1} 页，${got}/${cs.length}">
+        ${cs.map(c => html`<i class=${tab === HITS ? 'got' : has(c, h)}></i>`)}</button>`;
+    })}<span class="bk-pn">第 ${at.page + 1}${last - at.page > 1 ? `–${last}` : ''} / ${pages} 页</span></div>` : nothing];
+}
+
+// the set's line above its pages: how full the 图鉴 is and what the next 回头客 tier needs, 亲手开出, then what to do about the gaps
+function head(id: string) {
+  const c = G.dexCount(id), tot = G.dexTotal(id), share = c / tot, next = G.DEX_TIERS.find(([at]) => share < at - 1e-9);
+  const need = next ? Math.ceil(next[0] * tot - 1e-9) - c : 0, h = G.handCount(id);
+  return html`<div class="bk-head">
+      <p class="bk-count"><span><b>${c}</b>/${tot}</span> 张入册 <span class="bk-hand">亲手开出 <b>${h}</b>/${tot}</span></p>
+      <p class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(id) * 100)}%
+        <span class="bk-key"><i class="got"></i>开包开出 <i class="bought"></i>补的 <i class="none"></i>还没有</span></p>
+      ${G.unlocked(id) ? collect(id) : nothing}${handLine(id)}
+    </div>`;
+}
+
+// 图鉴补卡: buy the missing hits at market into the binder (never resellable); C/U/R only come from packs. 100% = 大师套.
+function collect(id: string) {
+  if (G.master(id)) return html`<small class="master">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
+  const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
+  const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
+  if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
+  return html`<div class="btns"><button type="button" data-act="collect" data-id="${id}" ?disabled=${cash < miss[0].price} title="按市价从同行买，只收进图鉴册，不能再卖">补 ${miss[0].name} ${money(miss[0].price)}</button>
+      ${miss.length > 1 ? html`<button type="button" data-act="collect" data-id="${id}" data-n="all" ?disabled=${cash < all}>闪卡全补 ${money(all)}</button>` : ''}</div>
+    <small class="muted">闪卡还缺 ${miss.length} 张，最贵的是 ${top.name} ${money(top.price)}${baseNote ? ` · ${baseNote}` : ''}</small>`;
+}
+
+// 亲手开出: the same set counted only from packs you opened (bought cards don't count). What is left, by rarity, and the one that
+// takes longest, in packs at today's 手气: the honest length of the line, not a promise.
+const packsFmt = (n: number) => (n >= 100 ? Math.round(n / 10) * 10 : Math.round(n)).toLocaleString('en-US');
+function handLine(id: string) {
+  const h = G.handCount(id);
+  if (G.handDone(id)) return html`<small class="master">一张没买，全是自己开的 · 名气 +${G.HAND_FAME}（开分店时拿）</small>`;
+  if (!h && !G.master(id)) return nothing;
+  const miss = G.handMissing(id), by: Record<string, number> = {};
+  for (const c of miss) by[c.r] = (by[c.r] || 0) + 1;
+  const left = Object.entries(by).sort((a, b) => (S.RANK[b[0]] ?? 0) - (S.RANK[a[0]] ?? 0)), top = miss[0];
+  return html`<div class="dx-hand"><small class="muted">${h ? html`亲手开出还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '亲手开出：补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
+      ${G.unlocked(id) && huntable(id) ? html`<div class="btns"><button type="button" data-act="autorun" data-id="${id}" title="十包一轮自动开，出一张没亲手开出过的卡就停；仓库不够按进货价补">连开到出新卡</button></div>` : nothing}</div>`;
+}
+
+// the whole book under the pages: how far every set is pulled by hand
+function handSum() {
+  const h = SETS.reduce((a, s) => a + G.handCount(s.id), 0), tot = SETS.reduce((a, s) => a + G.dexTotal(s.id), 0), done = SETS.filter(s => G.handDone(s.id)).length;
+  if (!h) return nothing;
+  return html`<p class="dx-sum muted">亲手开出 <b>${h.toLocaleString('en-US')}/${tot.toLocaleString('en-US')}</b> 张（只数开包开出来的，补的不算）· 亲手开齐 ${done}/${SETS.length} 个系列，每套下次开分店名气 +${G.HAND_FAME} · 开分店、破产都不清零</p>`;
+}
+
+// the card up close: a native popover (Esc / tapping outside closes it)
+function zoomed() {
+  const c = zoom; if (!c) return nothing;
+  const hits = at.tab === HITS, st = hits ? 'got' : has(c, hand(c.set)), copies = hand(c.set).get(c.n) || 0, odds = G.cardOdds(c.set, c.n);
+  const how = st === 'got' ? `亲手开出 ${copies} 张` : st === 'bought' ? '补的：从同行按市价买的，只收进卡册，不能再卖' : '还没有';
+  return html`${st === 'none' ? html`<span class="cf cf-big pk-ghost"><b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}</span>` : face(c, 'big')}
+    <div class="bk-zoom-t"><p class="bk-zoom-n">${c.name}</p>${cap(c, 'big')}
+      <p class="muted">${G.setById(c.set).name} · ${c.n} 号${hits ? '' : ` · ${how}`}</p>
+      ${odds > 0 ? html`<p class="muted">平均 ${packsFmt(1 / odds)} 包出一张（${rarLabel(c.kind)}）</p>` : nothing}</div>`;
+}
 
 export function renderBinder() {
-  const hits = G.state.hits.slice(0, 8);
-  render(html`<h2>战利品 · 开出过最贵的</h2>${hits.length
-    ? html`<ul class="binder">${hits.map(c => html`<li>${face(c, 'show', true)}${cap(c, 'show')}</li>`)}</ul>`
-    : html`<p class="muted">还没出过 RR 以上的卡。</p>`}`, $('binder'));
+  if (hold) return;
+  const ss = sets(), hits = G.state.hits.length > 0;
+  if (!at.tab || (at.tab !== HITS && !ss.some(s => s.id === at.tab)) || (at.tab === HITS && !hits)) {
+    const first = ss.find(s => !G.master(s.id)) || ss[0]; if (first) open(first.id); else if (hits) open(HITS);
+  }
+  const capped = G.crowdRaw() > G.CROWD_KNEE, tab = at.tab;
+  render(html`<h2>卡册 · 图鉴 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2>
+    <div class="bk-tabs" role="tablist" aria-label="卡册的系列">
+      ${hits ? html`<button type="button" role="tab" class="bk-tab" aria-selected=${tab === HITS} data-bk-tab=${HITS}><span>战利品</span><small>最贵的 ${G.state.hits.length} 张</small></button>` : nothing}
+      ${ss.map(s => html`<button type="button" role="tab" class="bk-tab ${G.master(s.id) ? 'full' : ''}" aria-selected=${tab === s.id} data-bk-tab=${s.id}>
+        <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}</small></button>`)}
+    </div>
+    ${tab ? html`${spread(tab)}
+      ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张 RR 以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
+    ${handSum()}
+    <div class="bk-zoom" id="bk-zoom" popover>${zoomed()}</div>`, $('dex'));
+}
+
+function go(page: number) { at.page = Math.max(0, page); renderBinder(); }
+export function initBinder() {
+  const root = $('dex');
+  let swiped = false; // the click that ends a swipe doesn't open the pocket under it
+  root.addEventListener('click', e => {
+    if (swiped) { swiped = false; return; }
+    const b = (e.target as Element).closest<HTMLElement>('[data-bk-tab], [data-bk-pg], [data-bk-zoom]'); if (!b) return;
+    if (b.dataset.bkTab) { open(b.dataset.bkTab); renderBinder(); root.querySelector('.bk-tab[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+    else if (b.dataset.bkPg) go(+b.dataset.bkPg);
+    else { zoom = pocketsOf(at.tab)[+b.dataset.bkZoom!]; renderBinder(); $('bk-zoom').showPopover(); }
+  });
+  root.addEventListener('keydown', e => {
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || (e.target as Element).closest('.bk-tabs, input')) return;
+    go(at.page + (e.key === 'ArrowLeft' ? -span() : span()));
+  });
+  // a swipe across the open pages turns them (phones)
+  let x0: number | null = null;
+  root.addEventListener('pointerdown', e => { x0 = (e.target as Element).closest('.bk-spread') && e.pointerType !== 'mouse' ? e.clientX : null; });
+  root.addEventListener('pointerup', e => { if (x0 == null) return; const dx = e.clientX - x0; x0 = null; if (Math.abs(dx) > 50) { swiped = true; setTimeout(() => { swiped = false; }); go(at.page + (dx > 0 ? -span() : span())); } });
+  wide.addEventListener('change', renderBinder);
 }
