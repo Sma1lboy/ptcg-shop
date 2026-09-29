@@ -421,12 +421,18 @@ function revealBatch(tok: Mat) {
 // ---------- actions (called from events.ts) ----------
 // Warm the cache before the flips (CORS mode, so the share poster can reuse it).
 const warm = (cards: Pull[]) => cards.forEach(c => { if (c.r !== 'E') for (const size of ['low', 'high']) { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = imgUrl(c, size); } });
+// A pack started from lower down the page (the rail's 进 1 包就开 reached with the keys, which scroll it into view) left the
+// table's head under the sticky top bar: bring the whole table back into view, under the bar.
+function frameMat() {
+  const r = $('mat').getBoundingClientRect(), bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0;
+  if (r.height && r.top < bar) scrollBy({ top: r.top - bar - 8, behavior: reduced() ? 'auto' : 'smooth' });
+}
 export function startPack(id: string) {
   run = null; hold = true;
   const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
   warm(cards);
   mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0, m3d: true } as Mat;
-  renderMat();
+  renderMat(); frameMat();
 }
 // What flies to the front of the 3D table: every hit and every card new to 亲手开出; a batch with neither shows its best
 // card. Plain ones (below RR) first, then the hits, each cheapest first (best last): the table turns the plain ones in one sweep. fresh: the new cards (first copy of each), from handNew() before the packs were opened.
@@ -450,7 +456,7 @@ export function openBatch(id: string, keep = false) {
   const fresh = handNew(packs, have), picks = pickOrder(packs, fresh);
   mat = { mode: 'batch', set: id, packs, picks, news: picks.flatMap(([p, i], k) => (fresh.has(packs[p][i]) ? [k] : [])), up: new Set(), cur: 0, m3d: true, quiet: !!run } as Mat;
   warm(picked());
-  renderMat();
+  renderMat(); if (!keep) frameMat();
   if (!mat.m3d) revealBatch(mat);
 }
 export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }

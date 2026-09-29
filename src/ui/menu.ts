@@ -23,10 +23,13 @@ const cur = document.createElement('i');
 cur.className = 'menu-cursor'; cur.setAttribute('aria-hidden', 'true'); cur.hidden = true;
 function place() {
   const a = document.activeElement as HTMLElement | null;
-  if (cur.hidden || !a || a === document.body) { cur.hidden = true; return; }
+  if (cur.hidden || !a || a === document.body || !a.isConnected) { cur.hidden = true; return; }
   // in the top layer the focus sits in (a dialog, any open popover — the guide too), or it would be drawn under it
   const host = a.closest<HTMLElement>('dialog[open], :popover-open') ?? document.body; if (cur.parentElement !== host) host.append(cur);
   const r = a.getBoundingClientRect(), mid = r.top + r.height / 2;
+  // a tab (the menu's page tabs, 货柜's view tabs, the binder's pockets) shows where it is by its own focus ring, as BW frames the
+  // tab under the cursor: a ▶ beside it would land on the neighbour tab's icon
+  cur.classList.toggle('off', !!a.closest('.nav, .subnav, .bk-tabs'));
   // left of the control, the way BW points at a row; when another control sits right there (a row of buttons), inside its left
   // padding instead, so the ▶ never lands on the neighbour
   const next = r.left > 18 && document.elementFromPoint(r.left - 9, mid)?.closest(ITEMS);
@@ -37,14 +40,16 @@ function place() {
 function step(from: HTMLElement, key: string, list: HTMLElement[]) {
   const a = from.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
   const [dx, dy] = ({ ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] } as Record<string, number[]>)[key];
-  let best: HTMLElement | null = null, bestScore = Infinity;
+  let best: HTMLElement | null = null, bestScore = Infinity, cone = false;
   for (const el of list) {
     if (el === from) continue;
     const b = el.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
     const ahead = (bx - ax) * dx + (by - ay) * dy, side = Math.abs((bx - ax) * dy + (by - ay) * dx);
     if (ahead <= 4) continue;
-    const score = ahead + side * 2.5;
-    if (score < bestScore) { bestScore = score; best = el; }
+    // inside a ~63° cone around the arrow beats anything outside it: → from a 3D pack label goes to the rail beside it, not to
+    // the footer link that is barely to the right but far below
+    const inCone = side <= ahead * 2, score = ahead + side * 2.5;
+    if ((inCone && !cone) || (inCone === cone && score < bestScore)) { bestScore = score; best = el; cone = inCone; }
   }
   return best;
 }
@@ -80,5 +85,10 @@ export function initMenu() {
   });
   document.addEventListener('pointerdown', () => { cur.hidden = true; }, true);
   document.addEventListener('focusin', () => requestAnimationFrame(place));
+  // the pressed control can vanish (开包 re-renders the mat, a sheet closes): a removed element fires no blur, so the ▶ would stay
+  // floating where it was. Re-place on DOM changes while the cursor shows, once a frame
+  let queued = false;
+  new MutationObserver(() => { if (cur.hidden || queued) return; queued = true; requestAnimationFrame(() => { queued = false; place(); }); })
+    .observe(document.body, { childList: true, subtree: true });
   addEventListener('scroll', place, { passive: true, capture: true }); addEventListener('resize', place);
 }

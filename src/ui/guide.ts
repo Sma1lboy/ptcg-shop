@@ -46,7 +46,7 @@ const STEPS: Step[] = [
     p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，还可能碰上倒爷按这个价整架收走。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
-    p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻（空格也行）。卡价和开包概率都是真实统计。` },
+    p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off
   { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
     at: () => pick('#shelf .set .primary:not(:disabled)', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
@@ -79,8 +79,9 @@ function place() {
   if (!pop.matches(':popover-open') || !anchor) return;
   const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav');
   // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
-  // 「测欧气：到「欧气」页」: the full text over the bottom tabs covered what the player was reading (成长's 借款额度)
-  if (phone() && (onMat || tab)) pop.dataset.strip = onMat ? 'mat' : 'tab'; else delete pop.dataset.strip;
+  // 「测欧气：到「欧气」页」, on every screen: the full text under a tab covered what the player was reading on this page (成长's
+  // 账本, 成就's totals, the 开包 title) and had nothing to do with it
+  if ((phone() && onMat) || tab) pop.dataset.strip = tab ? 'tab' : 'mat'; else delete pop.dataset.strip;
   if (onMat && !phone()) pop.dataset.side = 'right';
   const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
   let w = pop.offsetWidth, h = pop.offsetHeight;

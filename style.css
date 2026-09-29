@@ -111,7 +111,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .menu-cursor { position: fixed; z-index: 60; width: 12px; height: 14px; translate: 0 -50%; pointer-events: none;
   filter: drop-shadow(1px 0 0 #101318) drop-shadow(0 1px 0 #101318); animation: cursor-bob .8s steps(2, jump-none) infinite; }
 .menu-cursor::before { content: ""; position: absolute; inset: 0; background: var(--sel); clip-path: polygon(0 0, 100% 50%, 0 100%); } /* clipped inside, so the filter's edge is not */
-.menu-cursor[hidden] { display: none; }
+.menu-cursor:is([hidden], .off) { display: none; } /* .off: on a tab, whose own focus ring is the cursor (menu.ts place) */
+:is(.nav, .subnav) a:focus-visible { outline: 3px solid var(--sel); outline-offset: 1px; } /* the cursor on a page tab: BW's blue frame round it */
 @keyframes cursor-bob { 50% { transform: translateX(-3px); } }
 @media (prefers-reduced-motion: reduce) { .menu-cursor { animation: none; } }
 a { color: inherit; }
@@ -202,12 +203,25 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .cust-head { flex: 1 1 360px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0; }
 .cust-head .c-meta { margin: 0; }
 .cust-head .cust-bar { flex: 1 1 120px; max-width: 320px; margin: 0; }
-/* 店里的人 (ui/walk.ts): a BW indoor floor under the view tabs — a back wall, square floor tiles, the counter on the left with the
-   owner behind it, the door on the right. People are 4-frame pixel strips (public/gen/walk) at 2×: walking steps through the
-   frames, facing left is the strip mirrored. Balloons are BW emote bubbles. Both themes: the floor is a window like the panels */
+/* 店里的人 (ui/walk.ts): a BW indoor map under the view tabs — the back wall (planked, a window, two wall shelves of packs, a
+   baseboard), checker floor tiles, the counter on the left with the owner behind it, the door with its mat on the right. The room
+   is an illustration, so its colours are fixed (the same in both themes, like the story art): pale cool wall and tiles, the
+   frame-grey trim. People are 4-frame pixel strips (public/gen/walk) at 2×: walking steps through the frames, facing left is the
+   strip mirrored. Balloons are BW emote bubbles */
 .floor { position: relative; flex: 1 1 100%; height: 132px; overflow: hidden; border: 3px solid var(--frame); border-radius: var(--r-frame);
-  background: linear-gradient(color-mix(in oklab, var(--frame-in) 70%, var(--panel)) 0 40px, var(--frame) 40px 42px, transparent 42px),
-    linear-gradient(90deg, var(--frame-in) 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(var(--frame-in) 1px, transparent 1px) 0 0 / 24px 24px, var(--panel); }
+  background:
+    linear-gradient(#9FC8EE, #D6E9F8) calc(50% - 40px) 8px / 64px 24px no-repeat,            /* the window pane */
+    linear-gradient(#3A4150, #3A4150) calc(50% - 40px) 6px / 68px 28px no-repeat,            /* its frame */
+    repeating-linear-gradient(90deg, #D8492C 0 6px, transparent 6px 8px, #9B6BD0 8px 14px, transparent 14px 16px, #2A74D0 16px 22px, transparent 22px 24px, #3E9B4F 24px 30px, transparent 30px 32px) 140px 12px / 96px 14px no-repeat,
+    linear-gradient(#3A4150, #3A4150) 136px 26px / 104px 4px no-repeat,                      /* a wall shelf of packs */
+    repeating-linear-gradient(90deg, #3E9B4F 0 6px, transparent 6px 8px, #2A74D0 8px 14px, transparent 14px 16px, #D8492C 16px 22px, transparent 22px 24px, #9B6BD0 24px 30px, transparent 30px 32px) calc(100% - 150px) 12px / 96px 14px no-repeat,
+    linear-gradient(#3A4150, #3A4150) calc(100% - 146px) 26px / 104px 4px no-repeat,         /* and another */
+    linear-gradient(#2A74D0, #2A74D0) calc(100% - 4px) calc(100% - 3px) / 52px 8px no-repeat, /* the door mat */
+    linear-gradient(transparent 44px, #5A6272 44px 48px, transparent 48px),                   /* baseboard */
+    repeating-linear-gradient(90deg, transparent 0 31px, #B7C2D1 31px 32px) 0 0 / 100% 44px no-repeat, /* wall planks */
+    linear-gradient(#C9D3E0 0 44px, transparent 44px),                                        /* the wall */
+    linear-gradient(90deg, #C9D0DA 1px, transparent 1px) 0 0 / 24px 24px, linear-gradient(#C9D0DA 1px, transparent 1px) 0 0 / 24px 24px,
+    conic-gradient(#E4E9EF 25%, #EEF1F5 0 50%, #E4E9EF 0 75%, #EEF1F5 0) 0 0 / 48px 48px;  /* checker tiles */ }
 .floor::before { content: ""; position: absolute; z-index: 2; left: 0; bottom: 0; width: 76px; height: 40px; border: 2px solid #101318; border-left: 0; border-bottom: 0;
   border-radius: 0 6px 0 0; background: linear-gradient(#5A6272 0 8px, var(--hud) 8px); } /* the counter: its top, its front */
 .floor::after { content: ""; position: absolute; right: 8px; top: 0; width: 44px; height: 84px; border: 2px solid #101318; border-top: 0; background: #1A1D23; } /* the door */
@@ -350,7 +364,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .r-rail .sticker { margin-block: -6px -2px; }
 .rack.empty .r-bay { background: radial-gradient(circle, var(--line-strong) 1px, transparent 1.6px) 3px 3px / 12px 12px, color-mix(in oklab, var(--ink) 5%, var(--panel)); }
 .rack.ghost .r-sign, .rack.ghost .r-bay { border: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; color: var(--muted); }
-.rack.ghost .r-sign { border-bottom: 0; font-weight: 700; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height */
+.rack.ghost .r-sign { border-bottom: 0; text-shadow: none; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height. No hard shadow: on the pale page it doubled every stroke */
 .rack.ghost .board { border-bottom: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; }
 .rack.ghost .r-ctl { margin-top: 0; } .rack.ghost .r-ctl button { flex: 1; }
 /* 卖出落在墙上 (shelf.ts listen): the packs a customer took lift off the board and fade; a chip from the till (the top bar's .delta:
@@ -372,9 +386,10 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 @media (prefers-reduced-motion: reduce) { .board i .lift { display: none; } .r-beat { animation: none; } }
 .r-miss { margin: 6px 6px 0; font-size: var(--fs-cap); color: var(--muted); } .r-miss b { color: var(--ink); font-weight: 600; }
 .r-miss + .r-miss { margin-top: 2px; }
-.r-ctl { display: flex; gap: 6px; margin-top: auto; padding: 8px 6px 0; }
+.r-ctl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding: 8px 6px 0; }
 /* the shelf picker is a BW list box: pale field, dark rim, the ▼ of a BW menu */
-.r-ctl select { flex: 1; min-width: 0; min-height: 34px; padding: 4px 24px 4px 8px; appearance: none; border: 2px solid var(--frame); border-radius: 8px; color: var(--btn-ink); font: 400 var(--fs-cap)/1.5 var(--font-pixel);
+/* flex-basis 7.5em: the set's name gets its own row when the bay is narrow (a phone's 超电突围 lost its last glyph) */
+.r-ctl select { flex: 1 1 7.5em; min-width: 0; min-height: 34px; padding: 4px 24px 4px 8px; appearance: none; border: 2px solid var(--frame); border-radius: 8px; color: var(--btn-ink); font: 400 var(--fs-cap)/1.5 var(--font-pixel);
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23808A99'/%3E%3C/svg%3E") right 8px center no-repeat, var(--btn-face);
   box-shadow: inset 0 -3px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)); }
 .r-ctl select:hover { box-shadow: inset 0 -3px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)), 0 0 0 2px var(--sel); }
@@ -810,11 +825,12 @@ button:disabled { cursor: not-allowed; }
 /* phones: on the mat a strip under the button, the step's text and its button side by side, no heading; over the bottom tabs
    (the step is on another page) just the heading and the button (guide.ts place()) */
 .coach[data-strip]:popover-open { display: flex; align-items: center; gap: 10px; width: calc(100vw - 16px); padding: 6px 10px; line-height: 1.5; }
+.coach[data-strip="tab"]:popover-open { width: max-content; max-width: calc(100vw - 16px); } /* under a tab: 「新手 3/7 定价：到「货柜」页 [跳过引导]」, as small as it reads */
 .coach[data-strip="mat"] :is(.co-k, h3) { display: none; }
 .coach[data-strip="tab"] p { display: none; } .coach[data-strip="tab"] h3 { flex: 1; margin: 0; } /* just 「测欧气：到「欧气」页」 */
 .coach[data-strip] .co-btns { flex: none; margin: 0; }
 .coach .co-k { margin: 0; font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--muted); }
-.coach h3 { margin: 2px 0 4px; font: 400 var(--fs-h)/1.4 var(--font-pixel); }
+.coach h3 { margin: 2px 0 4px; font: 400 var(--fs-lg)/1.3 var(--font-pixel); } /* 24px: whole device pixels at both 2× and 3× (18px is 4.5 per font pixel on a 3× phone and breaks the strokes) */
 .coach h3 small { font: 400 var(--fs-cap)/1.4 var(--font-pixel); color: var(--muted); }
 .coach p { margin: 0; text-wrap: pretty; }
 .coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -1188,7 +1204,7 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button.in { opacity: 1; }
 /* everything the scene lays over the canvas is a BW status plate — the dark box a battle prints a name and HP in: --hud face,
    a near-black rim, a thin light inner rule, a hard drop. The pointed one gets the menu cursor's blue ring */
-:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum) { border-radius: 6px; background: var(--hud);
+:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .ip-next, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum) { border-radius: 6px; background: var(--hud);
   box-shadow: 0 0 0 2px #101318, inset 0 0 0 1px rgba(255, 255, 255, .14), 0 4px 0 2px rgba(0, 0, 0, .3); }
 :is(.s3-shelf button:not(:disabled):is(:hover, :focus-visible), .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-tag) { box-shadow: 0 0 0 2px #101318, 0 0 0 4px var(--sel), 0 0 14px 2px var(--sel-glow); }
 :is(.s3-shelf, .ip-tag) b { font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
@@ -1208,6 +1224,7 @@ button:disabled { cursor: not-allowed; }
 .ip-face { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: clamp(92px, 11vw, 160px); aspect-ratio: 7.4 / 12.8; border-radius: 3px;
   background: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1) 55%, var(--foil-2) 75%, var(--foil-3)); color: var(--back-2);
   transform: rotate(-2deg); transition: transform .25s cubic-bezier(.23, 1, .32, 1); } /* box-shadow (the stack's crimp edges) is set per stack in mat.ts */
+.idle-packs:not(:has(> li:nth-child(5))) .ip-face { width: clamp(104px, min(18vw, 36vh), 240px); } /* one row (early on, two or three sets): the packs fill the table instead of floating in it */
 .idle-packs li:nth-child(even) .ip-face { transform: rotate(1.5deg); }
 .ip-face.art { background: none; }
 .ip-face img { width: 88%; } .ip-face.art img { width: 100%; height: 100%; border-radius: inherit; display: block; }
@@ -1216,7 +1233,7 @@ button:disabled { cursor: not-allowed; }
 .idle-pack.none .ip-face { opacity: .72; } /* none in the warehouse: the sample on the counter, bought when opened */
 .idle-pack:disabled { cursor: not-allowed; } .idle-pack:disabled .ip-face { filter: grayscale(1) brightness(.6); }
 .ip-tag { display: grid; justify-items: center; gap: 1px; padding: 4px 8px; } /* the plate itself: the .s3-shelf rules above */
-.ip-next { margin: 0; text-align: center; font-size: var(--fs-cap); color: var(--mat-muted); } .ip-next:empty { display: none; }
+.ip-next { align-self: center; margin: 0; padding: 2px 10px; text-align: center; font-size: var(--fs-cap); color: var(--mat-muted); } .ip-next:empty { display: none; } /* the 3D table's hint plate */
 
 /* 开包 rail (src/ui/rail.ts): the warehouse's packs, a way to the shelf, and where luck stands */
 .rail-sets { list-style: none; margin: 0; padding: 0; }
@@ -1617,6 +1634,9 @@ button:disabled { cursor: not-allowed; }
   .st-box { bottom: calc(16px + env(safe-area-inset-bottom)); min-height: 136px; padding: 20px 18px 22px; }
   .st-text { font-size: var(--fs-h); }
 }
+/* a tall phone: the wide scene would be cropped to a blurry corner. Like the DS top screen, it takes the top 62% of the screen
+   (cropped far less), the text box sits on the dark --hud below it */
+@media (max-aspect-ratio: 4 / 5) { .st-scene { bottom: auto; height: 62vh; } .st-scene::after { background: linear-gradient(transparent 60%, var(--hud)); } }
 
 /* 债务 (src/ui/ledger.ts, GAMEPLAY.md「界面」). The due chip is the shop's BW battle box in the top bar: which week, the countdown
    in pixel numerals, the bill, and an HP bar — the till against this bill (full: 九姐 is paid on the spot). Last 5 minutes or cash
