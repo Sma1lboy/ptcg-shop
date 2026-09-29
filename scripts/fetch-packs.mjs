@@ -3,7 +3,7 @@
 import { writeFile } from 'node:fs/promises';
 import { SETS } from '../src/sets.ts';
 
-const out = { date: new Date().toISOString().slice(0, 10) };
+const out = { date: new Date().toLocaleDateString('en-CA') }; // local YYYY-MM-DD
 for (const s of SETS) {
   const html = await (await fetch(s.priceSource, { headers: { 'user-agent': 'Mozilla/5.0' } })).text();
   const m = html.match(/id="used_price"[\s\S]*?class="price js-price"[^>]*>\s*\$([\d,.]+)/); // "Ungraded" column
