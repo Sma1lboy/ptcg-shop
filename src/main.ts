@@ -1,5 +1,5 @@
 // Entry point. Boot order is the old <script> order: game state loads, fx binds its listeners, the panels and the mat
-// render and bind input, then onboarding/share, then goals. Listener order (G.on, document click, ptcg:release) follows from it.
+// render and bind input, then onboarding, then goals. Listener order (G.on, document click, ptcg:release) follows from it.
 import { G } from './ui/common.ts';
 import './fx.ts';
 import { renderStats } from './ui/stats.ts';
@@ -18,7 +18,6 @@ import { bindEvents } from './ui/events.ts';
 import { bindLayout, renderTabs } from './ui/layout.ts';
 import { renderRail } from './ui/rail.ts';
 import { renderGuide } from './ui/guide.ts';
-import { renderShare } from './ui/share.ts';
 import { initGoals } from './ui/goals.ts';
 import { initAch } from './ui/ach.ts';
 
@@ -32,8 +31,8 @@ setInterval(() => G.tick(), 1000);
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 
 renderBasis(); bindLayout();
-G.on(() => { renderGuide(); renderShare(); });
-renderGuide(); renderShare();
+G.on(renderGuide);
+renderGuide();
 
 initGoals();
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

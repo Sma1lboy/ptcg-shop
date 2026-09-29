@@ -3,7 +3,7 @@ import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, rarLabel } from './common.ts';
-import { tile } from './upgrades.ts';
+import { tile, pad } from './upgrades.ts';
 
 const pct = (v: number) => v.toFixed(v >= 10 ? 1 : 2) + '%';
 
@@ -23,5 +23,5 @@ export function renderSkills() {
       const lv = G.skill(k);
       return tile({ name: sk.name, tag: sk.group, desc: sk.desc, lv, max: sk.max, cost: G.skillCost(k), fx: [sk.fx(lv), sk.fx(lv + 1)], act: 'learn', k,
         blocked: G.canLearn(k) ? '' : '要先雇店员（店铺升级）' });
-    })}</ul>${odds()}`, $('skills'));
+    })}${pad(Object.keys(G.SKILLS).length)}</ul>${odds()}`, $('skills'));
 }

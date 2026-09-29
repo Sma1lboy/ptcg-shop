@@ -1,22 +1,43 @@
-// 欧气检测: percentile among simulated players, meter, per-rarity tally with exact tail odds.
-import { html, render } from 'lit-html';
+// 欧气检测: the verdict as a grading label, percentile among simulated players, meter, per-rarity tally with exact tail odds.
+import { html, render, svg } from 'lit-html';
 import * as S from '../sim.ts';
 import { G, $, money, RAR, rarLabel } from './common.ts';
+import { grade, pctText, type Grade } from './share.ts';
 
 const BANDS: [number, number, string][] = [[0, 10, '非酋'], [10, 30, '小非'], [30, 70, '平民'], [70, 90, '小欧'], [90, 99, '欧洲人'], [99, 100, '欧皇']];
+function barcode(b: number[]) {
+  let x = 0;
+  const rects = b.map((w, i) => { const r = i % 2 ? null : svg`<rect x=${x} width=${w} height="1"></rect>`; x += w; return r; });
+  return html`<svg class="g-bar" viewBox="0 0 ${x} 1" preserveAspectRatio="none" aria-hidden="true">${rects}</svg>`;
+}
+
+function label(g: Grade) {
+  if (g.pct == null) return html`<figure class="grade blank"><div class="g-id"><p class="g-k">欧气卡铺 · 欧气鉴定</p><p>开几包就能鉴定</p></div>
+    <p class="g-grade"><b>待鉴定</b></p></figure>`;
+  return html`<figure class="grade" aria-label="欧气鉴定：${g.L.title}，超过 ${pctText(g.pct)}% 的模拟玩家">
+    <div class="g-id">
+      <p class="g-k">欧气卡铺 · 欧气鉴定</p>
+      <p>${g.what}</p>
+      ${g.best ? html`<p class="g-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></p>` : ''}
+      <p class="g-cert">${barcode(g.bars)}<span>No. ${g.cert}</span></p>
+    </div>
+    <p class="g-grade"><b class=${g.L.title.length > 3 ? 'long' : ''}>${g.L.title}</b><span>超过 ${pctText(g.pct)}%</span></p>
+  </figure>`;
+}
+
 // Exact binomial tail for one rarity: how likely a player is to be at least this lucky (or unlucky).
 function tailLabel(k: string, got: number, exp: number) {
   const p = S.hitTail(G.state.packsBy, k, got), pct = p * 100;
   return `${got >= exp ? '≥' : '≤'}${got}　${pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
 }
 export function renderLuck() {
-  const L = G.luck(), e = G.expectedTally(), t = G.state.tally;
-  const pct = L.pct == null ? null : L.pct * 100;
+  const g = grade(), L = g.L, e = G.expectedTally(), t = G.state.tally, pct = g.pct;
   const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 id="luck-h">欧气检测</h2>
-      <p class="verdict ${pct == null ? '' : pct >= 70 ? 'lucky' : pct < 30 ? 'unlucky' : ''}">${L.title}</p>
-      <p class="verdict-sub">${pct == null ? '开几包就能测。拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
-        : html`开了 ${L.packs} 包，开出总值超过 <b>${pct.toFixed(0)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
+      ${label(g)}
+      ${pct == null ? '' : html`<p class="g-act"><button type="button" class="primary" data-act="shareluck">生成分享图</button><small>一块评级卡壳：这张标签 + 你开出过最贵的卡</small></p>`}
+      <p class="verdict-sub">${pct == null ? '拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
+        : html`开了 ${L.packs} 包，开出总值超过 <b>${pctText(pct)}%</b> 的模拟玩家。总市值被少数几张大卡左右，误差约 ±1–3 个百分点。${L.boosted ? `其中 ${L.boosted} 包开的时候有手气加成，它们只和同样加成的模拟玩家比。` : ''}`}</p>
       <div class="meter" role="img" aria-label="欧气百分位 ${pct == null ? '未测' : pct.toFixed(1)}">
         ${BANDS.map(([a, b, n]) => html`<span style="flex:${b - a}" title="${n} ${a}–${b}%"></span>`)}
         ${pct == null ? '' : html`<i style="left:${pct}%"></i>`}
