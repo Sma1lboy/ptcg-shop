@@ -66,7 +66,7 @@ let last = -2;
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null;
-  if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); last = i; return; }
+  if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button when it is on this page, else that page's tab
   const here = page() === step.page ? step.at() : step.alt?.() ?? null;
   anchor = here ?? pick(`.nav a[href="#${step.page}"]`);
