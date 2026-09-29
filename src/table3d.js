@@ -14,6 +14,7 @@ import * as fx from './fx.ts';
 import * as ASSETS from './assets.ts';
 import { SETS } from './sets.ts';
 import { FOIL, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
+import { money } from './ui/common.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
 const FX = () => fx;
 let T, M;
@@ -44,7 +45,7 @@ let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, ra
 // after it, while the mat keeps breathing; then the idle-sway fades out and the loop stops. The shop runs for hours.
 let awake = 0, breath = 0, aliveUntil = 0;
 const IDLE = 2500, QUICK = .7; // QUICK: a 连开 round's tweens run at this share of their time
-let hand, grip, L, parts, rays, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
+let hand, grip, L, parts, rays, veil, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
 let R = null; // the pack on the mat right now
 let lean = 0;
 const ptr = { x: 0, y: 0, in: false }, tilt = { x: 0, y: 0 }, shake = { t0: 0, ms: 1, amp: 0 };
@@ -471,14 +472,17 @@ const MOODS = {
   gold: { hemi: .08, key: .3, cone: .5, glow: 1.9, bloom: .8, rays: .5, col: '--fx-gold' }, // room lights down, the pull lit from the front
   glow: { hemi: .16, key: .6, cone: .5, glow: 1.5, bloom: .6, rays: .16, col: '--fx-gold' },
   look: { hemi: .2, key: .75, cone: .5, glow: .2, bloom: .15, rays: 0, col: '--fx-silver' }, // the table steps back behind the card in hand
+  // SIR / gold (tier 5) only: the shop goes dark behind the card (veil: the opacity of a curtain just behind it, so it holds in
+  // the light theme too, where dimming the lights alone leaves a white counter), the card is the one lit thing in the room.
+  solo: { hemi: 0, key: .1, cone: .5, glow: 2.2, bloom: .75, rays: .28, col: '--fx-gold', veil: .97 },
 };
-const moodNow = { hemi: .5, key: 1.6, cone: .5, glow: 0, bloom: .12, rays: 0 };
+const moodNow = { hemi: .5, key: 1.6, cone: .5, glow: 0, bloom: .12, rays: 0, veil: 0 };
 let moodTok = 0; // the latest mood wins: a show's delayed fade to 'glow' must not keep running over the spread's 'base'
 function mood(name, ms = 500) {
   const m = MOODS[name], a = { ...moodNow }, col = new T.Color(css(m.col)), c0 = L.glow.color.clone(), tok = ++moodTok;
   return tween(ms, p => {
     if (tok !== moodTok) return;
-    for (const k in a) moodNow[k] = a[k] + (m[k] - a[k]) * p;
+    for (const k in a) moodNow[k] = a[k] + ((m[k] ?? 0) - a[k]) * p;
     L.glow.color.copy(c0).lerp(col, p); rays.material.uniforms.uCol.value.copy(L.glow.color);
   });
 }
@@ -486,6 +490,11 @@ function applyMood() {
   const k = L.key; k.intensity = moodNow.key; k.angle = moodNow.cone;
   L.hemi.intensity = moodNow.hemi; L.glow.intensity = moodNow.glow * 10;
   bloom.strength = moodNow.bloom; rays.material.uniforms.uAmt.value = moodNow.rays;
+  veil.visible = moodNow.veil > .005; veil.material.opacity = moodNow.veil;
+  if (veil.visible) { // a card's width behind whatever is being shown, facing the camera, wider than the view
+    const hero = R?.look?.card || R?.hero || R?.cards?.[R.cur], d = (hero ? camera.position.distanceTo(hero.getWorldPosition(tmpV())) : 30) + 2.5, h = 2 * d * TAN * 1.4;
+    veil.position.copy(camera.position).addScaledVector(camBasis().f, -d); veil.quaternion.copy(camera.quaternion); veil.scale.set(h * camera.aspect, h, 1);
+  }
   const u = shared.u; // the card shader's own lighting follows the same lights (printed card ≈ texture colour at the base mood)
   u.amb.value.copy(L.hemi.color).multiplyScalar(moodNow.hemi * .76);
   u.keyCol.value.copy(k.color).multiplyScalar(moodNow.key * .42);
@@ -662,7 +671,9 @@ function celebrate(run, i, t) {
   if (t === 1) { mood('base', 300); push(1, 400); return 160; }
   if (t === 2) { mood('lift', 300); burst(at, 50, silver, 14); push(.96, 500); return 420; }
   if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
-  mood('gold', 450).then(() => wait(1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
+  // IR and up: the room lights down to the pull. SIR / gold goes further: the room goes dark behind it and a light sweeps across its foil.
+  mood(t === 5 ? 'solo' : 'gold', 450).then(() => wait(t === 5 ? 2600 : 1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
+  if (t === 5) { const g0 = L.glow.position.clone(), r = camBasis().r.clone(); wait(350).then(() => tween(2400, e => { if (R === run) L.glow.position.copy(g0).addScaledVector(r, Math.sin(e * Math.PI * 2) * 9); }, E.lin)); } // right, back across, home
   halo(card, gold, .6); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
   embers(run, card, gold, t === 5 ? 4200 : 2600);
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
@@ -716,18 +727,29 @@ async function toSpread(run) {
 function spreadHalos(run) {
   run.cards.forEach((c, k) => {
     const t = run.tiers[k]; if (t < 3) return;
-    halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); c.userData.halo.position.z = .012 - c.position.y;
+    halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); c.userData.halo.position.z = run.haul?.poses[k].prop ? -.03 : .012 - c.position.y; // propped up: the glow stays behind the card
   });
 }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 function tags(run) {
   const box = host && host.querySelector('.s3-tags'); if (!box) return;
-  box.innerHTML = run.data.map((c, k) => `<span class="s3-tag">${run.news?.includes(k) ? '<i class="hand-new">新</i>' : ''}${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price; 新 = first pulled by hand
+  const H = run.haul, nu = k => (run.news?.includes(k) ? '<i class="hand-new">新</i>' : '');
+  box.innerHTML = run.data.map((c, k) => H?.top.includes(k) // the front row: name over the big caption (mark, rarity, market price)
+    ? `<span class="s3-tag s3-top${k === H.top[0] ? ' best' : ''}"><b class="s3-name">${nu(k)}${esc(c.name)}</b>${toHTML(cap(c, 'big'))}</span>`
+    : `<span class="s3-tag">${nu(k)}${toHTML(cap(c, 'thumb'))}</span>`).join(''); // the 2D tray's caption: mark + market price; 新 = first pulled by hand
   run.tagEls = [...box.children]; run.tagW = run.tagEls.map(e => e.offsetWidth); // measured once: placeTags runs every frame
+  run.sumEl = null;
+  if (H?.rest.length) { // one tag for the row behind: how many, how many new, what they're worth together
+    const m = H.rest.filter(k => run.news?.includes(k)).length, v = H.rest.reduce((s, k) => s + run.data[k].price, 0);
+    run.sumEl = box.appendChild(document.createElement('span')); run.sumEl.className = 's3-tag s3-sum';
+    run.sumEl.textContent = `另 ${H.rest.length} 张${m ? `，新卡 ${m}` : ''} · 合计 ${money(v)}`;
+  }
 }
 // An overlapping fan shows only each card's left side: the price goes under that corner. A tag (mark + price) is wider than
 // that strip, so tags are stacked over up to three rows, the dearest card placed first; a tag with no free spot in any row
 // is left out (tap the card: lifted, it shows its price).
 function placeTags(run) {
+  if (run.haul) return placeHaulTags(run);
   const w = canvas.clientWidth, h = canvas.clientHeight, left = run.fan?.tight, rows = [[], [], []];
   const at = run.cards.map((c, k) => {
     const corner = left && run.look?.card !== c, p = c.localToWorld(new V3(corner ? -CW / 2 + .2 : 0, -CH / 2 - .15, 0)).project(camera);
@@ -743,6 +765,21 @@ function placeTags(run) {
     el.style.transform = `translate(${a.x.toFixed(1)}px, ${(a.y + a.dy).toFixed(1)}px)${a.corner ? '' : ' translate(-50%, 0)'}`;
     el.style.opacity = a.show ? 1 : 0;
   }
+}
+// The front row's tags are as wide as their card (name and rarity wrap inside); the row behind shows only its summary. A lifted
+// card keeps its own tag, centred, and the rest step back.
+function placeHaulTags(run) {
+  const w = canvas.clientWidth, h = canvas.clientHeight, px = v => { const p = v.project(camera); return [(p.x + 1) / 2 * w, (1 - p.y) / 2 * h]; };
+  run.cards.forEach((c, k) => {
+    const el = run.tagEls[k], lifted = run.look?.card === c, top = run.haul.top.includes(k), show = run.look ? lifted : top;
+    el.style.opacity = show ? 1 : 0; if (!show) return;
+    const [x0, y] = px(c.localToWorld(new V3(-CW / 2, -CH / 2 - .15, 0))), [x1] = px(c.localToWorld(new V3(CW / 2, -CH / 2 - .15, 0)));
+    el.style.width = top && !lifted ? `${Math.max(0, x1 - x0).toFixed(1)}px` : '';
+    el.style.transform = top && !lifted ? `translate(${x0.toFixed(1)}px, ${y.toFixed(1)}px)` : `translate(${((x0 + x1) / 2).toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, 0)`;
+  });
+  const s = run.sumEl; if (!s) return;
+  const c = run.cards[run.haul.rest[0]], [x, y] = px(c.localToWorld(new V3(-CW / 2, -CH / 2 - .15, 0)));
+  s.style.opacity = run.look ? 0 : 1; s.style.transform = `translate(${Math.max(4, x).toFixed(1)}px, ${y.toFixed(1)}px)`;
 }
 // In the spread, tap a card to hold it up to the camera; tap again to put it back.
 async function look(run, card) {
@@ -913,13 +950,27 @@ async function flipPick(run, i) {
   mood('base', 250);
   await turnOver(run, i, t >= 2 ? 520 : 360, () => opts.onFlip(i, run.data[i]));
   if (R !== run) return;
-  await wait(Math.min(celebrate(run, i, t), t >= 3 ? 1700 : 700)); if (R !== run) return; // a second big hit in the fan gets its whole show
+  if (t >= 4 && !run.quick) await liftShow(run, i, t); // an IR or better that isn't the last: its show up close, not on a far-off card in the fan
+  else await wait(Math.min(celebrate(run, i, t), t >= 3 ? 1700 : 700)); // a second big hit in the fan gets its whole show
+  if (R !== run) return;
   run.busy = false;
   if (run.skip) revealRest(run);
 }
+// Where a card is held up to the eye in a batch: just in front of the camera, a little above centre (the caption is below).
+const heldAt = () => camera.position.clone().addScaledVector(camBasis().f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6);
+// Turned face up in the fan, it rises to the eye for its show, then goes back to its place.
+async function liftShow(run, i, t) {
+  const m = run.cards[i], P = run.fan.poses[i], q = camera.quaternion.clone();
+  mood('look', 300);
+  await flyTo(m, heldAt(), q, 460, 1); if (R !== run) return;
+  run.look = { card: m, p: P.p, q: P.q, up: true, base: q };
+  await wait(celebrate(run, i, t) + (t >= 5 ? 1900 : 900)); if (R !== run) return;
+  run.look = null; mood('base', 400);
+  await flyTo(m, P.p, P.q, 520, 2);
+}
 async function flipBest(run, i) {
-  const m = run.cards[i], t = run.tiers[i], f = camBasis().f, P = run.fan.poses[i];
-  const at = camera.position.clone().addScaledVector(f, -fit(CW / .55, CH / .6)).addScaledVector(camBasis().u, .6), q = camera.quaternion.clone();
+  const m = run.cards[i], t = run.tiers[i], P = run.fan.poses[i];
+  const at = heldAt(), q = camera.quaternion.clone();
   mood('hush', 500); FX().slide(); opts.onHold?.(); run.hero = m;
   await flyTo(m, at, faceDown(q), 600, 2); if (R !== run) return;
   FX().swell(1700);
@@ -953,13 +1004,40 @@ async function batchSpread(run) {
   if (run.stage === 'spread') return;
   run.stage = 'spread'; run.busy = true; run.show = null; run.embers = null; drag = null;
   mood('base', 700); opts.onDone();
-  const L0 = run.look; run.look = null;
-  camTo(run.shot, 700);
-  if (L0) await flyTo(L0.card, L0.p, L0.q, 560, 2); // the best card goes back on top of the fan
-  run.hero = null;
+  run.look = null; run.hero = null;
+  const H = run.haul = haulOf(run); run.shot = H.cam; camTo(H.cam, 900);
+  // the rest slide back into one row together, then the best few come forward one by one, the dearest last
+  await Promise.all([...H.rest.map((k, j) => [k, j * Math.min(12, 300 / H.rest.length)]), ...H.top.map((k, r) => [k, 260 + (H.top.length - 1 - r) * 140])]
+    .map(([k, ms]) => wait(ms).then(() => R === run && flyTo(run.cards[k], H.poses[k].p, H.poses[k].q, 620, H.top.includes(k) ? 3 : 1))));
   if (R !== run) return;
   spreadHalos(run);
   run.busy = false; tags(run);
+}
+// The spread once a batch is all face up, the shot a player screenshots: the best few (RR and up, dearest first; the best card
+// alone when there's no hit) lie side by side in a front row, the dearest in the middle and a little nearer, each tagged with
+// name, rarity and price; everything else (plain new cards, lesser hits) shingles in one row behind them under one tag. The
+// front row takes as many as fit the fan's width, at most five. The emptied packs stay where the fan left them.
+const TOP_MAX = 5, TOP_GAP = 1.1, PROP = .45;
+function haulOf(run) {
+  const tall = camera.aspect < .8, room = roomy(), avail = Math.max((tall ? 32 : 46) * clamp(camera.aspect / 1.25, .45, 1), 3 * CW + 2 * TOP_GAP);
+  const byPrice = run.data.map((_, k) => k).sort((a, b) => run.data[b].price - run.data[a].price), hits = byPrice.filter(k => run.tiers[k] >= 2);
+  const top = hits.length ? hits.slice(0, clamp(Math.floor((avail + TOP_GAP) / (CW + TOP_GAP)), 1, small() ? 3 : TOP_MAX)) /* phones: three, or the names don't fit their tags */ : byPrice.slice(0, 1);
+  const rest = run.data.map((_, k) => k).filter(k => !top.includes(k)); // cheapest first, as picked
+  const K = top.length, slot = [...Array(K).keys()].sort((a, b) => Math.abs(a - (K - 1) / 2) - Math.abs(b - (K - 1) / 2) || a - b); // rank r → slot: centre out
+  // the rest lie across the emptied packs (a little in front of their middle, on top of them), the front row just ahead
+  const fz = BACK + PH + 1.4 + CH / 2, zw = run.fan.wrap[0]?.z ?? fz, zr = zw + 1.2, zTop = rest.length ? zr + CH + 3.2 : fz, poses = [], q = flatQ(0);
+  // the dearest is propped up toward the viewer (its bottom edge on the mat), like the one card a shop stands on a display stand
+  const up = q.clone().multiply(new T.Quaternion().setFromAxisAngle(new V3(1, 0, 0), PROP));
+  top.forEach((k, r) => { poses[k] = r ? { p: new V3((slot[r] - (K - 1) / 2) * (CW + TOP_GAP), .06, zTop), q } : { p: new V3((slot[0] - (K - 1) / 2) * (CW + TOP_GAP), .1 + Math.sin(PROP) * CH / 2, zTop - (1 - Math.cos(PROP)) * CH / 2 + .6), q: up, prop: true }; });
+  const nr = rest.length, dx = nr > 1 ? Math.min(CW + .5, (Math.min(avail, nr * (CW + .5)) - CW) / (nr - 1)) : 0;
+  const yr = Math.max(0, ...run.fan.wrap.map(w => w.y)) + .5;
+  rest.forEach((k, j) => { poses[k] = { p: new V3((j - (nr - 1) / 2) * dx, yr + j * .03, zr), q }; });
+  const pts = [];
+  for (const k of top) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); pts.push(p.clone().add(new V3(0, 0, CH / 2 + (small() ? 4.5 : 4)))); } // and its two-line tag (on a phone's small cards it's taller than the card is deep)
+  for (const k of rest) { const p = poses[k].p; for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(p.clone().add(new V3(x * CW / 2, 0, z * CH / 2))); }
+  for (const w of run.fan.wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2)));
+  pts.push(camera.aspect < 1 ? SLABS() : FOOT());
+  return { top, rest, poses, cam: frameOn(pts, new V3(0, 0, (zr + zTop) / 2), room ? SPREAD_PITCH : SPREAD_PITCH_TALL, .94, tall ? -.6 : -.76, .98) };
 }
 
 // ---------- the shelf: 今天拆哪包？ ----------
@@ -1227,7 +1305,8 @@ function relayout() {
     } else {
       run.fan = fanOf(run.n, run.packs.length); run.shot = run.fan.cam;
       run.packs.forEach((p, k) => go(p, run.fan.wrap[k]));
-      if (run.stage !== 'extract') run.cards.forEach((c, i) => { const P = run.fan.poses[i]; home(c, P.p, i <= run.cur ? P.q : faceDown(P.q)); });
+      if (run.haul) { run.haul = haulOf(run); run.shot = run.haul.cam; run.cards.forEach((c, k) => home(c, run.haul.poses[k].p, run.haul.poses[k].q)); tags(run); } // the front row may take more or fewer
+      else if (run.stage !== 'extract') run.cards.forEach((c, i) => { const P = run.fan.poses[i]; home(c, P.p, i <= run.cur ? P.q : faceDown(P.q)); });
     }
     camTo(run.shot, ms);
   } else if (run.stage === 'spread') {
@@ -1401,7 +1480,7 @@ function theme() {
   // The room past the counter is the shop in the lamp's shadow (the HUD's navy, both themes), not the page: a white fog in the
   // light theme washed the whole table out inside the navy case frame. A white laminate is held under the lamp so it doesn't clip.
   const room = new T.Color(css('--hud')), bg = new T.Color(css('--bg')), hsl = {};
-  renderer.setClearColor(room); scene.fog.color.copy(room);
+  renderer.setClearColor(room); scene.fog.color.copy(room); veil.material.color.copy(room).multiplyScalar(.3); // the room, lights off
   counter.material.color.setScalar(bg.getHSL(hsl).l > .6 ? .72 : 1);
   L.hemi.groundColor.set(css('--mat')); L.hemi.color.set(css('--lamp-fill')); L.key.color.set(css('--lamp')); L.rim.color.set(css('--lamp-rim'));
   const w = world0; drawMat(w.matC); drawLaminate(w.lamC); drawBinder(w.binC); drawSleeves(w.slvC); drawDeck(w.deckC);
@@ -1457,6 +1536,8 @@ function init() {
         float s = pow(max(0.0, sin(a * 11.0 + uTime * 0.22)), 14.0) + 0.6 * pow(max(0.0, sin(a * 5.0 - uTime * 0.15)), 18.0);
         gl_FragColor = vec4(uCol * uAmt * (s * 0.7 + 0.22 * smoothstep(0.3, 0.0, r)) * smoothstep(0.5, 0.08, r) * smoothstep(0.015, 0.08, r), 1.0); }` }));
   rays.renderOrder = -1; scene.add(rays);
+  veil = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ transparent: true, opacity: 0, fog: false, toneMapped: false })); // writes depth: the glow of cards behind it (additive, drawn later) stays hidden
+  veil.renderOrder = -2; veil.visible = false; scene.add(veil); // drawn before the rays and sparks; those in front of it stay lit
 
   composer = new M.EffectComposer(renderer, new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: 4 }));
   composer.addPass(new M.RenderPass(scene, camera));
@@ -1488,7 +1569,7 @@ function dispose(run) {
   for (const p of packsOf(run)) for (const o of [p, p.userData.strip]) o.traverse(m => { if (m.isMesh && m.geometry !== shared.cardGeo) m.geometry.dispose(); }); // the strip may have flown off the pack
 }
 function clearRun(run, animate) {
-  run.tagEls?.forEach(e => e.remove());
+  run.tagEls?.forEach(e => e.remove()); run.sumEl?.remove();
   const objs = [...packsOf(run).flatMap(p => [p, p.userData.strip]), ...run.cards, ...(run.group ? [run.group] : [])];
   if (!animate) { objs.forEach(o => o.removeFromParent()); dispose(run); return; }
   const old = new T.Group(); scene.add(old); objs.forEach(o => old.attach(o));
@@ -1522,7 +1603,7 @@ function mountTable(el, o) {
   close?.();
   opts = o; speed = o.reducedMotion ? 0 : 1; host = el;
   ro.observe(el); io.observe(el); el.prepend(canvas); resize();
-  for (const k in moodNow) moodNow[k] = MOODS.base[k];
+  for (const k in moodNow) moodNow[k] = MOODS.base[k] ?? 0;
   const fresh = (quick = false) => {
     speed = o.reducedMotion ? 0 : quick ? QUICK : 1;
     resize(); // mat.ts has just rewritten the header / dropped the summary: lay the new run out for the canvas as it is now, not as the ResizeObserver last saw it
