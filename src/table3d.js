@@ -28,7 +28,7 @@ const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t
 
 // Real sizes in cm: a card is 63×88 mm with 3 mm corners; an SV booster is about 74×128 mm with ~9.5 mm crimps.
 const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.95, TEAR = PH / 2 - 1.25, PUFF = 0.42;
-const MW = 76, MH = 64, MZ = -4; // playmat size and where its centre sits (deep enough that the ten-pack shots never see past its front edge)
+const MW = 76, MH = 68, MZ = -6; // playmat size and where its centre sits (deep enough that the ten-pack shots never see past its front edge)
 const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
@@ -652,9 +652,11 @@ function tags(run) {
 }
 function placeTags(run) {
   const w = canvas.clientWidth, h = canvas.clientHeight;
+  const left = run.fan?.tight; // an overlapping fan shows only each card's left side: the price goes under that corner
   run.cards.forEach((c, k) => {
-    const el = run.tagEls[k], p = c.localToWorld(new V3(0, -CH / 2 - .15, 0)).project(camera);
-    el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px, ${((1 - p.y) / 2 * h).toFixed(1)}px) translate(-50%, 0)`;
+    const corner = left && run.look?.card !== c, el = run.tagEls[k], p = c.localToWorld(new V3(corner ? -CW / 2 + .2 : 0, -CH / 2 - .15, 0)).project(camera);
+    const dy = corner && k % 2 ? 20 : 0; // and every other one a row lower, so neighbours don't cover each other
+    el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px, ${((1 - p.y) / 2 * h + dy).toFixed(1)}px)${corner ? '' : ' translate(-50%, 0)'}`;
     el.style.opacity = !run.look || run.look.card === c ? 1 : 0; // a lifted card keeps its price, the rest step back
   });
 }
@@ -687,11 +689,12 @@ const qY = a => new T.Quaternion().setFromAxisAngle(new V3(0, 1, 0), a);
 const faceDown = q => q.clone().multiply(qY(Math.PI));
 function packGrid(n) {
   const cols = Math.min(camera.aspect < .8 ? 4 : 5, n), rows = Math.ceil(n / cols); // portrait: 4-4-2, bigger packs
-  const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, gz = PH + 1.5, over = gx < PW + .3, zc = -18;
+  const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, over = gx < PW + .3;
+  const gz = over ? PH * .74 : PH + 1.5, front = FAN_Z - CH / 2 - 2 - PH / 2, zc = front - (rows - 1) / 2 * gz; // front row 2 cm behind the fan; crowded rows shingle
   const pos = [], col = [];
   for (let k = 0; k < n; k++) { // dealt by hand: not quite on the grid
     const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), j = () => (Math.random() - .5) * (over ? .5 : 1.1);
-    pos.push(new V3((c - (inRow - 1) / 2) * gx + j(), PUFF + .05 + (over ? c * .45 + r * .1 : 0), zc + (r - (rows - 1) / 2) * gz + j())); col.push(c);
+    pos.push(new V3((c - (inRow - 1) / 2) * gx + j(), PUFF + .05 + (over ? c * .45 + r * .55 : 0), front - (rows - 1 - r) * gz + j())); col.push(c);
   }
   const w = (cols - 1) * gx + PW, h = (rows - 1) * gz + PH;
   const p = BATCH_PITCH + .1, box = [w * 1.12, h * Math.sin(p) * 1.12 + 3]; // a little more top-down than the fan: the mat's far edge stays out of shot
@@ -700,14 +703,15 @@ function packGrid(n) {
 // The fan: an arc whose pivot is toward the player, cheapest on the left, the best on top at the right. Few picks lie
 // side by side; many overlap, the fan never gets wider than the view.
 function fanOf(n) {
-  const wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, 46 * wide);
+  const tall = camera.aspect < .8, wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, (tall ? 32 : 46) * wide); // phones: overlap sooner, bigger cards
   const sp = n > 1 ? 2 * Math.asin(clamp((avail - CW) / (2 * FAN_R), 0, 1)) : 0, poses = [];
   for (let i = 0; i < n; i++) {
     const a = n > 1 ? (i / (n - 1) - .5) * sp : 0;
     poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, FAN_Z + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
   }
+  const tight = n > 1 && 2 * FAN_R * Math.sin(sp / (n - 1) / 2) < CW + .3;
   const sag = FAN_R * (1 - Math.cos(sp / 2)), p = 1.08, box = [Math.max(avail, 3 * CW) + 4, (CH + sag) * Math.sin(p) + 12]; // one or two picks: framed as if three, so the packs don't loom
-  return { poses, cam: { t: new V3(0, 0, FAN_Z + sag / 2 - 1.2), p, d: fit(...box), box } }; // fan a little below centre: the packs show above it
+  return { poses, tight, cam: { t: new V3(0, 0, FAN_Z + sag / 2 - (tall ? 4 : 1.2)), p, d: fit(...box), box } }; // fan below centre: the packs show above it
 }
 function buildBatch(set, packs, picks) {
   const grid = packGrid(packs.length), data = picks.map(([p, i]) => packs[p][i]);
@@ -1006,7 +1010,7 @@ function init() {
   scene.add(hemi, key, key.target, rim, glow);
   L = { hemi, key, rim, glow };
 
-  const mapC = canvasOf(1520, 1280), matMap = canvasTex(mapC), grain = grainTex();
+  const mapC = canvasOf(1520, 1360), matMap = canvasTex(mapC), grain = grainTex();
   matMap.repeat.set(1 / MW, 1 / MH); matMap.offset.set(.5, .5); grain.repeat.set(1 / 5, 1 / 5);
   const mg = new T.ExtrudeGeometry(roundRect(MW, MH, 2.5), { depth: .3, bevelEnabled: true, bevelThickness: .08, bevelSize: .08, bevelSegments: 2, curveSegments: 8 });
   mg.rotateX(-Math.PI / 2); mg.translate(0, -.38, MZ);
