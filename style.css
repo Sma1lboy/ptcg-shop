@@ -44,6 +44,17 @@
   --font-body: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
   --font-tag: "Barlow Condensed", "DIN Condensed", "Arial Narrow", var(--font-body);
   --fs-cap: 12px; --fs-body: 14px; --fs-h: 16px; --fs-lg: 22px; --fs-cash: 30px; --fs-display: 44px; /* ~1.25 steps, 12px floor */
+  /* game skin (DESIGN.md「皮肤」): the display case's navy anodized-aluminium trim frames every panel, the HUD and the tabs;
+     buttons are enamel set in that trim. Same in both themes, like the mat: the case trim doesn't change with the room light.
+     Each colour is also the fallback when public/gen/*.webp is missing (pen, file://) */
+  --trim: #22355F;        /* the aluminium trim: panel frames, button rims (fallback border colour) */
+  --hud: #0E1830;         /* the top bar / phone nav: the till's dark display strip */
+  --hud-ink: #EEF1F7; --hud-muted: #A3AEC6;
+  --btn-face: #1C2C52;    /* secondary button: navy lacquer */
+  --btn-ink: #EEF1F7;
+  --danger-face: #6E1D17; /* danger button: dark oxide enamel, a button body only (money red stays text) */
+  --danger-ink: #FFE9E4;
+  --lamp-glow: rgba(255, 236, 206, .55); /* the shop lamp's light on a raised plate: current tab, hovered button */
   --r: 4px;               /* die-cut label corner: stickers and buttons */
   --r-mat: 14px;
   --top-h: 60px;          /* sticky top bar; the stage is the viewport minus this */
@@ -67,7 +78,11 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; }
-body { background: var(--bg); color: var(--ink); font: var(--fs-body)/1.55 var(--font-body); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
+/* the room behind the counter: the page colour under a faint grain and the lamp's pool of light from above (inline SVG noise,
+   no download; overlay keeps it working on both the white and the navy page) */
+body { background: radial-gradient(ellipse 80% 50% at 50% 0, color-mix(in oklab, var(--lamp) 14%, transparent), transparent 70%) fixed,
+  url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+  var(--bg); color: var(--ink); font: var(--fs-body)/1.55 var(--font-body); font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
 a { color: inherit; }
@@ -76,35 +91,65 @@ small { font-size: var(--fs-cap); }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach) h2 { font-size: var(--fs-h); font-weight: 600; line-height: 1.3; margin: 0 0 8px; color: var(--ink); text-wrap: balance; }
 
-/* top bar: the shop sign, cash as the one big number, the rest a step down. Sticky; the stage height is computed from --top-h */
-.top { position: sticky; top: 0; z-index: 10; height: var(--top-h); display: flex; align-items: center; gap: 28px; padding: 0 var(--gap); background: var(--bg); border-bottom: 1px solid var(--line); }
-.brand { font: 400 30px/1 var(--font-display); margin: 0; letter-spacing: .04em; flex: none; }
-.stats { display: flex; align-items: baseline; justify-content: flex-end; gap: 28px; min-width: 0; flex: 1; }
-.cash { order: 2; position: relative; display: flex; align-items: baseline; gap: 8px; margin: 0; flex: none; } /* the register display: rightmost */
+/* top bar = the HUD: the till's dark display strip in both themes (tokens re-pointed like .grade does for paper), sat on the
+   aluminium trim. Shop sign on a lit crest, the pages as metal tab plates, the till readouts, cash in the register window */
+.top { --ink: var(--hud-ink); --muted: var(--hud-muted); --line: rgba(238, 241, 247, .12); --line-strong: rgba(238, 241, 247, .32); --hover: rgba(238, 241, 247, .08); --bg: var(--hud);
+  position: sticky; top: 0; z-index: 10; height: var(--top-h); display: flex; align-items: center; gap: 24px; padding: 0 var(--gap); color: var(--ink);
+  background: linear-gradient(#1A2A4E, var(--hud) 55%, #0A1226); border-bottom: 3px solid var(--trim);
+  box-shadow: inset 0 -1px 0 rgba(174, 184, 200, .45), 0 6px 18px rgba(4, 8, 14, .35); }
+.brand { position: relative; font: 900 24px/1 var(--font-display); margin: 0; padding: 0 4px; letter-spacing: .06em; flex: none; color: #fff;
+  border: solid transparent; border-width: 11px 12px 11px 44px; border-image: url(gen/crest.webp) 40 36 40 150 fill / 11px 12px 11px 44px / 0 stretch;
+  text-shadow: 0 1px 0 #0A1226, 0 2px 0 rgba(0, 0, 0, .35), 0 0 18px rgba(255, 236, 206, .25); }
+.stats { display: flex; align-items: center; justify-content: flex-end; gap: 20px; min-width: 0; flex: 1; }
+/* the register window: a recessed dark plate, the coin, cash in the price-label numerals */
+.cash { order: 2; position: relative; display: flex; align-items: center; gap: 8px; margin: 0; flex: none; padding: 4px 14px 4px 8px; min-height: 40px;
+  border: 6px solid var(--trim); border-image: url(gen/well.webp) 32 fill / 9px / 0 stretch; background: #07101F padding-box; }
 .cash .k, .sub dt { font-size: var(--fs-cap); color: var(--muted); }
-.cash b { font: 600 var(--fs-cash)/1 var(--font-tag); }
-.delta { position: absolute; right: 0; top: calc(100% + 6px); padding: 0 4px; background: var(--bg); font-weight: 600; white-space: nowrap; pointer-events: none; animation: delta 1.6s cubic-bezier(.23, 1, .32, 1) forwards; }
+.cash .k { width: 22px; height: 22px; overflow: hidden; text-indent: 30px; white-space: nowrap; background: url(gen/i-coin.webp) center / contain no-repeat; flex: none; }
+.cash b { font: 700 var(--fs-cash)/1 var(--font-tag); letter-spacing: .01em; color: #fff; text-shadow: 0 0 12px rgba(255, 236, 206, .35); }
+.delta { position: absolute; right: 0; top: calc(100% + 6px); padding: 1px 6px; background: var(--hud); border-radius: 3px; font: 700 var(--fs-body)/1.3 var(--font-tag); white-space: nowrap; pointer-events: none; animation: delta 1.6s cubic-bezier(.23, 1, .32, 1) forwards; }
+.delta.gain { color: var(--mat-gain); } .delta.loss { color: var(--mat-loss); }
 @keyframes delta { 0% { opacity: 0; transform: translateY(6px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
-.sub { order: 1; display: flex; align-items: baseline; gap: 20px; margin: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.sub div { display: flex; align-items: baseline; gap: 6px; flex: none; }
-.sub dd { margin: 0; font-weight: 500; }
-.ghost { background: none; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 4px 12px; color: var(--muted); font-size: var(--fs-cap); }
+.sub { order: 1; display: flex; align-items: center; gap: 6px; margin: 0; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+/* each readout is a small inset slot, like the till's secondary displays */
+.sub div { display: flex; align-items: baseline; gap: 6px; flex: none; padding: 4px 10px; border-radius: 3px; background: rgba(0, 0, 0, .28); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5), 0 1px 0 rgba(238, 241, 247, .07); }
+.sub dd { margin: 0; font: 700 var(--fs-h)/1.2 var(--font-tag); color: var(--ink); }
+.sub div { align-items: center; }
+.sub div::before { content: ""; width: 18px; height: 18px; flex: none; background: var(--i) center / contain no-repeat; }
+.sub div:nth-child(1) { --i: url(gen/i-shelf.webp); } .sub div:nth-child(2) { --i: url(gen/i-pack.webp); } .sub div:nth-child(3) { --i: url(gen/i-customer.webp); }
+.sub div:nth-child(4) { --i: url(gen/i-receipt.webp); } .sub div:nth-child(5) { --i: url(gen/i-card.webp); }
 
-/* nav: the four pages as binder index tabs in the top bar (docked to the bottom on phones, see the end of the file) */
-.nav { display: flex; align-self: stretch; gap: 2px; }
-.nav a { display: flex; align-items: center; gap: 2px; padding: 0 14px; font-size: var(--fs-h); font-weight: 600; color: var(--muted); text-decoration: none; box-shadow: inset 0 -3px 0 transparent; transition: color .15s, box-shadow .15s; }
-.nav a:hover { color: var(--ink); }
-.nav a[aria-current="page"] { color: var(--ink); box-shadow: inset 0 -3px 0 var(--ink); }
+/* nav = the main menu: each page a tab plate (gen/tab.webp); the current one is raised under the lamp (gen/tab-on.webp) with a
+   warm-white light line — lamp light, not yellow: yellow stays for things to press. Docked to the bottom on phones */
+.nav { display: flex; align-items: center; align-self: stretch; gap: 4px; }
+.nav a { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; min-width: 76px; height: 40px; padding: 0 14px;
+  border: 2px solid var(--trim); border-image: url(gen/tab.webp) 26 30 fill / 9px 11px / 0 stretch; background: #111C36 padding-box;
+  font: 900 var(--fs-h)/1 var(--font-display); letter-spacing: .08em; color: var(--muted); text-decoration: none; transition: color .15s, filter .15s; }
+.nav a:hover { color: var(--ink); filter: brightness(1.15); }
+.nav a[aria-current="page"] { color: #fff; border-image-source: url(gen/tab-on.webp); background: #243966 padding-box;
+  box-shadow: 0 3px 0 -1px var(--lamp); text-shadow: 0 0 10px var(--lamp-glow); filter: drop-shadow(0 0 8px rgba(255, 236, 206, .22)); }
 
 /* pages (src/ui/layout.ts shows one per hash). Groups inside a column are split by a hairline, never boxed */
 main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
-.page { display: grid; gap: 24px 40px; align-items: start; }
+.page { display: grid; gap: 20px 24px; align-items: start; }
 .page[hidden] { display: none; }
 /* #shelf and #luck are both page hashes and panel ids; the browser's scroll-to-fragment on load would land mid-page, so their
    scroll margin is taller than any offset and the scroll clamps to the top */
 :is(#shelf, #luck) { scroll-margin-top: 100vh; }
 .col, .rail, .shelf { display: flex; flex-direction: column; min-width: 0; }
-:is(.col, .rail) > section:not([hidden]) ~ section:not([hidden]) { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
+:is(.col, .rail) > section:not([hidden]) ~ section:not([hidden]) { margin-top: 20px; }
+/* panels (DESIGN.md「面板」): each group is a compartment of the display case — the navy aluminium trim (gen/frame.webp, 9-slice,
+   corner brackets) around a --panel face; its h2 is the name plate across the top. The trim is the same in both themes */
+:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
+  position: relative; min-width: 0; padding: 14px 18px 18px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 16px / 0 stretch;
+  background: var(--panel) padding-box; box-shadow: 0 12px 28px rgba(4, 8, 14, .16); }
+:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child {
+  --ink: var(--hud-ink); --muted: var(--hud-muted);
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -14px -18px 14px; padding: 9px 18px 10px; color: var(--ink);
+  font: 900 var(--fs-h)/1.3 var(--font-display); letter-spacing: .06em;
+  border: 4px solid transparent; border-image: url(gen/plate.webp) 22 34 fill / 8px 12px / 0 stretch; background: linear-gradient(#22355F, #14223F) padding-box; }
+:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child :is(small, span) {
+  font-family: var(--font-body); font-weight: 400; letter-spacing: 0; }
 .page p { text-wrap: pretty; }
 .page details p { max-width: 42em; }
 /* 开包: the table takes the viewport; a narrow rail picks the next pack */
@@ -115,26 +160,36 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-shelf > .shelf { grid-column: 1 / -1; }
 /* 欧气: the detector | share and trophies, then the dex as a collection grid across the page (one cell per set, however many) */
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1320px; }
-.page-luck > #dex { grid-column: 1 / -1; border-top: 1px solid var(--line); padding-top: 20px; }
+.page-luck > #dex { grid-column: 1 / -1; }
 .dex { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px 40px; }
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
 }
 
-/* buttons outside the mat: outlined secondary, one sticker-orange primary per group, disabled = no fill + dashed + muted */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice, #share-pop) :where(button, .dl) {
-  min-height: 32px; padding: 5px 12px; border: 1px solid var(--line-strong); border-radius: var(--r); background: transparent; color: var(--ink);
-  font-size: var(--fs-body); line-height: 1.4; text-decoration: none; transition: background-color .15s, transform .1s;
+/* game buttons (DESIGN.md「按钮」): enamel faces set in the aluminium trim, one 9-slice base each (gen/btn-*.webp): secondary navy
+   lacquer, primary label-yellow (one per group), danger oxide (清空存档 only). States are CSS on the same base: hover lifts it
+   under the lamp, pressed sinks 1px and darkens, disabled is the bare dark socket. Without the images the same colours draw it
+   (border + fill), so pen / file:// still read as buttons */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl) { /* :is so it outranks the bare `button { color: inherit }` */
+  --face: url(gen/btn-secondary.webp);
+  min-height: 34px; padding: 6px 16px 7px; border: 2px solid var(--trim); border-radius: 5px;
+  border-image: var(--face) 34 44 38 44 fill / 9px 12px 10px 12px / 0 stretch; background: var(--btn-face) padding-box; color: var(--btn-ink);
+  font-size: var(--fs-body); font-weight: 600; line-height: 1.4; letter-spacing: .02em; text-decoration: none; text-shadow: 0 1px 0 rgba(4, 8, 14, .45);
+  transition: filter .15s, transform .08s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice, #share-pop) :where(button, .dl):not(:disabled):hover { background: var(--hover); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice, #share-pop) button:not(:disabled):active { transform: scale(.97); }
-/* primary = the yellow label with its navy print and edge, like the card-border yellow on the navy back; the 2px under-edge is the label's thickness */
-.primary, .mat .btns button.primary { background: var(--sticker); border-color: var(--sticker-edge); color: var(--sticker-ink); font-weight: 700;
-  box-shadow: 0 2px 0 color-mix(in oklab, var(--sticker) 45%, var(--sticker-ink)); }
-:is(.primary, .mat .btns button.primary):not(:disabled):active { transform: translateY(1px); box-shadow: 0 1px 0 color-mix(in oklab, var(--sticker) 45%, var(--sticker-ink)); }
-.mat .btns button.primary:hover { background: color-mix(in oklab, var(--sticker) 90%, var(--sticker-ink)); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice, #share-pop) .primary:not(:disabled):hover { background: color-mix(in oklab, var(--sticker) 90%, var(--sticker-ink)); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice, #share-pop) button:disabled { background: transparent; border-style: dashed; border-color: var(--line-strong); color: var(--muted); font-weight: 400; box-shadow: none; cursor: not-allowed; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(:disabled):hover {
+  filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) button:not(:disabled):active {
+  transform: translateY(1px); filter: brightness(.86); }
+/* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) .primary {
+  --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
+/* danger: the one irreversible button, oxide enamel so it can't pass for a normal key */
+#reset { --face: url(gen/btn-danger.webp); background-color: var(--danger-face); color: var(--danger-ink); }
+/* disabled: the empty socket — no enamel, just the trim, dim print. Never louder than a live secondary */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) button:disabled {
+  filter: grayscale(1) brightness(.62) contrast(.9); opacity: .7; color: var(--btn-ink); font-weight: 500; text-shadow: none; cursor: not-allowed; }
+:where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
 
 /* shelf (src/ui/shelf.ts): no boxes. Cards two-up by default; from 1280px one table-like row per set under a single header,
    so a long lineup of sets reads as a list, not a wall of blocks (the rows share the header's columns through subgrid) */
@@ -177,8 +232,12 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .r-edge b { color: var(--ink); font-weight: 600; }
 .r-miss { margin: 0; font-size: var(--fs-cap); color: var(--muted); } .r-miss b { color: var(--ink); font-weight: 600; }
 .r-ctl { display: flex; gap: 6px; margin-top: auto; }
-.r-ctl select { flex: 1; min-width: 0; min-height: 32px; padding: 4px 6px; border: 1px solid var(--line-strong); border-radius: var(--r); background: transparent; color: var(--ink); font: inherit; font-size: var(--fs-cap); }
-.r-ctl select:hover { background: var(--hover); }
+/* the shelf picker is a recessed selector slot in the trim: dark well, aluminium chevron */
+.r-ctl select { flex: 1; min-width: 0; min-height: 34px; padding: 4px 24px 4px 8px; appearance: none; border: 2px solid var(--trim); border-radius: 4px; color: var(--hud-ink); font: inherit; font-size: var(--fs-cap);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23AEB8C8'/%3E%3C/svg%3E") right 8px center no-repeat, linear-gradient(#0A1226, #16244A);
+  box-shadow: inset 0 2px 3px rgba(0, 0, 0, .5), 0 1px 0 rgba(174, 184, 200, .3); }
+.r-ctl select:hover { filter: brightness(1.15); }
+.r-ctl option { background: var(--hud); color: var(--hud-ink); }
 @media (min-width: 1280px) {
   #shelf { grid-template-columns: minmax(280px, 1fr) repeat(4, auto); column-gap: 40px; }
   .shelf-head, .set { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
@@ -218,13 +277,13 @@ button:disabled { cursor: not-allowed; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* the playmat */
-.mat { background: var(--mat); color: var(--mat-ink); border-radius: var(--r-mat); padding: 18px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.mat { background: var(--mat) padding-box; color: var(--mat-ink); border: 14px solid var(--trim); border-image: url(gen/frame.webp) 48 / 20px / 0 stretch; box-shadow: 0 16px 36px rgba(4, 8, 14, .3); padding: 18px; min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 .mat-empty { margin: auto; text-align: center; color: var(--mat-muted); }
 .mat-big { font: 900 var(--fs-display)/1 var(--font-display); color: var(--mat-ink); margin: 0 0 10px; }
 .mat-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .mat-head h2 { margin: 0; font: 900 24px/1.2 var(--font-display); }
 .mat-head span { font-size: var(--fs-body); color: var(--mat-muted); }
-.mat-head .ghost { margin-left: auto; color: var(--mat-ink); border-color: var(--mat-muted); }
+.mat-head .ghost { margin-left: auto; }
 .spread { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
 .slot { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .slot figcaption { font-size: var(--fs-cap); line-height: 1.3; color: var(--mat-muted); min-height: 2.6em; }
@@ -269,8 +328,6 @@ button:disabled { cursor: not-allowed; }
 .summary p { margin: 0 0 10px; }
 .summary .gain, .mat-head .gain { color: var(--mat-gain); font-weight: 600; } .summary .loss, .mat-head .loss { color: var(--mat-loss); font-weight: 600; }
 .mat .btns { display: flex; flex-wrap: wrap; gap: 8px; }
-.mat .btns button { min-height: 36px; padding: 4px 12px; border: 1px solid rgba(238, 241, 247, .3); border-radius: var(--r); background: transparent; color: var(--mat-ink); }
-.mat .btns button:hover { background: rgba(238, 241, 247, .08); }
 .mat-head b.gain, .mat-head b.loss { font-weight: 600; }
 
 /* luck detector: the verdict is one word in the card-name 黑体; the meter is a neutral ramp (colour belongs to money and rarity, not to rank) */
@@ -360,7 +417,8 @@ button:disabled { cursor: not-allowed; }
 .s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* footer: sources and game settings folded away; the reset lives here, far from the shop's buttons */
-.foot { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 48px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: start; gap: 12px 40px; font-size: var(--fs-cap); color: var(--muted); }
+.foot { max-width: 1680px; margin: 0 auto; padding: 28px var(--gap) 48px; background: url(gen/divider.webp) 50% 0 / min(560px, 90%) auto no-repeat; /* the trim's divider rule; hairline when it's missing */
+  border-top: 1px solid transparent; display: flex; flex-wrap: wrap; align-items: start; gap: 12px 40px; font-size: var(--fs-cap); color: var(--muted); }
 .foot details { flex: 1 1 340px; min-width: 0; }
 .foot summary { cursor: pointer; color: var(--ink); font-size: var(--fs-body); font-weight: 600; padding: 6px 0; }
 .foot p { margin: 8px 0; max-width: 36em; line-height: 1.7; text-wrap: pretty; }
@@ -384,7 +442,7 @@ button:disabled { cursor: not-allowed; }
 .tray .card.up { cursor: pointer; }
 .snd { margin-left: auto; }
 .snd + .ghost { margin-left: 0; }
-.mat-pack .snd { display: block; margin: 18px auto 0; color: var(--mat-muted); border-color: var(--mat-muted); }
+.mat-pack .snd { display: block; margin: 18px auto 0; }
 @keyframes deal { from { transform: translateX(70px) rotate(4deg); opacity: 0; } }
 @keyframes shake { 20% { translate: -5px 2px; } 40% { translate: 5px -3px; } 60% { translate: -3px 2px; } 80% { translate: 2px -1px; } }
 .fx-shake { animation: shake .45s; }
@@ -407,11 +465,12 @@ button:disabled { cursor: not-allowed; }
 
 /* 新手引导: a popover pinned beside the button the step is about (src/ui/guide.ts places it). It floats, so it is a sleeve (--panel);
    the button it points at gets a dashed ring, and the popover itself has no yellow: the yellow is the button you should press. */
-.coach { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 12px 14px; border: 1px solid var(--line-strong); border-radius: 12px;
-  background: var(--panel); color: var(--ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .28); font-size: var(--fs-body); line-height: 1.6; overflow: visible; }
-.coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 6px); width: 10px; height: 10px; background: var(--panel); border: 1px solid var(--line-strong); transform: rotate(45deg); }
-.coach[data-side="below"]::before { top: -6px; border-right: 0; border-bottom: 0; }
-.coach[data-side="above"]::before { bottom: -6px; border-left: 0; border-top: 0; }
+.coach { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 10px 12px; border: 8px solid var(--trim); border-image: url(gen/frame.webp) 48 / 12px / 0 stretch;
+  background: var(--panel) padding-box; color: var(--ink); box-shadow: 0 12px 32px rgba(0, 0, 0, .28); font-size: var(--fs-body); line-height: 1.6; overflow: visible; }
+/* the pointer is a notch of the same trim, outside the frame */
+.coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 16px); width: 16px; height: 9px; background: var(--trim); }
+.coach[data-side="below"]::before { top: -17px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.coach[data-side="above"]::before { bottom: -17px; clip-path: polygon(0 0, 100% 0, 50% 100%); }
 .coach .co-k { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
 .coach h3 { margin: 2px 0 4px; font-size: var(--fs-h); }
 .coach h3 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); }
@@ -429,7 +488,7 @@ button:disabled { cursor: not-allowed; }
 .mat.spot .stage, .mat.spot .spread .card.up { z-index: 3; }
 @media (prefers-reduced-motion: reduce) { .mat::after { display: none; } }
 .summary .rank { color: var(--mat-ink); font-weight: 600; }
-#share-pop { border: 0; padding: 16px; border-radius: 12px; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); background: var(--panel); color: var(--ink); max-width: min(520px, 94vw); max-height: 94vh; overflow: auto; }
+#share-pop { padding: 14px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 18px / 0 stretch; background-clip: padding-box; box-shadow: 0 24px 60px rgba(0, 0, 0, .35); background: var(--panel) padding-box; color: var(--ink); max-width: min(520px, 94vw); max-height: 94vh; overflow: auto; }
 #share-pop::backdrop { background: rgba(4, 8, 14, .72); }
 #share-pop:focus-visible { outline: none; } /* focus lands on the dialog while the image renders; its buttons keep their ring */
 #share-pop img { display: block; width: 100%; height: auto; border-radius: var(--r); }
@@ -471,7 +530,7 @@ button:disabled { cursor: not-allowed; }
 /* ---- storefront: shelf price stepper, case listings, customers, dex, clerk ---- */
 .pricer { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
 .pricer b { min-width: 3em; text-align: center; font-weight: 600; }
-.page .pricer button { width: 32px; padding: 0; }
+.page .pricer button { width: 34px; padding: 0; border-image-width: 9px; }
 .margin { font-size: var(--fs-cap); } .margin.loss { font-weight: 700; } /* priced under wholesale: the one loss the player should act on */
 #casepanel .singles li { grid-template-columns: 2.2em minmax(0, 1fr) auto auto auto; }
 .cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
@@ -528,9 +587,9 @@ button:disabled { cursor: not-allowed; }
 .scene3d::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 75% 70% at 50% 45%, transparent 55%, rgba(4, 8, 14, .5)); }
 .s3-hint, .s3-cap { position: absolute; z-index: 2; left: 16px; right: 16px; margin: 0; text-align: center; pointer-events: none; }
 .s3-hint { bottom: 10px; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 32px); font-size: 12px; color: var(--mat-muted);
-  background: color-mix(in oklab, var(--mat) 70%, transparent); padding: 2px 10px; border-radius: 4px; }
+  padding: 2px 10px; }
 .s3-cap { bottom: 36px; left: 50%; right: auto; transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; font-size: 13px; color: var(--mat-muted);
-  background: color-mix(in oklab, var(--mat) 78%, transparent); padding: 5px 12px 6px; border-radius: 6px; }
+  padding: 5px 14px 6px; }
 .s3-cap:empty { display: none; }
 .s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
 .s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 17px var(--font-tag); color: var(--mat-ink); }
@@ -546,8 +605,12 @@ button:disabled { cursor: not-allowed; }
 .s3-hint:empty { display: none; }
 .s3-shelf { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .s3-shelf button { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 1px; padding: 4px 8px; border: 0; border-radius: var(--r);
-  background: color-mix(in oklab, var(--mat) 72%, transparent); color: var(--mat-ink); white-space: nowrap; pointer-events: auto; opacity: 0; transition: opacity .3s; }
+  color: var(--mat-ink); white-space: nowrap; pointer-events: auto; opacity: 0; transition: opacity .3s; }
 .s3-shelf button.in { opacity: 1; }
+/* everything the scene lays over the canvas is a small HUD plate: dark glass in the same aluminium trim as the panels */
+:is(.s3-shelf button, .s3-cap, .s3-hint) { border-radius: 3px; background: linear-gradient(rgba(26, 42, 78, .9), rgba(10, 18, 38, .9));
+  box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(174, 184, 200, .35), 0 6px 14px rgba(0, 0, 0, .35); }
+.s3-shelf button.hot { box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(255, 236, 206, .6), 0 0 14px var(--lamp-glow); }
 .s3-shelf b { font: 900 var(--fs-h)/1.2 var(--font-display); }
 .s3-shelf small { font-size: var(--fs-cap); color: var(--mat-muted); }
 .s3-shelf button.hot small { color: var(--mat-ink); }
@@ -604,7 +667,7 @@ button:disabled { cursor: not-allowed; }
 .gg-what > b { font-size: var(--fs-h); }
 .gh-goal button { justify-self: start; border-color: var(--ink); font-weight: 600; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
-.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 22px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; }
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 :is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
@@ -683,19 +746,26 @@ button:disabled { cursor: not-allowed; }
   body { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
   .top { gap: 12px; }
   .brand { font-size: 22px; }
-  .cash .k { display: none; }
+  .cash { padding: 2px 10px 2px 6px; min-height: 36px; }
+  .cash .k { width: 18px; height: 18px; }
   .cash b { font-size: 24px; }
+  .sub div { padding: 3px 8px; }
   .sub { gap: 14px; justify-content: flex-start; }
   .stats { justify-content: space-between; }
   .nav { position: fixed; z-index: 20; left: 0; right: 0; bottom: 0; height: calc(var(--nav-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
-    background: var(--bg); border-top: 1px solid var(--line); gap: 0; }
-  .nav a { flex: 1; justify-content: center; box-shadow: inset 0 3px 0 transparent; }
-  .nav a[aria-current="page"] { box-shadow: inset 0 3px 0 var(--ink); }
+    align-items: center; gap: 4px; padding-inline: 6px; background: linear-gradient(#1A2A4E, var(--hud) 45%); border-top: 3px solid var(--trim);
+    box-shadow: inset 0 1px 0 rgba(174, 184, 200, .45), 0 -6px 18px rgba(4, 8, 14, .35); }
+  .nav a { flex: 1; min-width: 0; height: 44px; letter-spacing: .02em; }
   main { padding-top: 12px; }
   .page, .page-open, .page-shelf, .page-luck { grid-template-columns: minmax(0, 1fr); }
-  .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1); border-radius: 0; }
+  .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1);
+    border-width: 6px 0; border-image-width: 10px 0; }
+  /* panels keep the trim but thinner, so a 390 screen still has ~330px of content */
+  :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
+    padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
+  :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
   .notice { left: 16px; right: 16px; width: auto; max-width: 340px; margin-inline: auto; }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .foot, .notice) button { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
