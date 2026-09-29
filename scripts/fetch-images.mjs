@@ -1,16 +1,13 @@
 // Mirrors card art (low + high webp) and set logos from TCGdex into assets/tcg/, so the game serves them
 // from its own server instead of hitting the TCGdex CDN on every pack. Skips files already on disk.
-// Usage: node scripts/fetch-images.mjs   (needs data/cards-*.js from fetch-data.mjs)
+// Usage: node scripts/fetch-images.mjs   (needs data/cards-*.json from fetch-data.mjs)
 import { mkdir, writeFile, readdir, readFile, copyFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import vm from 'node:vm';
 
 const CDN = 'https://assets.tcgdex.net/en/sv';
-const ctx = { window: {} }; ctx.window.window = ctx.window; vm.createContext(ctx);
-for (const f of (await readdir('data')).filter(f => f.endsWith('.js'))) vm.runInContext(await readFile('data/' + f, 'utf8'), ctx);
-
 const jobs = [];
-for (const [set, d] of Object.entries(ctx.window.PTCG_DATA)) {
+for (const f of (await readdir('data')).filter(f => f.endsWith('.json'))) {
+  const d = JSON.parse(await readFile('data/' + f, 'utf8')), set = d.id;
   jobs.push([`${set}/logo.png`]);
   for (const c of d.cards) for (const size of ['low', 'high']) jobs.push([`${set}/${c.n}/${size}.webp`]);
 }

@@ -1,0 +1,18 @@
+{
+  // Type-check only (npm run build runs tsc first). Vite bundles for the browser; node runs src/*.ts directly by stripping types,
+  // so only erasable syntax is allowed (no enum / namespace / parameter properties) and imports keep their .ts extension.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true
+  },
+  "include": ["src"]
+}

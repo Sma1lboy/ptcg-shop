@@ -1,0 +1,21 @@
+{
+  "name": "ptcg-shop",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && mkdir -p dist/assets && ln -sfn ../../assets/tcg dist/assets/tcg",
+    "pen": "vite build --mode pen",
+    "preview": "vite preview",
+    "test": "node test/sim.test.mjs"
+  },
+  "dependencies": {
+    "lit-html": "3.3.3",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "8.3.1",
+    "vite-plugin-singlefile": "2.3.3"
+  }
+}
