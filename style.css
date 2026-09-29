@@ -196,9 +196,18 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 }
 button:disabled { cursor: not-allowed; }
 
-.log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: var(--fs-cap); color: var(--muted); max-height: 320px; overflow: auto; }
-.log time { margin-right: 8px; }
-.log .gain { color: var(--ink); } .log .hit { color: var(--ink); font-weight: 600; } /* a sale is routine here; red stays on standalone amounts */
+/* 店内动态 (ui/log.ts): the till roll. Walk-ins and shop events in one list; time, who, what, and the money in its own column.
+   A sale is routine here, so amounts in are ink (red stays on standalone amounts); money out is the quiet --loss */
+.log { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; column-gap: 10px; font-size: var(--fs-cap); max-height: 360px; overflow: auto; }
+.log li { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: baseline; padding: 3px 0; }
+.log time { color: var(--muted); min-width: 2.8em; }
+.log li > b { font-weight: 600; }
+.log li > span { color: var(--muted); } .log li.r-sold > span { color: var(--ink); }
+.log li.shop > span { grid-column: 2 / 4; } .log li.hit > span { color: var(--ink); font-weight: 600; }
+.log em { font: 600 var(--fs-body)/1 var(--font-tag); font-style: normal; text-align: right; } .log em.loss { color: var(--loss); }
+.log li { animation: arrive .4s cubic-bezier(.23, 1, .32, 1); }
+@keyframes arrive { from { opacity: 0; transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { .log li { animation: none; } }
 
 /* 成长 badge in the nav: how many upgrades/skills you can afford; yellow because it points at something to press */
 .tab-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 6px; padding: 0 5px; border-radius: 9px; vertical-align: 2px;
@@ -447,10 +456,28 @@ button:disabled { cursor: not-allowed; }
 .cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
 .cust-bar span { border-radius: 2px; min-width: 0; }
 .c-sold { background: var(--gain); } .c-pricey { background: color-mix(in oklab, var(--ink) 50%, transparent); } .c-none { background: var(--line); }
-.cust-sum { margin: 0 0 4px; } .c-p { color: var(--ink); }
-.cust-feed { list-style: none; margin: 8px 0 0; padding: 0; font-size: var(--fs-cap); display: flex; flex-direction: column; gap: 3px; }
-.cust-feed li span { display: inline-block; min-width: 3.6em; font-weight: 600; color: var(--muted); }
-.cust-feed li.sold span { color: var(--gain); } .cust-feed li.pricey span { color: var(--ink); }
+.cust-sum { margin: 0 0 4px; } .cust-sum b { font-weight: 600; }
+/* 顾客 (ui/goals.ts): what the last walk-ins came for, grouped. Pack buyers get one row per set with its price rail */
+.c-meta { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
+.c-h { font-size: var(--fs-body); font-weight: 600; margin: 20px 0 4px; } .c-h small { font-size: var(--fs-cap); font-weight: 400; color: var(--muted); margin-left: 6px; }
+.c-sets, .c-case { list-style: none; margin: 0; padding: 0; }
+.c-sets > li, .c-case > li { padding: 10px 0; border-top: 1px solid var(--line); }
+.c-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; } .c-row b { font-weight: 600; } .c-row .muted { font-size: var(--fs-cap); }
+.c-n { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
+.c-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); } .c-note b { color: var(--ink); font-weight: 600; }
+.c-note button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
+/* the price rail on the shelf edge, MIN_PCT…MAX_PCT of market in price steps: each customer is a dot stacked on the step of the most
+   they would pay (ink = would buy at the tag as it is now), the flippers' zone is the darker low end of the rail, and your price tag
+   is clipped on under it. --h (set inline) is the height of the tallest stack */
+.c-rule { --rail: 4px; position: relative; height: calc(var(--h) + var(--rail) + 30px); margin: 12px 0 0; }
+.c-rule::before { content: ""; position: absolute; left: 0; right: 0; top: var(--h); height: var(--rail); border-radius: 1px; background: var(--line); }
+.c-rule i { position: absolute; width: 6px; height: 6px; margin: 0 0 1px -3px; border-radius: 50%; background: color-mix(in oklab, var(--ink) 26%, transparent); }
+.c-rule i.buy { background: var(--ink); }
+.c-flip { position: absolute; left: 0; top: var(--h); height: var(--rail); border-radius: 1px 0 0 1px; background: color-mix(in oklab, var(--ink) 34%, transparent); }
+.c-mkt { position: absolute; top: calc(var(--h) - 3px); width: 1px; height: calc(var(--rail) + 6px); margin-left: -.5px; background: var(--muted); }
+.c-rule .sticker { position: absolute; top: calc(var(--h) + var(--rail) - 1px); z-index: 1; transform: translateX(-50%) rotate(-2deg); white-space: nowrap; }
+.c-rule small { position: absolute; top: calc(var(--h) + var(--rail) + 6px); font-size: var(--fs-cap); line-height: 1; color: var(--muted); white-space: nowrap; }
+.c-lo { left: 0; } .c-m { transform: translateX(-50%); }
 .auto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .auto { gap: 4px; }
 .dx-h { display: flex; justify-content: space-between; }

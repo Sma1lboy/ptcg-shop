@@ -181,10 +181,30 @@ console.log('ok luck percentile');
   assert.ok(G.trophyBonus() < 0.5, 'trophy bonus is bounded');
   const rate0 = G.rate(); G.clearTrophy(); assert.equal(G.rate(), rate0, 'trophy does not change walk-in rate'); assert.equal(st().singles.b.count, 1);
 
-  // 6. Old saves. Pre-storefront: packs that used to be "on sale" land on a shelf.
-  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, stock: { sv08: 7 }, singles: {} });
+  // 5b. Every walk-in is kept for the 顾客 panel and 店内动态: what they came for, the asking price, the most they would pay, how it
+  //     ended. The records have to agree with the till and with the rule that decided the sale.
+  {
+    G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 200); G.shelve('sv08', 20); G.setPrice('sv08', 1.05);
+    assert.equal(st().log[0].amt, -G.wholesale('sv08') * 200, 'the till roll keeps money out of the text, in its own field');
+    const took0 = st().earned.sealed + st().earned.singles;
+    for (let i = 0; i < 60; i++) { if (G.shelfQty('sv08') < 5) G.shelve('sv08', 20); T += 5e3; G.tick(); }
+    const vs = st().recent, took = st().earned.sealed + st().earned.singles - took0;
+    assert.ok(vs.length > 20 && vs.every(v => v.at <= T && v.at > T - G.MISS_WINDOW * 1000), 'walk-ins are stamped and kept for the window');
+    assert.ok(Math.abs(vs.reduce((a, v) => a + (v.gain || 0), 0) - took) < 1e-6, 'what the visits paid adds up to the takings');
+    const op = vs.filter(v => v.t === 'opener' && v.set === 'sv08');
+    assert.ok(op.some(v => v.r === 'sold') && op.some(v => v.r === 'pricey'), 'at 105% some buy and some balk');
+    for (const v of op) {
+      if (v.r === 'sold') assert.ok(v.pct <= v.max && v.n >= 1 && Math.abs(v.gain - Math.round(v.price * v.pct * 100) / 100 * v.n) < 1e-6, 'a buyer paid the tag at the market price of the moment, and could afford it');
+      if (v.r === 'pricey') assert.ok(v.why === 'budget' ? v.pct <= v.max : v.pct > v.max, 'who calls it too dear had a ceiling under the tag');
+    }
+    for (let i = 0; i < 20; i++) { T += 60e3; G.tick(); }
+    assert.ok(st().recent.every(v => v.at > T - G.MISS_WINDOW * 1000 - 60e3), 'older walk-ins drop out of the window');
+  }
+
+  // 6. Old saves. Pre-storefront: packs that used to be "on sale" land on a shelf. Walk-ins saved as text lines are dropped.
+  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, stock: { sv08: 7 }, singles: {}, recent: [{ t: 'opener', r: 'sold', text: '拆包玩家买走 1 包…' }] });
   const G2 = createGame(env); // a page reload: a second game over the same storage
-  assert.equal(G2.shelfQty('sv08'), 7); assert.equal(G2.state.stock.sv08 || 0, 0);
+  assert.equal(G2.shelfQty('sv08'), 7); assert.equal(G2.state.stock.sv08 || 0, 0); assert.deepEqual(G2.state.recent, []);
   // Pre-统一货架: one shelf per set and a 货架 level that deepened them all. Every set that was on sale gets a shelf of its own,
   // the old level becomes 加层 (same depth as the old per-set shelf), prices carry over, and every pack survives: sv10 is over
   // its old cap on purpose, the extra goes to the back room even past the back room's cap.
