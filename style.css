@@ -680,10 +680,12 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button:not(:disabled):is(:hover, :focus-visible) { box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(255, 236, 206, .6), 0 0 14px var(--lamp-glow); }
 .s3-shelf b { font: 900 var(--fs-h)/1.2 var(--font-display); }
 .s3-shelf small { font-size: var(--fs-cap); color: var(--mat-muted); }
+.s3-shelf small span::before { content: ' · '; }
 .s3-shelf button:disabled { cursor: default; } .s3-shelf button:disabled b { color: var(--mat-muted); }
 .scene3d :focus-visible { outline-color: var(--mat-ink); }
 @media (max-width: 779px) { .s3-shelf b { font-size: var(--fs-body); } .s3-shelf button { padding: 2px 4px; }
   .s3-shelf small { max-width: 6.5em; white-space: normal; text-align: center; line-height: 1.25; }
+  .s3-shelf small span { display: block; } .s3-shelf small span::before { content: none; }
   .s3-shelf button:disabled small { display: none; } /* four stacks a row: locked sets keep only their greyed name, or neighbours' notes collide */ }
 
 /* idle mat (ui/mat.ts renderIdle): the warehouse's sealed packs lie on the rubber; the stitched edge is the playmat's hem (same as drawMat in table3d.js) */

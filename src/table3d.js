@@ -287,6 +287,7 @@ const CARD_FS = `
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
+  float etchH(vec2 uv) { return dot(texture2D(uFace, uv, 2.5).rgb, vec3(0.299, 0.587, 0.114)) + 0.12 * vnoise(uv * vec2(5.0, 7.0)); }
   void main() {
     vec3 N = normalize(vN), V = normalize(cameraPosition - vP);
     bool front = vFront > 0.5;
@@ -315,6 +316,18 @@ const CARD_FS = `
       float spark = step(0.9, h) * smoothstep(0.45, 0.1, length(fract(vUv * vec2(84.0, 118.0)) - 0.5)) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
       float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
       float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
+      if (k > 3.5 && k < 4.5) { // etched: the foil is pressed into ridges that follow the art. The ridges are contour lines of the scan's
+        // blurred brightness (plus a slow swirl, so flat print like a gold card's field still has grain); each ridge's flank tilts
+        // toward or away from the light, so the sweep breaks into streaks along the drawing and slides between them as the card turns.
+        vec2 e = vec2(2.0 / 512.0, 2.0 / 715.0);
+        float hr = etchH(vUv + vec2(e.x, 0.0)), hl = etchH(vUv - vec2(e.x, 0.0)), hu = etchH(vUv + vec2(0.0, e.y)), hd = etchH(vUv - vec2(0.0, e.y));
+        float ph = (hr + hl + hu + hd) * 0.25 * 70.0, fade = 1.0 - smoothstep(0.25, 0.6, fwidth(ph)); // ridges finer than ~3 px would shimmer: flat foil there
+        vec2 g = vec2(hr - hl, hu - hd); g /= length(g) + 0.004;
+        float c = cos(ph * 6.2832), flank = c * fade, crest = 0.5 + 0.5 * sin(ph * 6.2832);
+        float b = band + dot(g, vec2(0.7, 0.9)) * flank * 0.55;
+        crest *= crest; tx = mix(tx, 0.3 + 0.9 * crest * crest, fade); // grooves hold less light than crests: only how much white goes on moves, never the print
+        sheen = 0.015 + 0.42 * exp(-b * b * 12.0);
+      }
       col += rb * shine * amt * tx * sheen * (0.4 + 0.6 * luma) + spark * amt * (k > 3.5 ? 1.1 : k < 1.5 ? 0.35 : 0.7) * shine;
     }
     gl_FragColor = vec4(col, 1.0);
@@ -646,8 +659,16 @@ async function toSpread(run) {
   const q = flatQ(0);
   run.cards.forEach((c, k) => setTimeout(() => { if (R === run) flyTo(c, G.pos[k], q, 620, 3); }, k * 55));
   await wait(700 + run.n * 55); if (R !== run) return;
-  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); });
+  spreadHalos(run);
   run.busy = false; tags(run);
+}
+// Laid out, a hit's glow is the lamp bouncing off the mat around it (DESIGN.md「卡面」): the halo drops to just above the rubber,
+// under every card, so in an overlapping fan the neighbours cover it instead of it washing gold over their faces.
+function spreadHalos(run) {
+  run.cards.forEach((c, k) => {
+    const t = run.tiers[k]; if (t < 3) return;
+    halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); c.userData.halo.position.z = .012 - c.position.y;
+  });
 }
 function tags(run) {
   const box = host && host.querySelector('.s3-tags'); if (!box) return;
@@ -852,7 +873,7 @@ async function batchSpread(run) {
   if (L0) await flyTo(L0.card, L0.p, L0.q, 560, 2); // the best card goes back on top of the fan
   run.hero = null;
   if (R !== run) return;
-  run.cards.forEach((c, k) => { const t = run.tiers[k]; if (t >= 3) halo(c, css(t >= 4 ? '--fx-gold' : '--fx-silver'), .32); });
+  spreadHalos(run);
   run.busy = false; tags(run);
 }
 
@@ -1335,7 +1356,7 @@ function init() {
     const o = opts; close?.(); o?.onLost?.();
   });
   ro = new ResizeObserver(resize);
-  if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; } }; // dev probe: frame count and renderer.info
+  if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; }, look: k => look(R, R.cards[k]) }; // dev probe: frame count, renderer.info, hold spread card k up
   io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; if (seen && R) wake(IDLE); });
 }
 

@@ -2,7 +2,7 @@
 import { card } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import { G, $, money } from './common.ts';
-import { back } from './card.ts';
+import { back, stock } from './card.ts';
 import type { ShareSpec } from './mat.ts';
 
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -29,24 +29,18 @@ export type Grade = ReturnType<typeof grade>;
 // ---------- card art for share images ----------
 // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
 const loadOne = (url: string) => new Promise<HTMLImageElement | null>(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url; });
-async function loadArt(c: { set: string; n: string }) {
+async function loadArt(c: { set: string; n: string; name: string }) {
   for (const size of ['high', 'low']) { const i = await loadOne(card(c.set, c.n, size)); if (i) return i; }
-  return null;
+  return loadOne(stock(c.name)); // offline: card.ts's blank stock with the name, the same picture as the 3D table's
 }
 const roundRect = (x: CanvasRenderingContext2D, px: number, y: number, w: number, h: number, r: number) => { x.beginPath(); x.roundRect(px, y, w, h, r); };
 // The card as card.ts draws it on the page (DESIGN.md「卡面」): the scan filling a 63×88 box with its 3.2 mm corner, a soft shadow;
-// blank card stock with the name when the scan can't load (offline). The face-down card is card.ts's back, drawn the same way.
-function drawArt(x: CanvasRenderingContext2D, img: HTMLImageElement | null, px: number, py: number, w: number, name?: string) {
+// card.ts's blank stock when the scan can't load (loadArt). The face-down card is card.ts's back, drawn the same way.
+function drawArt(x: CanvasRenderingContext2D, img: HTMLImageElement | null, px: number, py: number, w: number) {
   const h = w * 88 / 63, r = w * .0508;
   x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, r); x.fillStyle = css('--stock-rim'); x.fill(); x.restore();
   x.save(); roundRect(x, px, py, w, h, r); x.clip();
   if (img) x.drawImage(img, px, py, w, h);
-  else {
-    x.fillStyle = css('--stock'); x.fillRect(px + w * .043, py + h * .031, w * .914, h * .938);
-    x.fillStyle = css('--stock-ink'); x.textAlign = 'center'; x.font = `600 ${Math.round(w / 12)}px ${css('--font-body')}`;
-    const ls = name ? nameLines(name, 18) : []; ls.forEach((l, i) => x.fillText(l, px + w / 2, py + h * .45 + i * w / 10));
-    x.globalAlpha = .7; x.font = `${Math.round(w / 18)}px ${css('--font-body')}`; x.fillText('卡图没加载出来', px + w / 2, py + h * .45 + ls.length * w / 10 + w / 16);
-  }
   x.restore();
   return h;
 }
@@ -67,7 +61,7 @@ function fit(x: CanvasRenderingContext2D, s: string, w: number) {
 interface Label { k: string; what: string; short?: string; best?: string; price?: string; cert?: string; bars?: number[]; grade: string; gradeF: string; sub: string }
 // Clear acrylic case: body and shadow, the seam where the two halves meet, the label with its inset navy frame, the card in its well,
 // and one soft glare across the front. Returns the slab's bottom edge.
-function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, art: HTMLImageElement | null, name: string | undefined, L: Label) {
+function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, art: HTMLImageElement | null, L: Label) {
   const pad = 32, lh = 212, ch = cw * 88 / 63, sw = cw + pad * 2 + 28, sx = (W - sw) / 2, sh = pad + lh + 40 + ch + pad + 20, cy = top + pad + lh + 40;
   const body = () => roundRect(x, sx, top, sw, sh, 30);
   x.save(); x.shadowColor = 'rgba(0,0,0,.6)'; x.shadowBlur = 70; x.shadowOffsetY = 30; body(); x.fillStyle = css('--mat'); x.fill(); x.restore();
@@ -97,7 +91,7 @@ function slab(x: CanvasRenderingContext2D, W: number, top: number, cw: number, a
   // card in its well
   const cx = (W - cw) / 2;
   roundRect(x, cx - 14, cy - 14, cw + 28, ch + 28, 14); x.fillStyle = 'rgba(0,0,0,.3)'; x.fill(); x.strokeStyle = 'rgba(255,255,255,.1)'; x.lineWidth = 2; x.stroke();
-  drawArt(x, art, cx, cy, cw, name);
+  drawArt(x, art, cx, cy, cw);
   // glare
   x.save(); body(); x.clip();
   const g = x.createLinearGradient(sx, top, sx + sw * .9, top + sh * .6);
@@ -120,7 +114,7 @@ async function drawCard() {
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body'), num = css('--font-tag');
   mat(x, W, H);
-  const y = slab(x, W, 48, 580, art, best?.name, { k: '欧气卡铺 · 欧气鉴定', what: g.what, short: g.short, best: best?.name, price: best ? money(best.price) : '', cert: g.cert, bars: g.bars,
+  const y = slab(x, W, 48, 580, art, { k: '欧气卡铺 · 欧气鉴定', what: g.what, short: g.short, best: best?.name, price: best ? money(best.price) : '', cert: g.cert, bars: g.bars,
     grade: L.title, gradeF: css('--font-display'), sub: `超过 ${pct}%` });
   // the numbers under the slab, the way a listing states what is in the case
   const cols: [string, string][] = [['开出市值', money(L.value)], ['期望市值', money(L.expected)], ['进货成本', money(L.cost)]];
@@ -135,9 +129,6 @@ async function drawCard() {
   return c.toDataURL('image/png');
 }
 
-// Chinese/English mixed names have no spaces to break on: split by character count.
-const nameLines = (name: string, n: number) => name.match(new RegExp(`.{1,${n}}`, 'g')) || [name];
-
 // One pack or one batch, straight from the mat: the best card in a slab, graded by where the pack ranks among packs of its set.
 async function drawPack(d: ShareSpec) {
   const top = d.pct >= .995 ? '前 0.5%' : `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%`;
@@ -145,7 +136,7 @@ async function drawPack(d: ShareSpec) {
   const art = await loadArt(d.best), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body');
   mat(x, W, H);
-  const y = slab(x, W, 48, 580, art, d.best.name, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
+  const y = slab(x, W, 48, 580, art, { k: `欧气卡铺 · ${d.set}`, what: d.n > 1 ? `${d.n} 包共开出 ${money(d.value)}` : `这包开出 ${money(d.value)}`,
     best: d.best.name, price: money(d.best.price), ...cert(`${d.set}|${d.n}|${Math.round(d.value * 100)}|${d.best.n}`), grade: top, gradeF: css('--font-tag'), sub: d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里' });
   const diff = d.value - d.cost;
   x.textAlign = 'center';
