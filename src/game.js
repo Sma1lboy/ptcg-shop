@@ -16,12 +16,18 @@
   const SIGN_STEP = 0.3;                  // +30% walk-ins per signage level
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop sales credited on return
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
+  // 图鉴: each set's Pokédex fills as you pull new card numbers (selling a card never un-collects it).
+  // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +30% per set.
+  const DEX_TIERS = [[0.25, 0.02], [0.5, 0.03], [0.75, 0.05], [0.9, 0.08], [1, 0.12]];
+  const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
+  const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
   const UNLOCK = { 'sv08.5': 400, 'sv03.5': 2000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES = {
     signage:  { name: '招牌', desc: `进店客流 +${SIGN_STEP * 100}% / 级`, costs: [120, 260, 570, 1250, 2750] },
     shelf:    { name: '货架', desc: `每个系列多放 ${SHELF_STEP} 包`, costs: [80, 160, 320, 640] },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
+    clerk:    { name: '店员', desc: '1 级：货架见底自动进货（含打烊时）；2 级：补满货架，并把散卡卖给同行', costs: [500, 2600] },
   };
 
   const setById = id => g.PTCG_SETS.find(s => s.id === id);
@@ -35,9 +41,14 @@
   const unlockAt = id => UNLOCK[id] || 0;
   const unlocked = id => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // capped below +50%
-  const rate = () => CUSTOMERS_PER_SEC * (1 + SIGN_STEP * lvl('signage')) * (1 + trophyBonus());
+  const dexTotal = id => g.PTCG_DATA[id].cards.length;
+  const dexCount = id => Object.keys(state.dex).filter(k => k.startsWith(id + '|')).length;
+  const dexShare = id => dexCount(id) / dexTotal(id);
+  const dexBonusOf = id => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
+  const dexBonus = () => g.PTCG_SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
+  const rate = () => CUSTOMERS_PER_SEC * (1 + SIGN_STEP * lvl('signage')) * (1 + trophyBonus()) * (1 + dexBonus());
   const fresh = () => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [],
-    up: {}, shown: [], casePrice: 1, trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: Date.now(), offline: null });
+    up: {}, dex: {}, auto: {}, shown: [], casePrice: 1, trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: Date.now(), offline: null });
 
   let state = load(), luckCache = null, lastTick = state.savedAt; // first tick after load credits the time the tab was closed
   const listeners = [];
@@ -50,15 +61,19 @@
   function save() { state.savedAt = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); } catch {} }
   function log(text, tone = '') { state.log.unshift({ t: Date.now(), text, tone }); state.log.length = Math.min(state.log.length, 40); }
 
-  function buy(id, n) {
-    if (!unlocked(id)) return false;
+  // Moves cash into shelf stock without logging or saving; returns the cost (0 if nothing was bought).
+  function stockUp(id, n) {
+    if (!unlocked(id)) return 0;
     n = Math.min(n, capacity() - (state.stock[id] || 0));
-    if (n <= 0) return false;
     const cost = wholesale(id) * n;
-    if (state.cash < cost) return false;
-    state.cash -= cost;
-    state.stock[id] = (state.stock[id] || 0) + n;
-    log(`进货 ${setById(id).name} ×${n}，−$${cost.toFixed(2)}`);
+    if (n <= 0 || state.cash < cost) return 0;
+    state.cash -= cost; state.stock[id] = (state.stock[id] || 0) + n;
+    return cost;
+  }
+  function buy(id, n) {
+    const before = state.stock[id] || 0, cost = stockUp(id, n);
+    if (!cost) return false;
+    log(`进货 ${setById(id).name} ×${state.stock[id] - before}，−$${cost.toFixed(2)}`);
     emit(); return true;
   }
 
@@ -66,12 +81,13 @@
     n = Math.min(n, state.stock[id] || 0);
     if (!n) return [];
     state.stock[id] -= n;
-    const packs = [];
+    const packs = [], dex0 = dexBonusOf(id), had = dexCount(id);
     for (let i = 0; i < n; i++) {
       const pack = S.openPack(id, Math.random);
       packs.push(pack);
       state.pulled += S.packValue(pack);
       for (const c of pack) {
+        if (c.r !== 'E') state.dex[`${c.set}|${c.n}`] = 1;
         const key = `${c.set}|${c.n}|${c.kind}`;
         (state.singles[key] ||= { ...c, count: 0 }).count++;
         state.tally[c.kind] = (state.tally[c.kind] || 0) + 1;
@@ -82,6 +98,9 @@
     state.costOpened += wholesale(id) * n;
     state.opened[id] = (state.opened[id] || 0) + n;
     luckCache = null;
+    if (dexCount(id) > had) {
+      if (dexBonusOf(id) > dex0) log(`图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%`, 'hit');
+    }
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
     log(`开了 ${n} 包${setById(id).name}，最贵：${best.name} $${best.price.toFixed(2)}`, S.HITS.includes(best.kind) ? 'hit' : '');
     emit(); return packs;
@@ -98,10 +117,14 @@
 
   const isBulk = s => !S.HITS.includes(s.kind);
   function bulkValue() { let n = 0, v = 0; for (const s of Object.values(state.singles)) if (isBulk(s)) { n += s.count; v += s.price * s.count * BUYLIST; } return { n, v }; }
-  function sellBulk() {
-    const { n, v } = bulkValue(); if (!n) return 0;
+  function dumpBulk() { // sells every non-hit single, no log or save; returns { n, v }
+    const b = bulkValue(); if (!b.n) return b;
     for (const [k, s] of Object.entries(state.singles)) if (isBulk(s)) delete state.singles[k];
-    state.cash += v; state.earned.singles += v;
+    state.cash += b.v; state.earned.singles += b.v;
+    return b;
+  }
+  function sellBulk() {
+    const { n, v } = dumpBulk(); if (!n) return 0;
     log(`散卡 ${n} 张打包卖给同行，+$${v.toFixed(2)}`, 'gain');
     emit(); return v;
   }
@@ -143,6 +166,7 @@
     const cost = upgradeCost(k);
     if (cost == null || state.cash < cost) return false;
     state.cash -= cost; state.up[k] = lvl(k) + 1;
+    if (k === 'clerk' && lvl(k) === 1) for (const s of g.PTCG_SETS) if (state.stock[s.id] || state.opened[s.id]) state.auto[s.id] = true;
     log(`升级：${UPGRADES[k].name} Lv${lvl(k)}，−$${cost}`);
     emit(); return true;
   }
@@ -166,22 +190,48 @@
     return price;
   }
 
+  // The clerk (upgrade): tops up the shelf of every set with auto-restock on, and at level 2 sells the bulk to peers.
+  function clerkWork(acc) {
+    const L = lvl('clerk'); if (!L) return;
+    for (const set of g.PTCG_SETS) {
+      const id = set.id, cap = capacity(), goal = L >= 2 ? cap : Math.ceil(cap / 2), have = state.stock[id] || 0;
+      if (!state.auto[id] || have >= goal / 2) continue;
+      const n = Math.min(goal - have, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n) : 0;
+      if (cost) { acc.packs += n; acc.spent += cost; }
+    }
+    if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
+  }
+  // Dead end guard: no cash for the cheapest pack, nothing on the shelf, nothing to sell. Game setting.
+  function bailout() {
+    const cheapest = Math.min(...g.PTCG_SETS.filter(s => unlocked(s.id)).map(s => wholesale(s.id)));
+    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || Object.keys(state.singles).length || state.shown.length) return false;
+    state.cash += BAILOUT; log(`货架空了、钱也花光了，亲戚周济了 $${BAILOUT}`, 'gain'); return true;
+  }
+
   // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up.
   function tick() {
     const now = Date.now(), dt = Math.min((now - lastTick) / 1000, OFFLINE_CAP); lastTick = now;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const x = rate() * dt;
-    const n = Math.floor(x) + (Math.random() < x % 1 ? 1 : 0), lost0 = state.lost, quiet = n > 3;
-    let revenue = 0, sales = 0;
-    for (let i = 0; i < n; i++) { const g = serve(quiet); revenue += g; if (g) sales++; }
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
+    let n = 0, revenue = 0, sales = 0, quiet = false;
+    for (let left = dt; left > 0; left -= slice) {
+      const x = rate() * Math.min(slice, left), m = Math.floor(x) + (Math.random() < x % 1 ? 1 : 0);
+      quiet = quiet || m > 3; n += m;
+      for (let i = 0; i < m; i++) { const g = serve(quiet); revenue += g; if (g) sales++; }
+      clerkWork(acc);
+    }
+    if (acc.packs) log(`店员进货 ${acc.packs} 包，−$${acc.spent.toFixed(2)}${acc.bulk ? `；散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}` : ''}`);
+    else if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行，+$${acc.bulkV.toFixed(2)}`, 'gain');
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
       log(`打烊期间卖出 ${sales} 件，+$${revenue.toFixed(2)}`, 'gain');
     }
-    if (n || dt > 30) emit(); else save();
+    const rescued = bailout();
+    if (n || dt > 30 || acc.packs || acc.bulk || rescued) emit(); else save();
   }
+  function setAuto(id, on) { state.auto[id] = !!on; emit(); }
   function ackOffline() { state.offline = null; emit(); }
 
   // 行情: every couple of minutes one unlocked set runs hot (+15% at the counter) and another cold (−10%). Game setting.
@@ -210,9 +260,9 @@
 
   g.PTCG_GAME = {
     get state() { return state; }, on: f => listeners.push(f),
-    buy, open, sell, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
+    buy, open, sell, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setCasePrice, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline,
     sealedPrice, capacity, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, CASE_PRICING, BUYLIST, WHOLESALE, WHOLESALE_STEP, CUSTOMERS_PER_SEC, SIGN_STEP, BROWSE, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE,
+    UPGRADES, DEX_TIERS, BAILOUT, CASE_PRICING, BUYLIST, WHOLESALE, WHOLESALE_STEP, CUSTOMERS_PER_SEC, SIGN_STEP, BROWSE, OFFLINE_CAP, HEAT_EVERY, SHELF_BASE, CASE_BASE,
   };
 })(window);
