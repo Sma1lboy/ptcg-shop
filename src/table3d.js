@@ -37,7 +37,7 @@ const CW = 6.3, CH = 8.8, CT = 0.032, CR = 0.32, PW = 7.4, PH = 12.8, CRIMP = 0.
 const MW = 64, MH = 54, MZ = -8; // playmat size and where its centre sits: the shelf, the single-pack spread and the fan stay on it; a ten-pack deal's back row reaches the counter
 const CZ0 = 34, CZ1 = -60, CX = 72; // the counter top: near edge (under the player's hands), back edge, half width
 const SW = 30, SH = 15, SD = 12, SX = 1, SZ = -46; // the glass showcase behind the mat: width, glass height (on a 2.2 plinth), depth, centre
-const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.9, SPREAD_PITCH = 1.18, SPREAD_PITCH_TALL = 1.42;
+const FOV = 30, TAN = Math.tan(FOV / 2 * Math.PI / 180), PITCH = 0.74, SPREAD_PITCH = .9, SPREAD_PITCH_TALL = 1.42;
 
 let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, raf = 0, last = 0, now = 0, seen = true;
 // Render on demand: a frame is drawn only while something moves (tweens, drag, pointer tilt, particles, a show) and for IDLE ms
@@ -526,8 +526,12 @@ function frameOn(pts, t, p, mx = .9, y0 = -.86, y1 = .86) {
   for (let it = 0; it < 4; it++) { const e = solve(); st.t.x += (e[0] + e[1]) / 2 * st.d * TAN * camera.aspect; st.t.z -= ((e[2] + e[3]) - (y0 + y1)) / 2 * st.d * TAN / Math.sin(p); }
   solve(); return st;
 }
-const FOCUS = () => new V3(0, 7, 0);
-const GLOW0 = () => FOCUS().add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6));
+// The held shot is the idle shot moved a little closer along the same line of sight (same pitch as the shelf): the pack comes up
+// off its stack into the player's hands, held above the mat and a little below the middle of the frame, so the showcase and
+// the back of the counter stay in view over it. FOCUS is where the camera looks; HOLD is where the hand is.
+const FOCUS = () => new V3(0, 22, -10);
+const HOLD = () => FOCUS().add(new V3(0, -Math.cos(PITCH), Math.sin(PITCH)).multiplyScalar(.9));
+const GLOW0 = () => HOLD().add(new V3(0, 3 + Math.sin(PITCH) * 6, Math.cos(PITCH) * 6));
 const stages = () => ({ pack: { t: FOCUS(), p: PITCH, d: fit(PW / .62, PH / .66) }, reveal: { t: FOCUS(), p: PITCH, d: fit(CW / .56, CH / .58) } });
 function camTo(st, ms, ease = E.io) {
   const a = { t: cam.t.clone(), p: cam.p, d: cam.d };
@@ -586,9 +590,9 @@ async function autoTear(run) {
 // Where the torn strip lands, the empty pack rests and the seen cards pile, for this aspect (relayout() moves them on resize).
 function spots() {
   const st = stages().reveal, wide = camera.aspect > 1;
-  return { strip: onTable(small() ? .45 : .5, small() ? .8 : .62, st).setY(.06),
-    pile: onTable(wide ? .7 : .84, wide ? -.08 : -.18, st), // portrait: half off the side edges, clear of the caption
-    rest: onTable(wide ? -.72 : -.86, wide ? .02 : -.12, st).setY(PUFF + .05) };
+  return { strip: onTable(small() ? .6 : .46, small() ? .02 : 0, st).setY(.06), // on the mat in front of the showcase
+    pile: onTable(wide ? .66 : .84, wide ? -.4 : -.18, st), // portrait: half off the side edges, clear of the caption
+    rest: onTable(wide ? -.68 : -.86, wide ? -.3 : -.12, st).setY(PUFF + .05) };
 }
 function rip(run) {
   run.stage = 'extract';
@@ -665,16 +669,25 @@ function celebrate(run, i, t) {
 }
 // Portrait and phones look almost straight down: at the landscape pitch a 3–4 row grid keystones, the outer cards lean out and the
 // back rows shrink, so the rows read as slanted and each price tag lands on the card below it. The rows also leave a tag's height.
+// Wide screens keep the counter in every shot: what's laid out on the mat goes to its back edge, right in front of the showcase
+// (as the idle stacks do), and the shot keeps the showcase's front glass up to the slabs' middle in its top band, so the spread
+// stays on the counter the pack came from instead of cutting to bare rubber. Phones keep their near top-down shots (R17).
+const roomy = () => camera.aspect >= 1.15 && !small();
+const BACK = MZ - MH / 2 + 1.5; // 1.5 cm inside the mat's far edge
+const SHOWCASE = () => new V3(SX, 2.2 + 7, SZ + SD / 2);
 function gridOf(n) {
-  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), tall = camera.aspect < 1.15 || small(); // a phone whose summary squeezed the scene wide still gets the phone shot
+  const cols = camera.aspect >= 1.15 ? 6 : camera.aspect >= .78 ? 4 : 3, rows = Math.ceil(n / cols), tall = !roomy(); // a phone whose summary squeezed the scene wide still gets the phone shot
   const gx = CW + .7, gz = CH + (tall ? 2.6 : 1.6), p = tall ? SPREAD_PITCH_TALL : SPREAD_PITCH;
-  const pos = [];
+  const z0 = tall ? -.6 : BACK + CH / 2 + (rows - 1) / 2 * gz, pos = [], pts = [];
   for (let k = 0; k < n; k++) {
-    const r = Math.floor(k / cols), inRow = Math.min(cols, n - r * cols), c = k - r * cols;
-    pos.push(new V3((c - (inRow - 1) / 2) * gx, .06, (r - (rows - 1) / 2) * gz - .6));
+    const r = Math.floor(k / cols), inRow = Math.min(cols, n - r * cols), c = k - r * cols, at = new V3((c - (inRow - 1) / 2) * gx, .06, (r - (rows - 1) / 2) * gz + z0);
+    pos.push(at);
+    for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * CW / 2, 0, dz * CH / 2)));
+    pts.push(at.clone().add(new V3(0, 0, CH / 2 + 1.6))); // its price tag
   }
-  const w = cols * gx, h = rows * gz;
-  return { pos, cam: { t: new V3(0, 0, .8), p, d: fit(w * 1.02, h * Math.sin(p) * 1.08 + 4) } };
+  if (tall) { const w = cols * gx, h = rows * gz; return { pos, cam: { t: new V3(0, 0, .8), p, d: fit(w * 1.02, h * Math.sin(p) * 1.08 + 4) } }; }
+  pts.push(SHOWCASE());
+  return { pos, cam: frameOn(pts, new V3(0, 0, z0), p, .94, -.8, .98) };
 }
 async function toSpread(run) {
   if (run.stage === 'spread') return;
@@ -753,35 +766,42 @@ const faceDown = q => q.clone().multiply(qY(Math.PI));
 function packGrid(n, jit) {
   const cols = Math.min(camera.aspect < .8 ? 4 : 5, n), rows = Math.ceil(n / cols); // portrait: 4-4-2, bigger packs
   const gx = cols > 1 ? clamp((camera.aspect * 37 - PW) / (cols - 1), 4.4, PW + 1.2) : 0, over = gx < PW + .3;
-  const gz = over ? PH * .74 : PH + 1.5, front = FAN_Z - CH / 2 - 2 - PH / 2, zc = front - (rows - 1) / 2 * gz; // front row 2 cm behind the fan; crowded rows shingle
+  const gz = over ? PH * .74 : PH + 1.5, wide = roomy(), front = wide ? BACK + PH / 2 + (rows - 1) * gz : FAN_Z - CH / 2 - 2 - PH / 2, zc = front - (rows - 1) / 2 * gz; // phones: front row 2 cm behind the fan; crowded rows shingle
   const pos = [], col = [], js = over ? .5 : 1.1;
   for (let k = 0; k < n; k++) { // dealt by hand: not quite on the grid
     const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols);
     pos.push(new V3((c - (inRow - 1) / 2) * gx + jit[k][0] * js, PUFF + .05 + (over ? c * .45 + r * .55 : 0), front - (rows - 1 - r) * gz + jit[k][1] * js)); col.push(c);
   }
+  if (wide) {
+    const pts = [SHOWCASE()];
+    for (const at of pos) for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * PW / 2, 0, dz * PH / 2)));
+    return { pos, col, cols, cam: frameOn(pts, new V3(0, 0, zc), SPREAD_PITCH, .94, -.8, .98) };
+  }
   const w = (cols - 1) * gx + PW, h = (rows - 1) * gz + PH;
   const p = BATCH_PITCH + .1, box = [w * 1.12, h * Math.sin(p) * 1.12 + 3]; // a little more top-down than the fan: the mat's far edge stays out of shot
-  return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p, d: fit(...box), box } };
+  return { pos, col, cols, cam: { t: new V3(0, 0, zc + 1), p, d: fit(...box) } };
 }
 // The fan: an arc whose pivot is toward the player, cheapest on the left, the best on top at the right. Few picks lie
 // side by side; many overlap, the fan never gets wider than the view. Behind it the np emptied packs lie flattened in one
 // shingled row as wide as the fan, and the shot frames both: the wrappers stay on the mat instead of off its top edge.
 function fanOf(n, np) {
-  const tall = camera.aspect < .8, wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, (tall ? 32 : 46) * wide); // phones: overlap sooner, bigger cards
+  const tall = camera.aspect < .8, room = roomy(), wide = clamp(camera.aspect / 1.25, .45, 1), avail = Math.min(n * (CW + .8) - .8, (tall ? 32 : 46) * wide); // phones: overlap sooner, bigger cards
   const sp = n > 1 ? 2 * Math.asin(clamp((avail - CW) / (2 * FAN_R), 0, 1)) : 0, poses = [];
+  const fz = room ? BACK + PH + 1.4 + CH / 2 : FAN_Z; // wide: the wrappers' row at the mat's far edge, the fan just in front of it
   for (let i = 0; i < n; i++) {
     const a = n > 1 ? (i / (n - 1) - .5) * sp : 0;
-    poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, FAN_Z + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
+    poses.push({ p: new V3(Math.sin(a) * FAN_R, .06 + i * .03, fz + FAN_R * (1 - Math.cos(a))), q: flatQ(-a) });
   }
   const tight = n > 1 && 2 * FAN_R * Math.sin(sp / (n - 1) / 2) < CW + .3;
   const sag = FAN_R * (1 - Math.cos(sp / 2)), W = Math.max(avail, 3 * CW); // one or two picks: framed as if three, so the wrappers don't loom
-  const dx = np > 1 ? Math.min(PW + .6, (W - PW) / (np - 1)) : 0, zw = FAN_Z - CH / 2 - 1.4 - PH / 2, wrap = [];
+  const dx = np > 1 ? Math.min(PW + .6, (W - PW) / (np - 1)) : 0, zw = fz - CH / 2 - 1.4 - PH / 2, wrap = [];
   for (let k = 0; k < np; k++) wrap.push(new V3((k - (np - 1) / 2) * dx, .1 + k * .12, zw)); // each a little above the last: shingles
   // the shot: every card's corners and the price tag under it, and the wrappers' corners; the bottom kept clear for the caption
   const pts = [], corner = (P, x, y) => pts.push(new V3(x, y, 0).applyQuaternion(P.q).add(P.p));
   for (const P of poses) { for (const [x, y] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) corner(P, x * CW / 2, y * CH / 2); corner(P, 0, -CH / 2 - 2); }
   for (const w of wrap) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(w.clone().add(new V3(x * PW / 2, 0, z * PH / 2)));
-  return { poses, tight, wrap, pts, cam: frameOn(pts, new V3(0, 0, 0), 1.08, .94, tall ? -.66 : -.74, .92) };
+  if (room) pts.push(SHOWCASE().setY(2.2 + 2)); // only the showcase's foot: the fan's picks are the point, they stay big
+  return { poses, tight, wrap, pts, cam: frameOn(pts, new V3(0, 0, fz), room ? SPREAD_PITCH : 1.08, .94, tall ? -.66 : -.74, room ? .98 : .92) };
 }
 function buildBatch(set, packs, picks) {
   const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]);
@@ -919,7 +939,7 @@ async function batchSpread(run) {
 // the label has the count), one pack when it's out, in the lamp's shadow when it can't be opened. Labels are mat.ts's buttons
 // (.s3-shelf, index-aligned with the items), placed under each stack every frame. Pointing at a stack lifts its top pack;
 // tapping it calls onPick(k). The pack that gets opened rises from its stack into the hand (enter / enterBatch).
-const SHELF_MAX = 12, SHELF_PITCH = .74, SHELF_BACK = 25.5, SGX = PW + 2.8, LIFT = 1.1;
+const SHELF_MAX = 12, SHELF_PITCH = PITCH, SHELF_BACK = 25.5, SGX = PW + 2.8, LIFT = 1.1;
 // The column count that shows the packs biggest at this aspect; item 0 front left. The packs fill the lower part of the shot;
 // the top shows the back of the counter (showcase, binder), so the table reads as a place and not a black box.
 function shelfGrid(n) {
@@ -1156,7 +1176,7 @@ function resize() {
     const set = st => { cam.t.copy(st.t); cam.d = st.d; };
     if (R.shelf) set(R.cam = shelfGrid(R.items.length).cam);
     else if (R.batch && R.stage === 'cards') set(R.shot = (R.fan = fanOf(R.n, R.packs.length)).cam);
-    else if (R.batch) { const st = R.grid.cam; st.d = fit(...st.box); cam.d = st.d; }
+    else if (R.batch) set(packGrid(R.packs.length, R.jit).cam);
     else if (R.stage === 'pack') cam.d = stages().pack.d; else if (R.stage === 'cards') cam.d = stages().reveal.d;
   }
   relay = performance.now() + 160; wake(400); // and 160 ms after the last resize, lay the table out again for the new shape
@@ -1358,7 +1378,7 @@ function init() {
 
   const hemi = new T.HemisphereLight(css('--lamp-fill'), css('--mat'), .5);
   const key = new T.SpotLight(css('--lamp'), 1.6, 0, .5, .9, 0);
-  key.position.set(-12, 46, 22); key.target.position.copy(FOCUS()).setY(3);
+  key.position.set(-12, 46, 22); key.target.position.copy(HOLD()); // the lamp is on what's in the hand; the mat under it stays in the cone
   key.castShadow = true; key.shadow.mapSize.setScalar(small() ? 1024 : 2048); key.shadow.bias = -.0006;
   key.shadow.radius = 9; key.shadow.blurSamples = 16; key.shadow.intensity = .8;
   key.shadow.camera.near = 20; key.shadow.camera.far = 120;
@@ -1367,7 +1387,7 @@ function init() {
   scene.add(hemi, key, key.target, rim, glow);
   L = { hemi, key, rim, glow };
 
-  hand = new T.Group(); hand.position.copy(FOCUS()); hand.lookAt(FOCUS().add(new V3(0, Math.sin(PITCH), Math.cos(PITCH))));
+  hand = new T.Group(); hand.position.copy(HOLD()); hand.lookAt(HOLD().add(new V3(0, Math.sin(PITCH), Math.cos(PITCH))));
   grip = new T.Group(); hand.add(grip); scene.add(hand);
 
   const cardGeo = new T.ExtrudeGeometry(roundRect(CW, CH, CR), { depth: CT, bevelEnabled: false, curveSegments: 6 }); cardGeo.translate(0, 0, -CT / 2);
