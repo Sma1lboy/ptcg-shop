@@ -8,7 +8,7 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money } from './common.ts';
 import { SETS } from '../sets.ts';
 import { hold } from './mat.ts';
-import { SCENES, NAMES, END, BIG_PULL, sceneFor, slipFor, SLIP_NOTES, SLIP_LOAN, type Ctx, type Seen, type Who } from '../story.ts';
+import { SCENES, NAMES, END, BIG_PULL, sceneFor, slipFor, SLIP_NOTES, SLIP_LOAN, SLIP_LATE, type Ctx, type Seen, type Who } from '../story.ts';
 import { bill, inDebt, debtBeat } from '../debt.ts';
 import { printSlip } from './notice.ts';
 
@@ -77,13 +77,16 @@ function draw() {
 }
 
 // milestones that need no debt: the first 大货 pulled, and each set newly unlocked (baseline taken at start, so old saves don't replay)
-let forced = 0; // a forced loan just settled the bill that is about to be paid (loan_taken comes right before bill_paid)
+// forced: a forced loan just settled the bill that is about to be paid (loan_taken comes right before bill_paid);
+// missedWeek: the week whose bill went overdue, so its bill_paid is late
+let forced = 0, missedWeek = 0;
 function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
-  const b = debtBeat(ev, G), id = sceneFor(b, seen);
+  const b = debtBeat(ev, G), late = b?.kind === 'paid' && !!b.week && b.week === missedWeek, id = sceneFor(b, seen, late);
+  if (b?.kind === 'missed') missedWeek = b.week ?? 0;
   if (b?.kind === 'loan' && b.forced) forced = b.amount ?? 0;
   else if (b) {
-    if (slipFor(b, seen)) printSlip({ week: b.week ?? 0, amount: b.amount ?? 0, borrowed: forced, note: forced ? SLIP_LOAN : SLIP_NOTES[(b.week ?? 0) % SLIP_NOTES.length] });
-    forced = 0;
+    if (slipFor(b, seen, late)) printSlip({ week: b.week ?? 0, amount: b.amount ?? 0, borrowed: forced, note: forced ? SLIP_LOAN : late ? SLIP_LATE : SLIP_NOTES[(b.week ?? 0) % SLIP_NOTES.length] });
+    if (b.kind === 'paid') forced = 0;
   }
   if (id === 'branch') { seen.sets = unlockedSets().length; save(); } // the new shop relocks the later sets: each unlock plays again
   if (b && id) play(id, b.kind === 'story' ? { ...storyCtx(), ...(b.set ? { set: G.setById(b.set).name, fame: G.HAND_FAME } : {}) } : { ...billCtx(), ...(b.amount != null ? { bill: money(b.amount) } : {}), ...(b.week ? { week: b.week } : {}) }, b.key || undefined);

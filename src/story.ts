@@ -155,16 +155,18 @@ export const BIG_PULL = 100; // a card at least this much (market) is the first 
 
 export type Seen = Record<string, number>;
 // Which scene a debt beat plays, or null (already played, or nothing to say). Marks nothing: the ui marks `key` when it plays.
-// 'due' has no scene: a covered week is a slip, a short one is 'missed' (emitted right after it).
-export function sceneFor(b: DebtBeat | null, seen: Seen): string | null {
+// 'due' has no scene: a covered week is a slip, a short one is 'missed' (emitted right after it). late = this bill was missed first
+// (paid in the grace, or by the forced loan): never 「准时」, so it is a slip and the first on-time bill still gets paid1.
+export function sceneFor(b: DebtBeat | null, seen: Seen, late = false): string | null {
   if (!b || (b.key && seen[b.key])) return null;
   if (b.kind === 'story') return b.id && SCENES[b.id] ? b.id : null;
-  if (b.kind === 'paid') return seen.paid1 ? null : 'paid1';
+  if (b.kind === 'paid') return seen.paid1 || late ? null : 'paid1';
   if (b.kind === 'due') return null;
   return b.kind;
 }
 // A paid bill after the first one: a receipt in the printer slot instead of a scene
-export const slipFor = (b: DebtBeat | null, seen: Seen) => !!b && b.kind === 'paid' && !!seen.paid1 && !(b.key && seen[b.key]);
-// the line 九姐 (or 阿豆) scribbles on it, by week; a bill settled with a forced loan gets no pleasantry
+export const slipFor = (b: DebtBeat | null, seen: Seen, late = false) => !!b && b.kind === 'paid' && (!!seen.paid1 || late) && !(b.key && seen[b.key]);
+// the line 九姐 (or 阿豆) scribbles on it, by week; a bill paid late (SLIP_LATE) or with a forced loan gets no pleasantry
 export const SLIP_NOTES = ['收到。下周见。', '一张不少。九姐说「还行」。——阿豆', '准时。准时的人活得久。', '货架别空着。下周见。'];
 export const SLIP_LOAN = '宽限到了，差的记在借款上。';
+export const SLIP_LATE = '晚了，但凑齐了。下周别让我等。';

@@ -694,6 +694,14 @@ console.log('ok luck percentile');
   for (let i = 0; i <= W.GRACE; i += 20) { T += 20e3; W.tick(); } // the grace runs out with the till still empty
   assert.deepEqual(shown.slice(0, 3), ['missed', 'loan', 'forced'], `short week: one scene, then the grace runs out into a forced loan (${shown})`);
   assert.equal(shown[3], 'slip', `...and the bill it settled prints a receipt (${shown})`);
+  // a fresh save whose first bill is short: after the hammer, 九姐 never says 「准时」 — a late receipt, and paid1 waits for an on-time week
+  T += 1e9; const F = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), fs = {}, fShown = []; let missedW = 0;
+  F.on(ev => { const b = D.debtBeat(ev, F); if (!b) return; if (b.kind === 'missed') missedW = b.week; const late = b.kind === 'paid' && b.week === missedW, id = ST.sceneFor(b, fs, late);
+    if (id) { fShown.push(id); fs[id] = 1; if (b.key) fs[b.key] = 1; } else if (ST.slipFor(b, fs, late)) fShown.push('slip'); });
+  const fTicks = s => { for (let i = 0; i < s; i += 20) { T += 20e3; F.tick(); } };
+  F.state.cash = 0; F.state.shelves.length = 0; F.state.stock = { sv08: 5 }; fTicks(F.WEEK + F.GRACE + 20);
+  assert.ok(fShown.includes('missed') && fShown.includes('slip') && !fShown.includes('paid1'), `a late first bill: ${fShown}`);
+  F.state.cash = 1e5; fShown.length = 0; fTicks(F.WEEK); assert.deepEqual(fShown, ['paid1'], 'the first on-time bill still gets 九姐 in person');
   console.log('ok 每二十分钟: a covered bill is a receipt, a short one one scene, the lapse a forced loan + receipt');
 }
 

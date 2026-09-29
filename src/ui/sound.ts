@@ -41,7 +41,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
 // ---------- the story: each scene's bed, and cues found in the line's text (so edits to the script keep their sounds) ----------
 const CUES: [RegExp, keyof typeof GAP, () => void][] = [
   [/风铃/, 'chime', FX.chime], [/计算器/, 'calc', () => FX.calc(2)], [/锤子/, 'hammer', FX.hammer], [/卷帘门/, 'shutter', FX.shutter],
-  [/灯管/, 'flicker', FX.flicker], [/麻袋/, 'sack', FX.sack], [/钞票/, 'count', FX.count], [/收银机/, 'till', FX.till], [/敲了/, 'knock', FX.knock],
+  [/灯管/, 'flicker', FX.flicker], [/麻袋/, 'sack', FX.sack], [/钞票/, 'count', FX.count], [/收银机叮|叮了一声/, 'till', FX.till], [/敲了/, 'knock', FX.knock],
 ];
 let walked = ''; // the scene 九姐 last walked into
 interface Line { id: string; scene: number; bg: FX.Scene; who: string; text: string }
