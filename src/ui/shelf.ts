@@ -7,6 +7,7 @@
 //    step for the set's state is the primary button: no stock → buy, stock but on no shelf → shelve, else → open.
 import { html, render, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
+import { keyed } from 'lit-html/directives/keyed.js';
 import type { Shelf } from '../game.ts';
 import { SETS, LOOK } from '../sets.ts';
 import * as S from '../sim.ts';
@@ -28,7 +29,50 @@ const look = (id: string) => { // same width as the 2D mat asks for, so each set
   return (l ? `--c0:${l.c[0]};--c1:${l.c[1]};--c2:${l.c[2]};--art:url("${imgUrl({ set: id, n: l.chase })}");` : '') + (f ? `--front:url("${f}");` : '');
 };
 
-function rack(r: Shelf, i: number, boards: number, deep: number) {
+// 卖出落在墙上: every render (once a second, on every page, mid-reveal too) compares each shelf with what it held last time. Packs
+// gone from a shelf that still holds the same set were sold (sellPacks drains a set's shelves in order, so the drop says which
+// shelf; restocking only adds): the packs lift off the boards and a till chip rises from the rail, 「卖出 3 包 +$24」, or
+// 「倒爷扫走 12 包」 when a flipper swept that set since. A sold-out shelf whose set lost buyers since says so: 「2 位空手走」, and
+// its 卖空了 sign shakes. One beat per shelf per render, gone after LIVE: at 85 walk-ins a minute over seven shelves that is
+// a chip every few seconds per shelf. The first render only takes the baseline.
+const LIVE = 2400;
+type Beat = { k: number; at: number; n: number; gain: number; flip: boolean; lost: number; faces: number[] };
+let seen: { id: string | null; qty: number }[] | null = null, missSeen: Record<string, number> = {}, lastAt = 0, beatN = 0;
+const beats: (Beat | undefined)[] = [];
+function listen(boards: number) {
+  const s = G.state, now = Date.now(), per = G.DEPTH_STEP / FACES, shelves = G.shelves();
+  const flips = new Set(s.recent.filter(v => v.at > lastAt && v.t === 'flipper' && v.r === 'sold' && v.n).map(v => v.set));
+  lastAt = s.recent[0]?.at ?? lastAt;
+  const shaken = new Set<string>();
+  shelves.forEach((r, i) => {
+    const was = seen?.[i], id = r.id; if (!was || !id || was.id !== id) return;
+    const n = Math.max(0, was.qty - r.qty), lost = !r.qty && !shaken.has(id) ? G.missed(id) - (missSeen[id] ?? G.missed(id)) : 0;
+    if (!r.qty) shaken.add(id); // a set on several empty shelves: said once
+    if (!n && lost <= 0) return;
+    const faces = Array.from({ length: boards * FACES }, (_, j) => j).filter(j => row(was.qty - j * per, per) !== row(r.qty - j * per, per));
+    beats[i] = { k: ++beatN, at: now, n, gain: n * G.ask(id), flip: flips.has(id), lost: Math.max(0, lost), faces };
+  });
+  seen = shelves.map(r => ({ id: r.id, qty: r.qty }));
+  missSeen = Object.fromEntries(SETS.map(x => [x.id, G.missed(x.id)]));
+}
+const beat = (i: number) => { const b = beats[i]; return b && Date.now() - b.at < LIVE ? b : undefined; };
+
+// A set customers keep asking for that is on no shelf, while every shelf is taken: the shelf whose set sold to the fewest buyers
+// in the same window says so and offers the swap (G.place, what its <select> does). Only when more came for the missing set
+// than bought from that shelf, so a busy wall doesn't nag.
+function swapHint(): { i: number; id: string; miss: number; buyers: number } | null {
+  const racks = G.shelves(); if (racks.some(r => !r.id)) return null;
+  const want = SETS.filter(x => G.unlocked(x.id) && !racks.some(r => r.id === x.id)).map(x => ({ id: x.id, miss: G.missed(x.id) })).sort((a, b) => b.miss - a.miss)[0];
+  if (!want?.miss) return null;
+  const since = Date.now() - G.MISS_WINDOW * 1000, buyers = (id: string) => G.state.recent.filter(v => v.at > since && v.r === 'sold' && v.set === id && v.n && !v.card && v.t !== 'seeker').length / racks.filter(r => r.id === id).length;
+  const idle = racks.map((r, i) => ({ i, b: buyers(r.id!) })).sort((a, b) => a.b - b.b)[0];
+  return want.miss > idle.b ? { i: idle.i, id: want.id, miss: want.miss, buyers: Math.round(idle.b) } : null;
+}
+// 顾客 rows (goals.ts) light their set's shelves while pointed at (a set on no shelf: the shelf swapHint offers for it)
+let lit: string | null = null;
+export function point(id: string | null) { if (lit !== id) { lit = id; draw(); } }
+
+function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnType<typeof swapHint>) {
   // flippers who swept this set in the 顾客 window (the same one the 没买到 count uses): the player sees the packs gone and why
   const s = G.state, id = r.id, since = Date.now() - G.MISS_WINDOW * 1000, swept = id ? s.recent.filter(v => v.at > since && v.t === 'flipper' && v.r === 'sold' && v.set === id && v.n) : [];
   const per = G.DEPTH_STEP / FACES, miss = id ? G.missed(id) : 0;
@@ -38,14 +82,18 @@ function rack(r: Shelf, i: number, boards: number, deep: number) {
   const full = !!id && (s.stock[id] || 0) + r.qty > G.WAREHOUSE;
   // Options bind .selected through live(): after a swap the same template re-renders, and lit's cache would skip re-selecting
   // the current set, leaving the option the player clicked (now some other set) shown as chosen.
-  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
+  const bt = beat(i), lift = (j: number) => (bt?.faces.includes(j) ? keyed(bt.k, html`<i class="pk lift"></i>`) : nothing);
+  const sw = swap?.i === i ? swap : null, canSwap = !!sw && (!!s.stock[sw.id] || clerk) && !full;
+  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'} ${lit && (id === lit || sw?.id === lit) ? 'lit' : ''}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
       <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>
       <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
-        html`<i class="${row(r.qty - ((boards - 1 - b) * FACES + f) * per, per)}"></i>`)}</div>`)}${id && !r.qty ? html`<span class="r-out">卖空了</span>` : nothing}</div>
+        html`<i class="${row(r.qty - ((boards - 1 - b) * FACES + f) * per, per)}">${lift((boards - 1 - b) * FACES + f)}</i>`)}</div>`)}${id && !r.qty ? keyed(bt?.lost ? bt.k : 0, html`<span class="r-out ${bt?.lost ? 'shake' : ''}">卖空了</span>`) : nothing}
+        ${bt ? keyed(bt.k, html`<span class="r-beat ${bt.n ? '' : 'lost'}">${bt.n ? html`${bt.flip ? '倒爷扫走' : '卖出'} ${bt.n} 包 <em>+${money(bt.gain)}</em>` : `${bt.lost} 位空手走`}</span>`) : nothing}</div>
       <p class="r-rail">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>0</b>/${deep}`}</span>` : html`<span>放 ${deep} 包</span>`}</p>
       ${swept.length ? html`<p class="r-miss" title="倒爷只收便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就整架收走，按标价付钱；收过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再收这个系列">倒爷整架收走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
       ${miss ? html`<p class="r-miss" title="${lately()}，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${lately()} <b>${miss}</b> 位没买到</p>` : nothing}
+      ${sw ? html`<p class="r-miss r-swap" title="${lately()}：来买${G.setById(sw.id).name}却不在任何货架上的拆包玩家 ${sw.miss} 位；这个货架的系列买走的只有 ${sw.buyers} 位">${G.setById(sw.id).name} <b>${sw.miss} 位</b>没找到 · 这架只卖给 ${sw.buyers} 位${canSwap ? html` <button type="button" @click=${() => G.place(i, sw.id)}>换成${G.setById(sw.id).name}</button>` : '：在下面换系列'}</p>` : nothing}
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
           ${id ? html`<option value="${id}" .selected=${live(true)}>${G.setById(id).name}</option>` : html`<option value="-" .selected=${live(true)} disabled>摆上…</option>`}
           ${others.map(opt)}
@@ -78,12 +126,12 @@ function clerkNote() {
 
 function wall() {
   const shelves = G.shelves(), deep = G.depth(), boards = Math.ceil(deep / G.DEPTH_STEP), cash = G.state.cash;
-  const nr = G.upgradeCost('racks'), nd = G.upgradeCost('depth');
+  const nr = G.upgradeCost('racks'), nd = G.upgradeCost('depth'), swap = swapHint();
   return html`<div class="wall">
       <p class="wall-h"><b>货架 ${shelves.length}/${G.RACK_BASE + G.UPGRADES.racks.costs.length}</b><span class="muted">每个 ${boards} 层、放 ${deep} 包，摆一个系列</span>
         <span class="wall-up">${nd != null ? html`<button type="button" data-act="up" data-k="depth" ?disabled=${cash < nd}>每个加一层 ${money(nd)}</button>` : nothing}</span></p>
       ${clerkNote()}
-      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep))}${nr != null ? ghost(nr) : nothing}</ol>
+      <ol class="racks">${shelves.map((r, i) => rack(r, i, boards, deep, swap))}${nr != null ? ghost(nr) : nothing}</ol>
       <p class="wall-note">想买的系列不在架上，拆包玩家一半改买别的，一半直接走。</p>
     </div>`;
 }
@@ -106,6 +154,7 @@ export function renderShelf() {
 }
 
 function draw() {
+  listen(Math.ceil(G.depth() / G.DEPTH_STEP));
   const s = G.state, shelves = G.shelves(), deep = G.depth(), free = shelves.some(r => !r.id);
   render(html`${wall()}<div class="shelf-head" aria-hidden="true"><span>系列 · 行情</span><span>仓库</span><span>货架</span><span>标价</span><span>开包</span></div>${SETS.map(set => {
     const w = G.wholesale(set.id), ev = S.packEV(S.rateKey(set.id, G.luckMult())), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);

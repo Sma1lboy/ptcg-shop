@@ -283,7 +283,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; gap: 3px; margin-inline: -8px; padding: 12px 9px 5px;
   background: linear-gradient(to top, color-mix(in oklab, var(--trim) 45%, var(--panel)) 0 6px, transparent 6px); border-bottom: 7px solid var(--trim);
   border-image: linear-gradient(to bottom, rgba(174, 184, 200, .75) 0 1px, color-mix(in oklab, var(--trim) 78%, white) 1px 3px, var(--trim) 3px 5px, #16244A 5px) 0 0 100% / 0 0 7px; box-shadow: 0 5px 6px -2px rgba(4, 8, 14, .35); }
-.board i { aspect-ratio: 5 / 8.4; }
+.board i { position: relative; aspect-ratio: 5 / 8.4; }
 /* a pack face-out, painted like the 3D pack (table3d.js drawFront, colours from sets.ts LOOK): the foil gradient, the set logo up top,
    the chase card's art in the middle feathered into the foil, the darker foot, heat-seal crimps. Without the look (unknown set) it
    falls back to plain foil. d1–d3: that many packs of the row behind it, peeking over its top */
@@ -315,6 +315,23 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .rack.ghost .r-sign { border-bottom: 0; font-weight: 700; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height */
 .rack.ghost .board { border-bottom: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; }
 .rack.ghost .r-ctl { margin-top: 0; } .rack.ghost .r-ctl button { flex: 1; }
+/* 卖出落在墙上 (shelf.ts listen): the packs a customer took lift off the board and fade; a chip from the till (the top bar's .delta:
+   the dark display glass, the money in --mat-gain as the cash window's delta) rises from the price rail and fades. A sold-out shelf
+   that lost a buyer shakes its sign once and the chip says how many walked out, in the display's muted ink (it is news, not money).
+   Pointed at from the 顾客 panel, a shelf is lit by the shop lamp. Reduced motion: the chip stands still for its 2.4 s, no lift */
+.board i .lift { position: absolute; inset: 0; z-index: 1; pointer-events: none; animation: lift .9s cubic-bezier(.3, .7, .4, 1) forwards; }
+@keyframes lift { 30% { opacity: 1; transform: translateY(-14%) rotate(-3deg); } to { opacity: 0; transform: translateY(-46%) rotate(-5deg); } }
+.r-beat { position: absolute; right: 6px; bottom: 6px; z-index: 2; padding: 1px 7px; border-radius: 3px; background: var(--hud); box-shadow: 0 2px 6px rgba(4, 8, 14, .4);
+  color: var(--hud-ink); font: 600 var(--fs-cap)/1.5 var(--font-body); white-space: nowrap; pointer-events: none; animation: beat 2.4s ease-out forwards; }
+.r-beat em { font: 700 var(--fs-body)/1 var(--font-tag); font-style: normal; color: var(--mat-gain); }
+.r-beat.lost { color: var(--hud-muted); }
+@keyframes beat { from { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } to { opacity: 0; transform: translateY(-18px); } }
+.r-out.shake { animation: shake .5s ease-out; }
+@keyframes shake { 20% { rotate: -9deg; } 45% { rotate: 1deg; } 70% { rotate: -6deg; } }
+.rack.lit .r-bay { box-shadow: inset 0 10px 12px -8px rgba(4, 8, 14, .45), 0 0 0 2px var(--lamp-glow), 0 0 18px 4px var(--lamp-glow); }
+.rack.lit .r-sign { filter: brightness(1.25); }
+.r-swap button { margin-left: 4px; padding: 2px 10px; min-height: 28px; font-size: var(--fs-cap); }
+@media (prefers-reduced-motion: reduce) { .board i .lift { display: none; } .r-beat { animation: none; } }
 .r-miss { margin: 6px 6px 0; font-size: var(--fs-cap); color: var(--muted); } .r-miss b { color: var(--ink); font-weight: 600; }
 .r-miss + .r-miss { margin-top: 2px; }
 .r-ctl { display: flex; gap: 6px; margin-top: auto; padding: 8px 6px 0; }
@@ -613,6 +630,16 @@ button:disabled { cursor: not-allowed; }
 :is(.v-info, .v-say) b { color: var(--ink); font-weight: 600; }
 :is(.v-info, .v-say) .mk { margin-right: 3px; vertical-align: -1px; }
 .v-ctl button { flex: none; }
+/* a card sold out of its cube (case.ts place): the picture lifts off the stand and fades under a flare of the cube's own lamp, and the
+   till chip of the shelf wall (.r-beat) rises from the cube's foot, over whatever stands there now. Reduced motion: chip only */
+.v-gone { grid-area: 1 / 1; z-index: 2; display: grid; place-items: end center; width: 100%; height: 100%; padding-bottom: 4px; pointer-events: none; animation: gone 1.1s ease-in forwards; }
+.v-gone .cf { width: 96px; }
+.v-gone::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 70% 55% at 50% 30%, var(--lamp-glow), transparent 70%); animation: flare 1.1s ease-out forwards; }
+@keyframes gone { 25% { opacity: 1; transform: translateY(-8px); } to { opacity: 0; transform: translateY(-40px) scale(.94); } }
+@keyframes flare { from { opacity: 0; } 20% { opacity: 1; } to { opacity: 0; } }
+.v-beat { bottom: 8px; left: 50%; right: auto; translate: -50% 0; z-index: 4; }
+.v-info .v-miss { grid-column: 1 / -1; }
+@media (prefers-reduced-motion: reduce) { .v-gone { display: none; } }
 .v-slot.ghost .v-cube { border: 2px dashed var(--line-strong); background: none; box-shadow: none; }
 .v-slot.ghost .v-cube::after { display: none; } .v-slot.ghost .v-empty { color: var(--muted); }
 .v-slot.ghost .v-ctl { padding-top: 0; } .v-slot.ghost .v-ctl button { flex: 1; }
