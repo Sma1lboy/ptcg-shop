@@ -371,10 +371,11 @@ async function loadFace(c) {
   }
   const t = await svgTex(stockSVG(c.name)); t.userData.stock = true; return t;
 }
+// uScan starts at 0: until the scan is in, the face is the blank placeholder, which has no print for the foil to read.
 function cardMesh(c) {
   const [kind, foil] = foilOf(c), u = shared.u;
   const cap = new T.ShaderMaterial({ vertexShader: CARD_VS, fragmentShader: CARD_FS,
-    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uScan: { value: 1 }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
+    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uScan: { value: 0 }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
   const m = new T.Mesh(shared.cardGeo, [cap, shared.edge]); m.castShadow = true;
   m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; cap.uniforms.uScan.value = t.userData.stock ? 0 : 1; m.userData.face = t; });
   return m;
@@ -382,6 +383,8 @@ function cardMesh(c) {
 // Sized in CSS pixels, not cm, like the 2D mat's 26 px glow (DESIGN.md「卡面」): d over its own screen derivative is the distance
 // from the card's edge in device pixels, uDpr takes it to CSS pixels. So a small card in a ten-pack spread gets the same thin rim
 // as the one held up close, instead of a glow a third of its width (a phone's small cards get it narrower still). The world fade only keeps it off the plane's edge.
+// dFdx runs in highp on every GPU that can run the scene: three ≥ r163 is WebGL2-only, GLES 3.0 requires highp in fragment
+// shaders, and ShaderMaterial gets three's `precision highp float` prefix (renderer.capabilities.precision).
 const HALO_FS = `uniform vec3 uCol; uniform float uAmt, uDpr; varying vec2 vP;
   float sdr(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
   void main() { float d = sdr(vP, vec2(${CW / 2}, ${CH / 2}), ${CR}), wpx = length(vec2(dFdx(d), dFdy(d))) * uDpr + 1e-5,
