@@ -282,7 +282,7 @@ const CARD_VS = `
 // hand light, not the room's: away from the lamp's cone and under the dimmed show moods it still shows the printed colours.
 // Foil only ADDS reflection (a white sheen that sweeps across as the card tilts, and sparkles); it never tints the print.
 const CARD_FS = `
-  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
+  uniform sampler2D uFace, uBack; uniform float uKind, uFoil, uScan, uTime, uCone0, uCone1, uLit; uniform vec3 uKey, uKeyDir, uKeyCol, uAmb, uWash, uGlowAt;
   varying vec2 vUv; varying float vFront; varying vec3 vN, vP, vR, vU;
   float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
   float vnoise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
@@ -304,9 +304,11 @@ const CARD_FS = `
     float gl = (vUv.x + vUv.y) * 0.5 - 0.5 - ang.x * 1.7 - ang.y * 1.2; // laminate glare sliding across as the card tilts
     col += exp(-gl * gl * 28.0) * 0.06 * shine;
     if (front && uKind > 0.5) {
-      float k = uKind, luma = dot(base, vec3(0.299, 0.587, 0.114));
+      // uScan 0: the scan didn't load and the face is blank stock (card.ts stock()). The 2D face keeps its foil layer over it, so
+      // this one keeps a plain sheen too, but nothing that reads the print (art box, etch ridges, ink roughness, printed patterns).
+      float k = uScan > 0.5 ? uKind : 0.0, luma = dot(base, vec3(0.299, 0.587, 0.114));
       float art = step(0.075, vUv.x) * step(vUv.x, 0.925) * step(0.525, vUv.y) * step(vUv.y, 0.903);
-      float mask = k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
+      float mask = k < 0.5 ? 1.0 : k < 1.5 || (k > 5.5 && k < 6.5) ? 1.0 - art : k < 2.5 ? art : 1.0;
       vec3 rb = vec3(1.0); // white light only: the print keeps its own colours, gold cards included (DESIGN.md「闪面」)
       float tx = 1.0;
       if (k > 3.5 && k < 4.5) tx = 0.45 + 0.8 * vnoise(vUv * vec2(64.0, 90.0)) * vnoise(vUv * vec2(9.0, 12.6) + 3.0);
@@ -316,7 +318,7 @@ const CARD_FS = `
       float spark = step(0.9, h) * smoothstep(0.45, 0.1, length(fract(vUv * vec2(84.0, 118.0)) - 0.5)) * pow(max(0.0, sin(h * 91.0 + ang.x * 38.0 + ang.y * 29.0 + uTime * 0.6)), 40.0);
       float band = vUv.x * 0.7 + vUv.y * 0.9 - 0.8 - ang.x * 1.9 - ang.y * 1.4; // the bright sweep, where the foil catches the light
       float amt = mask * uFoil, sheen = 0.035 + 0.3 * exp(-band * band * 6.0);
-      if (k < 3.5) { // plain foil under ink: where the print is light the foil is a mirror (a tight, bright streak), where the ink
+      if (k > 0.5 && k < 3.5) { // plain foil under ink: where the print is light the foil is a mirror (a tight, bright streak), where the ink
         // is heavy it scatters (a wide, dim wash). Same light either way, only spread differently: the print's colour never moves.
         // Full-card holo is also brushed: fine lengthwise grain breaks its sweep into streaks, so it never reads as reverse foil.
         float rough = 1.0 - dot(texture2D(uFace, vUv, 3.0).rgb, vec3(0.299, 0.587, 0.114)), b = band, gr = 1.0;
@@ -367,14 +369,14 @@ async function loadFace(c) {
     const img = await loadImg(ASSETS.card(c.set, c.n, size));
     if (img) { const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; renderer.initTexture(t); return t; }
   }
-  return svgTex(stockSVG(c.name));
+  const t = await svgTex(stockSVG(c.name)); t.userData.stock = true; return t;
 }
 function cardMesh(c) {
   const [kind, foil] = foilOf(c), u = shared.u;
   const cap = new T.ShaderMaterial({ vertexShader: CARD_VS, fragmentShader: CARD_FS,
-    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
+    uniforms: { uFace: { value: shared.blank }, uBack: u.back, uKind: { value: kind }, uFoil: { value: foil }, uScan: { value: 1 }, uLit: { value: 0 }, uTime: u.time, uKey: u.key, uKeyDir: u.keyDir, uCone0: u.cone0, uCone1: u.cone1, uGlowAt: u.glowAt, uKeyCol: u.keyCol, uAmb: u.amb, uWash: u.wash } });
   const m = new T.Mesh(shared.cardGeo, [cap, shared.edge]); m.castShadow = true;
-  m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; m.userData.face = t; });
+  m.userData.ready = loadFace(c).then(t => { cap.uniforms.uFace.value = t; cap.uniforms.uScan.value = t.userData.stock ? 0 : 1; m.userData.face = t; });
   return m;
 }
 // Sized in CSS pixels, not cm, like the 2D mat's 26 px glow (DESIGN.md「卡面」): d over its own screen derivative is the distance
