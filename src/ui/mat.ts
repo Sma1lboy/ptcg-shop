@@ -7,8 +7,9 @@ import * as FX from '../fx.ts';
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
+import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
-import { mountTable, ENERGY } from '../table3d.js';
+import { mountTable } from '../table3d.js';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -17,27 +18,21 @@ const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '
 interface Mat { mode: 'idle' | 'pack' | 'cards' | 'batch'; set: string; cards: Pull[]; packs: Pull[][]; picks: [number, number][]; up: Set<number>; cur: number; busy?: boolean; finished?: boolean; m3d?: boolean; quiet?: boolean; torn?: boolean }
 let mat = { mode: 'idle' } as Mat;
 
-const capHTML = (c: Pull) => { const r = rar(c); return `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>`; };
-// Basic energy: the type mark the 3D table paints (src/table3d.js ENERGY), as inline SVG.
-function energyHTML(c: Pull) {
-  const e: { col: string; d: string; cut?: string; rot?: number; dot?: number[] } = ENERGY[c.name.slice(2, 3) as keyof typeof ENERGY] ?? ENERGY.钢;
-  return `<span class="energy"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="50" fill="${e.col}"/><g${e.rot ? ` transform="rotate(${e.rot} 50 50)"` : ''}>
-    <path d="${e.d}" fill="#fff"/>${e.cut ? `<path d="${e.cut}" fill="${e.col}"/>` : ''}${e.dot ? `<circle cx="${e.dot[0]}" cy="${e.dot[1]}" r="${e.dot[2]}" fill="#fff"/>` : ''}</g></svg>${esc(c.name)}</span>`;
-}
-// big = the enlarged card on the stage (hi-res, tap to advance); otherwise a tray/grid thumbnail (tap to inspect once face-up).
+// The 3D table's caption line (s3-cap): the printed rarity mark, the rarity's name, the market price.
+const capHTML = (c: Pull) => `${toHTML(mark(c, false))}${rarLabel(c.kind)}<b>${money(c.price)}</b>`;
+// One card on the 2D mat, the shared card face (card.ts) back to back with the card back. big = the card in hand on the stage
+// (hi-res, tap to advance); otherwise a tray thumb or, in a ten-pack spread, a larger one (tap to inspect once face-up).
 function cardHTML(c: Pull, i: number, up: boolean, big?: boolean) {
-  const r = rar(c);
-  const face = c.r === 'E'
-    ? energyHTML(c)
-    : `<img src="${imgUrl(c, big ? 'high' : 'low')}" crossorigin="anonymous" alt="${esc(c.name)}" loading="eager" decoding="async">`;
-  const act = big ? 'advance' : up ? 'peek' : '';
+  const size = big ? 'big' : mat.mode === 'batch' ? 'show' : 'thumb', act = big ? 'advance' : up ? 'peek' : '';
   return `<figure class="slot">
-      <button type="button" class="card t${r.t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
-        <span class="card-in"><span class="back"></span><span class="face">${face}</span></span>
+      <button type="button" class="card t${rar(c).t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
+        <span class="card-in"><span class="back">${BACK()}</span><span class="face">${toHTML(face(c, size))}</span></span>
       </button>
-      <figcaption>${capHTML(c)}</figcaption>
+      <figcaption>${toHTML(cap(c, size))}</figcaption>
     </figure>`;
 }
+let backMarkup = '';
+const BACK = () => (backMarkup ||= toHTML(backFace()));
 
 // Where one pack ranks among simulated packs of the same set, in words a player can quote.
 function rankText(setId: string, v: number) {
