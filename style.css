@@ -197,30 +197,30 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
    lacquer, primary label-yellow (one per group), danger oxide (清空存档 only). States are CSS on the same base: hover lifts it
    under the lamp, pressed sinks 1px and darkens, disabled is the bare dark socket. Without the images the same colours draw it
    (border + fill), so pen / file:// still read as buttons */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
   --face: url(gen/btn-secondary.webp);
   min-height: 34px; padding: 6px 16px 7px; border: 2px solid var(--trim); border-radius: 5px;
   border-image: var(--face) 34 44 38 44 fill / 9px 12px 10px 12px / 0 stretch; background: var(--btn-face) padding-box; color: var(--btn-ink);
   font-size: var(--fs-body); font-weight: 600; line-height: 1.4; letter-spacing: .02em; text-decoration: none; text-shadow: 0 1px 0 rgba(4, 8, 14, .45);
   transition: filter .15s, transform .08s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
 /* pressed: its own base (gen/btn-*-dn.webp) — the key pushed flush into the rim, lower lip gone, the rim's shadow on the face.
    The 1px sink stays underneath, and without the images the darker face alone says "down" */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   --face: url(gen/btn-secondary-dn.webp); border-image-slice: 34 44 34 44 fill; border-image-width: 9px 12px;
   background-color: color-mix(in oklab, var(--btn-face) 82%, black); transform: translateY(1px); filter: none; }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
   --face: url(gen/btn-primary-dn.webp); background-color: color-mix(in oklab, var(--sticker) 90%, black); }
 #reset:active { --face: url(gen/btn-danger-dn.webp); background-color: color-mix(in oklab, var(--danger-face) 85%, black); }
 /* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) .primary {
   --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
 /* danger: the one irreversible button, oxide enamel so it can't pass for a normal key */
 #reset { --face: url(gen/btn-danger.webp); background-color: var(--danger-face); color: var(--danger-ink); }
 /* disabled: the empty socket — no enamel, just the trim, dim print. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) button:disabled {
   filter: grayscale(1) brightness(.78) contrast(.9); opacity: .85; color: var(--btn-ink); font-weight: 500; text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
 
@@ -680,10 +680,12 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button:not(:disabled):is(:hover, :focus-visible) { box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(255, 236, 206, .6), 0 0 14px var(--lamp-glow); }
 .s3-shelf b { font: 900 var(--fs-h)/1.2 var(--font-display); }
 .s3-shelf small { font-size: var(--fs-cap); color: var(--mat-muted); }
+.s3-shelf small span::before { content: ' · '; }
 .s3-shelf button:disabled { cursor: default; } .s3-shelf button:disabled b { color: var(--mat-muted); }
 .scene3d :focus-visible { outline-color: var(--mat-ink); }
 @media (max-width: 779px) { .s3-shelf b { font-size: var(--fs-body); } .s3-shelf button { padding: 2px 4px; }
   .s3-shelf small { max-width: 6.5em; white-space: normal; text-align: center; line-height: 1.25; }
+  .s3-shelf small span { display: block; } .s3-shelf small span::before { content: none; }
   .s3-shelf button:disabled small { display: none; } /* four stacks a row: locked sets keep only their greyed name, or neighbours' notes collide */ }
 
 /* idle mat (ui/mat.ts renderIdle): the warehouse's sealed packs lie on the rubber; the stitched edge is the playmat's hem (same as drawMat in table3d.js) */
@@ -864,7 +866,7 @@ button:disabled { cursor: not-allowed; }
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
   .notice { left: 16px; right: 16px; width: auto; max-width: 340px; margin-inline: auto; }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
@@ -920,4 +922,45 @@ button:disabled { cursor: not-allowed; }
   .ach-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .ach-pop { left: 16px; right: 16px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 12px); width: auto; max-width: 400px; margin-inline: auto; }
   .nav a { padding: 0 2px; }
+}
+
+/* 剧情 (src/ui/story.ts, DESIGN.md「剧情」): a cutscene over the whole shop. The scene illustration fills the screen, the two
+   portraits stand at its edges (the one talking is under the shop lamp, the other steps back into shade), and the dialogue box
+   is one more compartment of the display case — the same trim and panel as every group, its speaker on the name plate.
+   Without the images (pen) it is the dark till strip with the same box on it */
+.story { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; overflow: hidden;
+  background: var(--hud); color: var(--ink); cursor: pointer; }
+.story[open] { animation: dim .35s ease-out; }
+.story::backdrop { background: rgba(4, 8, 14, .8); }
+.story:focus-visible { outline: none; }
+.st-scene { position: absolute; inset: 0; background: var(--hud) center / cover no-repeat; animation: dim .6s ease-out; }
+.st-scene::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 45%, rgba(4, 8, 14, .78)); }
+.st-scene[data-bg="shop"] { background-image: url(gen/story/shop.webp); }
+.st-scene[data-bg="street"] { background-image: url(gen/story/street.webp); }
+.st-scene[data-bg="dark"] { box-shadow: inset 0 0 30vmin rgba(0, 0, 0, .8); } /* inside the sack */
+.st-who { position: absolute; bottom: 0; height: min(82vh, 760px); width: auto; pointer-events: none; user-select: none;
+  filter: brightness(.3) saturate(.5); transform: translateY(12px) scale(.97); transform-origin: 50% 100%; transition: filter .25s, transform .25s; }
+.st-who.left { left: max(0px, calc(50% - 700px)); } .st-who.right { right: max(0px, calc(50% - 700px)); }
+.st-who.on { filter: drop-shadow(0 0 22px var(--lamp-glow)); transform: none; }
+.st-box { position: absolute; left: 50%; bottom: 28px; translate: -50% 0; width: min(900px, calc(100% - 32px)); min-height: 150px; padding: 22px 26px 18px;
+  border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 16px / 0 stretch; background: var(--panel) padding-box;
+  box-shadow: 0 18px 40px rgba(4, 8, 14, .45); animation: case-in .42s cubic-bezier(.2, 1.1, .3, 1); }
+.st-name { --ink: var(--hud-ink); position: absolute; top: -26px; left: 18px; margin: 0; padding: 6px 22px 7px; color: var(--ink);
+  font: 900 var(--fs-h)/1.3 var(--font-display); letter-spacing: .12em;
+  border: 4px solid transparent; border-image: url(gen/plate.webp) 22 34 fill / 8px 12px / 0 stretch; background: linear-gradient(#22355F, #14223F) padding-box; }
+.st-name.right { left: auto; right: 18px; }
+.st-text { margin: 0; font-size: var(--fs-lg); line-height: 1.6; text-wrap: pretty; }
+.st-box.narr .st-text { color: var(--muted); }
+.st-rest { visibility: hidden; } /* the untyped rest keeps its place, so the box never grows while typing */
+.story .st-next { position: absolute; right: 12px; bottom: 8px; min-height: 0; padding: 2px 8px; border: 0; background: none; border-image: none;
+  color: var(--muted); font-size: var(--fs-cap); text-shadow: none; opacity: 0; transition: opacity .2s; }
+.story .st-next.ready { opacity: 1; }
+.story .st-next::after { content: " ▼"; display: inline-block; animation: nudge 1s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: translateY(3px); } }
+.story .st-skip { position: absolute; top: 16px; right: 16px; }
+@media (max-width: 700px) {
+  .st-who { height: 58vh; } .st-who:not(.on) { display: none; } /* one portrait fits beside the box on a phone */
+  .st-who.left { left: -8%; } .st-who.right { right: -8%; }
+  .st-box { bottom: calc(16px + env(safe-area-inset-bottom)); min-height: 136px; padding: 20px 18px 22px; }
+  .st-text { font-size: var(--fs-h); }
 }

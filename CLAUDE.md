@@ -49,6 +49,7 @@
 | `src/table3d.js` | 开包台的 three.js 3D 场景：柜台（层压台面、铝包边、胶垫印刷、后面的玻璃展示柜/卡册/硬卡膜）、铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的包和卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onPick, onLost, onHold, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, flip, flipAll, resize, dispose }`；`showShelf(items)` 是闲置时的「今天拆哪包？」（每个系列一叠仓库里的包，`{ set, n, off }` 由 mat.ts 的 `shelfItems()` 算，标签按钮也是 mat.ts 的），点包回调 `onPick(k)`，从这里开的包从那叠上拿起来进手里；`ready` 是 three 加载完的 promise；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
 | `src/achievements.ts` | 成就：43 个成就的定义、奖金（游戏设定）和判定。`note(G, packs)` 在每次开包事件记计数（`state.feat`），`check(G)` 按状态判定、记进 `state.ach`、用 `G.bonus` 一次性发奖金。不改任何概率和数值 |
 | `src/ui/ach.ts` | 成就页 `#ach`（每个成就一张评级标签）和解锁提示；翻牌没翻完（`hold`）不判成就 |
+| `src/story.ts` / `src/ui/story.ts` / `src/debt.ts` | 剧情：台词和触发规则（纯数据，node 能测）/ 过场播放器（全屏 `<dialog>`，排队、开包演出中不插、引导让路）/ 读经济状态和事件的唯一适配层（`bill()` `inDebt()` `debtBeat()`；经济接口改名只改这个文件，字段不存在时返回 null，剧情只放开场）。插画在 `public/gen/story/`，提示词在 `public/gen/PROMPTS.md` |
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |

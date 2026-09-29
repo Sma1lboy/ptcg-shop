@@ -6,6 +6,7 @@ import { startPack, openBatch, tear, advance, peek, flipAll, toggleMute, shareMa
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
 import { branchClick } from './upgrades.ts';
+import { resetStory } from './story.ts';
 
 export function bindEvents() {
   let resetArmed = 0;
@@ -42,7 +43,7 @@ export function bindEvents() {
       case 'perk': G.learnPerk(b.dataset.k!); break;
       case 'branch': branchClick(); break;
       case 'reset':
-        if (Date.now() - resetArmed < 3000) { resetGuide(); resetMat(); b.textContent = '清空存档'; resetArmed = 0; }
+        if (Date.now() - resetArmed < 3000) { resetGuide(); resetMat(); resetStory(); b.textContent = '清空存档'; resetArmed = 0; }
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }
         break;
     }
