@@ -61,7 +61,8 @@ const unfolded = (id: string) => unfold.has(id);
 
 export function renderShelf() {
   const first = G.shelves().find(r => r.id)?.id;
-  if (!primed && first && !Object.keys(G.state.price).length) { primed = true; unfold.add(first); }
+  if (!first) primed = false; // 清空存档 doesn't reload the page: a fresh shop primes again
+  else if (!primed && !Object.keys(G.state.price).length) { primed = true; unfold.add(first); }
   draw();
 }
 
