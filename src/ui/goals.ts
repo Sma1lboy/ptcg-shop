@@ -8,7 +8,7 @@ import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
 import { G, $, money, toShelf, shelveLabel, lately, restock } from './common.ts';
-import { hold } from './mat.ts';
+import { hold, huntable } from './mat.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
@@ -175,7 +175,8 @@ function hand(id: string) {
   const left = Object.entries(by).sort((a, b) => (S.RANK[b[0]] ?? 0) - (S.RANK[a[0]] ?? 0)), top = miss[0];
   return html`<div class="dx-hand"><div class="dx-h"><span>亲手开出</span><b>${h}/${tot}</b></div>
       <div class="dx-bar" role="img" aria-label="${G.setById(id).name} 亲手开出 ${h}/${tot}"><i style="width:${h / tot * 100}%"></i></div>
-      <small class="muted">${h ? html`还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small></div>`;
+      <small class="muted">${h ? html`还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
+      ${G.unlocked(id) && huntable(id) ? html`<div class="btns"><button type="button" data-act="autorun" data-id="${id}" title="十包一轮自动开，出一张没亲手开出过的卡就停；仓库不够按进货价补">连开到出新卡</button></div>` : ''}</div>`;
 }
 
 function clerk() {
