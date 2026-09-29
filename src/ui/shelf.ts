@@ -1,4 +1,5 @@
-// 货架 · 进货: one row per set, the buttons grouped by verb (warehouse / shelf / price / open).
+// 货架 · 进货: one row per set, the buttons grouped by verb (warehouse / shelf / price / open). Wide screens lay the rows out as a
+// table under one header (style.css, subgrid), narrower ones as cards; the markup is the same, so 7+ sets stay compact either way.
 // Only the next step for the set's current state is the primary button: no stock → buy, stock but nothing out → shelve, else → open.
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
@@ -7,19 +8,20 @@ import { G, $, money, logoUrl } from './common.ts';
 
 export function renderShelf() {
   const s = G.state;
-  render(SETS.map(set => {
+  render(html`<div class="shelf-head" aria-hidden="true"><span>系列 · 行情</span><span>仓库</span><span>货架</span><span>标价</span><span>开包</span></div>${SETS.map(set => {
     const w = G.wholesale(set.id), ev = S.packEV(S.rateKey(set.id, G.luckMult())), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
     const room = G.WAREHOUSE - stock, can = (n: number) => room > 0 && s.cash >= w * Math.min(n, room), shelfRoom = G.capacity() - onShelf, pct = G.pctOf(set.id);
-    const head = html`<img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
-        <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>`;
-    if (!G.unlocked(set.id)) return html`<article class="set locked">${head}
+    const heat = s.heat[set.id];
+    const head = (tag?: string) => html`<div class="s-id"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
+        <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}${tag ? html` · <span title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${tag}</span>` : ''}</span></div>
+        ${heat && tag ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}</div>`;
+    if (!G.unlocked(set.id)) return html`<article class="set locked">${head()}
         <p class="set-mkt">累计营业额 ${money(G.unlockAt(set.id))} 解锁进货（现在 ${money(G.revenue())}）</p></article>`;
-    const heat = s.heat[set.id], margin = G.ask(set.id) - w, canShelve = !!(stock && shelfRoom > 0);
+    const margin = G.ask(set.id) - w, canShelve = !!(stock && shelfRoom > 0);
     const next = !stock ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
-    return html`<article class="set">${head}
-        ${heat ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}
+    return html`<article class="set">${head(G.demand(set.id).tag)}
         <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 市价 × 你现在开包的概率（实测概率，有手气时乘上加成）算出的单包期望">开出期望 ${money(ev)}</span>
-          · <span title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${G.demand(set.id).tag}</span></p>
+</p>
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>
@@ -44,5 +46,5 @@ export function renderShelf() {
             <button type="button" data-act="open10" data-id="${set.id}" ?disabled=${!stock}>开 ${Math.min(10, stock) || 10} 包</button></span>
         </div>
       </article>`;
-  }), $('shelf'));
+  })}`, $('shelf'));
 }
