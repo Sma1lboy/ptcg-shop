@@ -174,7 +174,7 @@ async function drawPack(d: ShareSpec) {
   const top = d.pct >= .995 ? '前 0.5%' : d.pct >= .5 ? `前 ${Math.max(1, Math.round((1 - d.pct) * 100))}%` : `后 ${Math.max(1, Math.round(d.pct * 100))}%`;
   // A batch with more than one hit lays out what the table shows after it (table3d.js): the dearest in the slab, the next few RR-and-up
   // cards in a row under it, each on a plate with name, rarity and price, and the rest as one line 「另 N 张 · 合计 $x」.
-  const row = d.n > 1 ? d.front.slice(1, 5) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
+  const row = d.n > 1 ? d.front.filter(c => c !== d.best).slice(0, 4) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
   await fonts(top + d.set + d.best.name + row.map(c => c.name + rarLabel(c.kind)).join('') + '另张合计');
   const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, mi = css('--mat-ink'), mm = css('--mat-muted'), body = css('--font-body'), tag = css('--font-tag');
