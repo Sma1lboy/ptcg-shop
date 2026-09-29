@@ -4,6 +4,8 @@
 // have is the empty pocket with its number, rarity mark and name printed. Under the tabs, the set's page map (one 3×3 per page)
 // jumps to a page. Tap a pocket for the card up close. 补卡 and 连开到出新卡 (moved here from goals.ts, unchanged) sit with the set.
 // Frozen while a pack is being revealed (a pocket filling would spoil the pull): main.ts renderAll skips it during hold.
+// 新: a pocket filled since the player last had the binder open wears 新, its tab and page map say so, and the 欧气 tab carries a
+// dot with the count; the pack summary on the mat names them and opens the binder on their page (see 「新」 below).
 import { html, render, nothing } from 'lit-html';
 import { SETS, DATA } from '../sets.ts';
 import * as S from '../sim.ts';
@@ -33,26 +35,71 @@ const pocketsOf = (tab: string): Pocket[] => tab === HITS ? G.state.hits
   : DATA[tab].cards.map(c => ({ set: tab, n: c.n, name: c.name, r: c.r, kind: c.r, price: S.cardPrice(tab, c.n, c.r) ?? 0 }));
 const has = (c: Pocket, h: Map<string, number>) => G.state.dexSeen[`${c.set}|${c.n}`] ? (h.has(c.n) ? 'got' : 'bought') : 'none';
 
-// where a tab opens the first time: the first page with a gap (a set's gaps cluster at the end, in the secret rares)
+// where a tab opens: its first new pocket, else the first page with a gap (a set's gaps cluster at the end, in the secret rares)
 function open(tab: string) {
-  const h = hand(tab), i = tab === HITS ? 0 : pocketsOf(tab).findIndex(c => has(c, h) === 'none');
+  const h = hand(tab), all = pocketsOf(tab), nu = fresh();
+  let i = tab === HITS ? -1 : all.findIndex(c => nu.has(`${c.set}|${c.n}`));
+  if (i < 0) i = tab === HITS ? 0 : all.findIndex(c => has(c, h) === 'none');
   at = { tab, page: Math.max(0, Math.floor(i / PER)) };
 }
 
-function pocket(c: Pocket, st: string, i: number) {
+// ---------- 新: feat.dexSeenN / feat.dexHandN are how many keys state.dexSeen / state.dex had when the player last had the binder
+// open. Both objects only ever gain keys, and string keys keep insertion order (through the JSON save too), so the keys past those
+// counts are what went into the book since: a new card number (pulled or 补), or a number pulled by hand for the first time.
+// base is this visit's snapshot, so 新 stays on for the whole visit, like the 成就 page's. ----------
+let base: { s: number; d: number } | null = null, memo = { k: '', v: new Set<string>() };
+const onPage = () => location.hash === '#luck';
+function fresh() {
+  const st = G.state, f = st.feat, b = base ?? { s: f.dexSeenN ?? Infinity, d: f.dexHandN ?? Infinity };
+  const s = Object.keys(st.dexSeen), d = Object.keys(st.dex), k = `${s.length},${d.length},${b.s},${b.d}`;
+  if (memo.k === k) return memo.v;
+  const card = (key: string) => key.slice(0, key.lastIndexOf('|')), had = new Set(d.slice(0, b.d).map(card)), v = new Set(s.slice(b.s));
+  for (const key of d.slice(b.d)) { const c = card(key); if (!c.endsWith('|E') && !had.has(c)) v.add(c); }
+  return (memo = { k, v }).v;
+}
+// the new pockets of one set, in the order they went in
+const freshOf = (id: string) => [...fresh()].filter(k => k.startsWith(`${id}|`));
+function looked() {
+  if (hold) return; // mid-reveal the book is frozen: looking now must not use up the 新 of cards not yet flipped
+  const st = G.state, f = st.feat, s = Object.keys(st.dexSeen).length, d = Object.keys(st.dex).length;
+  f.dexSeenN ??= s; f.dexHandN ??= d;             // a save from before this: what it already has counts as seen
+  if (onPage()) {
+    if (!base) { base = { s: f.dexSeenN, d: f.dexHandN }; const nu = [...fresh()]; if (nu.length) open(nu[nu.length - 1].split('|')[0]); }
+    f.dexSeenN = s; f.dexHandN = d;
+  } else base = null;
+  const n = onPage() ? 0 : fresh().size, el = $('luck-n');
+  el.hidden = !n; render(html`${n}<span class="visually-hidden"> 张新卡进了卡册</span>`, el);
+}
+
+// For the pack summary on the mat (plain strings, it's innerHTML there): the set's cards new to the book, and how far the set is.
+export function toBook(id: string) {
+  const cs = freshOf(id).map(k => DATA[id].cards.find(c => c.n === k.split('|')[1])!).filter(Boolean);
+  const names = cs.sort((a, b) => (S.cardPrice(id, b.n, b.r) ?? 0) - (S.cardPrice(id, a.n, a.r) ?? 0)).map(c => c.name); // dearest first
+  const { need, next } = tierOf(id);
+  return { names, count: G.dexCount(id), total: G.dexTotal(id), next: next ? `再 ${need} 张到 ${next[0] * 100}%` : '' };
+}
+function tierOf(id: string) {
+  const c = G.dexCount(id), tot = G.dexTotal(id), next = G.DEX_TIERS.find(([at]) => c / tot < at - 1e-9);
+  return { next, need: next ? Math.ceil(next[0] * tot - 1e-9) - c : 0 };
+}
+
+function pocket(c: Pocket, st: string, i: number, nu: boolean) {
   const hits = at.tab === HITS;
   if (st === 'none') return html`<li class="pk none"><button type="button" class="pk-slot" data-bk-zoom=${i} aria-label="${c.n} 号 ${c.name}，还没有">
       <b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}<small>${c.name}</small></button><span class="cf-cap"><b class="cf-price">${money(c.price)}</b></span></li>`;
   return html`<li class="pk ${st}"><button type="button" class="pk-card" data-bk-zoom=${i} aria-label="${hits ? '' : `${c.n} 号 `}${c.name}${st === 'bought' ? '，补的' : ''}">
-      ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}</button>${cap(c, 'show')}</li>`;
+      ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}</button>${nu ? html`<i class="hand-new">新</i>` : nothing}${cap(c, 'show')}</li>`;
 }
 
 function spread(tab: string) {
   const all = pocketsOf(tab), h = tab === HITS ? new Map() : hand(tab), pages = Math.max(1, Math.ceil(all.length / PER)), w = span();
+  const nu = fresh(), isNew = (c: Pocket) => tab !== HITS && nu.has(`${c.set}|${c.n}`);
+  // a page with every pocket filled gets a 满页 stamp; it's pressed on (animated) when one of those went in on this visit
+  const full = (p: number) => { const cs = all.slice(p * PER, p * PER + PER); return tab !== HITS && cs.every(c => has(c, h) !== 'none') ? (cs.some(isNew) ? 'full nu' : 'full') : ''; };
   at.page = Math.min(Math.floor(at.page / w) * w, Math.floor((pages - 1) / w) * w);
-  const pg = (p: number) => html`<ol class="bk-page" start=${p * PER + 1}>${Array.from({ length: PER }, (_, k) => {
+  const pg = (p: number) => html`<ol class="bk-page ${full(p)}" start=${p * PER + 1}>${Array.from({ length: PER }, (_, k) => {
     const i = p * PER + k, c = all[i];
-    return c ? pocket(c, tab === HITS ? 'got' : has(c, h), i) : html`<li class="pk blank" aria-hidden="true"></li>`;
+    return c ? pocket(c, tab === HITS ? 'got' : has(c, h), i, isNew(c)) : html`<li class="pk blank" aria-hidden="true"></li>`;
   })}</ol>`;
   const shown = Array.from({ length: w }, (_, k) => at.page + k).filter(p => p < pages || p === at.page);
   const last = Math.min(at.page + w, pages);
@@ -64,18 +111,18 @@ function spread(tab: string) {
     pages > 1 ? html`<div class="bk-map" role="group" aria-label="翻到第几页">${Array.from({ length: pages }, (_, p) => {
       const cs = all.slice(p * PER, p * PER + PER), got = cs.filter(c => tab === HITS || has(c, h) !== 'none').length;
       return html`<button type="button" class="bk-mm ${p >= at.page && p < last ? 'on' : ''}" data-bk-pg=${p} aria-label="第 ${p + 1} 页，${got}/${cs.length}">
-        ${cs.map(c => html`<i class=${tab === HITS ? 'got' : has(c, h)}></i>`)}</button>`;
+        ${cs.map(c => html`<i class="${tab === HITS ? 'got' : has(c, h)}${isNew(c) ? ' nu' : ''}"></i>`)}</button>`;
     })}<span class="bk-pn">第 ${at.page + 1}${last - at.page > 1 ? `–${last}` : ''} / ${pages} 页</span></div>` : nothing];
 }
 
 // the set's line above its pages: how full the 图鉴 is and what the next 回头客 tier needs, 亲手开出, then what to do about the gaps
 function head(id: string) {
-  const c = G.dexCount(id), tot = G.dexTotal(id), share = c / tot, next = G.DEX_TIERS.find(([at]) => share < at - 1e-9);
-  const need = next ? Math.ceil(next[0] * tot - 1e-9) - c : 0, h = G.handCount(id);
+  const c = G.dexCount(id), tot = G.dexTotal(id), { next, need } = tierOf(id), h = G.handCount(id), stock = G.state.stock[id] || 0;
   return html`<div class="bk-head">
       <p class="bk-count"><span><b>${c}</b>/${tot}</span> 张入册 <span class="bk-hand">亲手开出 <b>${h}</b>/${tot}</span></p>
       <p class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(id) * 100)}%
         <span class="bk-key"><i class="got"></i>开包开出 <i class="bought"></i>补的 <i class="none"></i>还没有</span></p>
+      ${stock ? html`<div class="btns"><button type="button" class="primary" data-act="open1" data-id=${id}>再开一包${G.setById(id).name}（仓库 ${stock}）</button></div>` : nothing}
       ${G.unlocked(id) ? collect(id) : nothing}${handLine(id)}
     </div>`;
 }
@@ -125,6 +172,7 @@ function zoomed() {
 
 export function renderBinder() {
   if (hold) return;
+  looked();
   const ss = sets(), hits = G.state.hits.length > 0;
   if (!at.tab || (at.tab !== HITS && !ss.some(s => s.id === at.tab)) || (at.tab === HITS && !hits)) {
     const first = ss.find(s => !G.master(s.id)) || ss[0]; if (first) open(first.id); else if (hits) open(HITS);
@@ -134,13 +182,15 @@ export function renderBinder() {
     <div class="bk-tabs" role="tablist" aria-label="卡册的系列">
       ${hits ? html`<button type="button" role="tab" class="bk-tab" aria-selected=${tab === HITS} data-bk-tab=${HITS}><span>战利品</span><small>最贵的 ${G.state.hits.length} 张</small></button>` : nothing}
       ${ss.map(s => html`<button type="button" role="tab" class="bk-tab ${G.master(s.id) ? 'full' : ''}" aria-selected=${tab === s.id} data-bk-tab=${s.id}>
-        <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}</small></button>`)}
+        <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}${newTag(s.id)}</small></button>`)}
     </div>
     ${tab ? html`${spread(tab)}
       ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张 RR 以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
     ${handSum()}
     <div class="bk-zoom" id="bk-zoom" popover>${zoomed()}</div>`, $('dex'));
 }
+
+const newTag = (id: string) => { const n = freshOf(id).length; return n ? html` <i class="hand-new" aria-label="${n} 张新卡">新 ${n}</i>` : nothing; };
 
 function go(page: number) { at.page = Math.max(0, page); renderBinder(); }
 export function initBinder() {
@@ -162,4 +212,13 @@ export function initBinder() {
   root.addEventListener('pointerdown', e => { x0 = (e.target as Element).closest('.bk-spread') && e.pointerType !== 'mouse' ? e.clientX : null; });
   root.addEventListener('pointerup', e => { if (x0 == null) return; const dx = e.clientX - x0; x0 = null; if (Math.abs(dx) > 50) { swiped = true; setTimeout(() => { swiped = false; }); go(at.page + (dx > 0 ? -span() : span())); } });
   wide.addEventListener('change', renderBinder);
+  addEventListener('hashchange', renderBinder);
+  // 看卡册 in the pack summary (mat.ts): open the book on that set's new cards; #dex sits under 欧气检测, so scroll down to it
+  // once layout.ts has shown the page (its route scrolls to the top first: it listened earlier)
+  document.addEventListener('click', e => {
+    const a = (e.target as Element).closest<HTMLElement>('[data-bk-set]'); if (!a) return;
+    e.preventDefault();
+    addEventListener('hashchange', () => $('dex').scrollIntoView({ block: 'start' }), { once: true });
+    location.hash = 'luck'; renderBinder(); open(a.dataset.bkSet!); renderBinder(); // the first render takes this visit's snapshot
+  });
 }
