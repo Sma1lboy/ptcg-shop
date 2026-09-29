@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>欧气卡铺</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=ZCOOL+QingKe+HuangYou&family=IBM+Plex+Mono:wght@500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1 class="brand">欧气卡铺</h1>
+  <dl class="stats" id="stats"></dl>
+  <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+</header>
+<main class="shop">
+  <section class="shelf" aria-labelledby="shelf-h">
+    <h2 class="eyebrow" id="shelf-h">货架 · 进货</h2>
+    <div id="shelf"></div>
+    <h2 class="eyebrow">店内动态</h2>
+    <ol class="log" id="log"></ol>
+  </section>
+  <section class="mat" id="mat" aria-live="polite"></section>
+  <aside class="side">
+    <section id="luck" aria-labelledby="luck-h"></section>
+    <section id="binder"></section>
+    <section id="singles"></section>
+  </aside>
+</main>
+<footer class="sources" id="sources"></footer>
+<script src="data/cards-sv08.js"></script>
+<script src="data/cards-sv10.js"></script>
+<script src="data/cards-sv08.5.js"></script>
+<script src="data/cards-sv03.5.js"></script>
+<script src="src/sets.js"></script>
+<script src="src/sim.js"></script>
+<script src="src/game.js"></script>
+<script src="src/ui.js"></script>
+</body>
+</html>
