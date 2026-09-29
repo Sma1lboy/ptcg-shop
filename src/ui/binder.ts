@@ -122,7 +122,7 @@ function head(id: string) {
       <p class="bk-count"><span><b>${c}</b>/${tot}</span> 张入册 <span class="bk-hand">亲手开出 <b>${h}</b>/${tot}</span></p>
       <p class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(id) * 100)}%
         <span class="bk-key"><i class="got"></i>开包开出 <i class="bought"></i>补的 <i class="none"></i>还没有</span></p>
-      ${stock ? html`<div class="btns"><button type="button" class="primary" data-act="open1" data-id=${id}>再开一包${G.setById(id).name}（仓库 ${stock}）</button></div>` : nothing}
+      ${stock ? html`<div class="btns"><button type="button" class="primary" data-act="open1" data-id=${id}>开一包${G.setById(id).name}（仓库 ${stock}）</button></div>` : nothing}
       ${G.unlocked(id) ? collect(id) : nothing}${handLine(id)}
     </div>`;
 }
