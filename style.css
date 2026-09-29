@@ -1201,13 +1201,14 @@ button:disabled { cursor: not-allowed; }
 .perks .tn:not(:last-child)::after { content: none; } /* no rail: perks have no order */
 .perks ol { list-style: none; margin: 18px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px 36px; }
 /* 下一步 is a link to the node it names (upgrades.ts seek): plain text that underlines on hover, not a second button */
-.gh-goal :is(.gg-what, .gg-fame) { justify-self: start; padding: 0; border: 0; background: none; box-shadow: none; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+.gh-goal :is(.gg-what, .gg-fame), .gh-goal :is(.gg-what, .gg-fame):is(:hover, :active) { justify-self: start; min-height: 0; padding: 0; border: 0; border-image: none; background: none; box-shadow: none;
+  text-align: left; font: inherit; letter-spacing: normal; text-shadow: none; color: inherit; filter: none; transform: none; cursor: pointer; }
 .gh-goal .gg-what > i, .gg-fame > i { font-style: normal; color: var(--muted); }
 .gh-goal .gg-fame { font-size: var(--fs-cap); color: var(--muted); } .gg-fame b { color: var(--ink); }
 .gh-goal :is(.gg-what, .gg-fame):hover > b:first-child, .gg-fame:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* the node 下一步 scrolled to: the shop lamp swings onto its badge for a moment */
 .tn.seek .tn-badge { animation: tn-seek 1.6s ease-out; }
-@keyframes tn-seek { 0%, 40% { box-shadow: 0 0 0 1px var(--hud), 0 0 0 8px var(--lamp-glow), 0 0 36px 12px var(--lamp-glow); } 100% { box-shadow: none; } }
+@keyframes tn-seek { 0%, 40% { box-shadow: 0 0 0 1px var(--hud), 0 0 0 8px var(--lamp-glow), 0 0 36px 12px var(--lamp-glow); } }
 .br-prog p, .br-go p { margin: 0; }
 .br-prog > p:first-child { display: flex; align-items: baseline; gap: 10px; }
 .br-prog > p:first-child span, .br-prog small { color: var(--muted); }
