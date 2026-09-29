@@ -4,6 +4,7 @@
 // Never add a query string to CDN URLs: assets.tcgdex.net then sends Access-Control-Allow-Origin twice and browsers reject it.
 declare const __REMOTE_ASSETS__: boolean;
 const remote = __REMOTE_ASSETS__ || location.protocol === 'file:';
-const base = remote ? 'https://assets.tcgdex.net/en/sv/' : 'assets/tcg/';
-export const card = (set: string, n: string, size = 'low') => `${base}${set}/${n}/${size}.webp`; // size: 'low' (245×337) | 'high' (600×825)
-export const logo = (set: string) => `${base}${set}/logo.png`;
+// The CDN files each set under its series, which is the set id's letter prefix (sv08 → sv, me01 → me); the mirror has no series level.
+const base = (set: string) => remote ? `https://assets.tcgdex.net/en/${set.match(/^[a-z]+/)![0]}/` : 'assets/tcg/';
+export const card = (set: string, n: string, size = 'low') => `${base(set)}${set}/${n}/${size}.webp`; // size: 'low' (245×337) | 'high' (600×825)
+export const logo = (set: string) => `${base(set)}${set}/logo.png`;

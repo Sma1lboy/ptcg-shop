@@ -5,8 +5,8 @@ export type Rng = () => number;
 // One pulled card. kind = the slot it came from (REV / PB / MB are printings of C/U/R cards, FE the cosmos-foil Energy).
 export interface Pull { set: string; n: string; name: string; r: string; kind: string; price: number }
 
-export const RANK: Record<string, number> = { C: 0, U: 1, R: 2, E: -1, REV: 2, ACE: 3, RR: 3, PB: 3, UR: 4, IR: 4, MB: 5, SIR: 6, HR: 6 };
-export const HITS = ['ACE', 'RR', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR'];
+export const RANK: Record<string, number> = { C: 0, U: 1, R: 2, E: -1, REV: 2, ACE: 3, RR: 3, PB: 3, UR: 4, IR: 4, MB: 5, SIR: 6, HR: 6, MHR: 7 };
+export const HITS = ['ACE', 'RR', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'];
 const ENERGY = ['草', '火', '水', '雷', '超', '斗', '恶', '钢'];
 const setOf = (id: string) => SETS.find(s => s.id === id)!;
 
@@ -59,7 +59,7 @@ export const ratesFor = (set: SetConf, m = 1) => m === 1 ? set.rates : Object.fr
 
 export function slotTables(set: SetConf, m = 1) {
   const t = ratesFor(set, m), pick = (keys: string[]) => Object.fromEntries(keys.filter(k => t[k]).map(k => [k, t[k]]));
-  return { rare: pick(['UR', 'RR']), rev1: pick(['ACE', 'PB']), rev2: pick(['HR', 'SIR', 'IR', 'MB']) };
+  return { rare: pick(['UR', 'RR']), rev1: pick(['ACE', 'PB']), rev2: pick(['MHR', 'HR', 'SIR', 'IR', 'MB']) };
 }
 
 function draw(r: Rng, setId: string, kind: string): Pull {

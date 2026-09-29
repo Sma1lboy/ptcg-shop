@@ -17,8 +17,8 @@ Promise.all([import('three'), import('three/addons/postprocessing/EffectComposer
   import('three/addons/postprocessing/OutputPass.js'), import('three/addons/environments/RoomEnvironment.js')])
   .then(([three, ...addons]) => { T = three; M = Object.assign({}, ...addons); })
   .catch(e => console.warn('[table3d] three.js did not load; the 2D mat stays', e));
-// Rarity tier drives the show: 0 bulk, 1 reverse/holo rare, 2 RR/ACE/Poké Ball/foil energy, 3 UR, 4 IR/Master Ball, 5 SIR/HR.
-const TIER = { R: 1, REV: 1, RR: 2, ACE: 2, PB: 2, FE: 2, UR: 3, IR: 4, MB: 4, SIR: 5, HR: 5 };
+// Rarity tier drives the show: 0 bulk, 1 reverse/holo rare, 2 RR/ACE/Poké Ball/foil energy, 3 UR, 4 IR/Master Ball, 5 SIR/HR/MHR.
+const TIER = { R: 1, REV: 1, RR: 2, ACE: 2, PB: 2, FE: 2, UR: 3, IR: 4, MB: 4, SIR: 5, HR: 5, MHR: 5 };
 const tierOf = c => TIER[c.kind] || 0;
 const small = () => matchMedia('(max-width: 779px), (pointer: coarse)').matches;
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -108,6 +108,9 @@ const LOOK = {
   sv10: { chase: '231', c: ['#E4493C', '#6E1624', '#121019'] },
   'sv08.5': { chase: '161', c: ['#F6C2DB', '#7CC6DB', '#232845'] },
   'sv03.5': { chase: '199', c: ['#FF8B3D', '#C42B1C', '#1B1A20'] },
+  sv09: { chase: '184', c: ['#F4B8C8', '#4D9C7D', '#1F2B33'] },
+  me01: { chase: '178', c: ['#EFEBE5', '#8F6A85', '#2C2A33'] },
+  me02: { chase: '125', c: ['#4FA2BB', '#2E648A', '#0E0C19'] },
 };
 const K = 768 / PW; // pack-art pixels per cm
 const artCache = {};
@@ -289,7 +292,7 @@ const CARD_FS = `
     #include <tonemapping_fragment>
     #include <colorspace_fragment>
   }`;
-const FOIL = { REV: [1, .75], R: [2, .8], RR: [3, .75], ACE: [3, .8], PB: [6, .85], MB: [6, 1], UR: [4, 1], IR: [4, .8], SIR: [4, 1], HR: [5, 1], FE: [7, .85] };
+const FOIL = { REV: [1, .75], R: [2, .8], RR: [3, .75], ACE: [3, .8], PB: [6, .85], MB: [6, 1], UR: [4, 1], IR: [4, .8], SIR: [4, 1], HR: [5, 1], MHR: [5, 1], FE: [7, .85] };
 const foilOf = c => FOIL[c.kind] || [0, 0];
 
 function roundRect(w, h, r) {
