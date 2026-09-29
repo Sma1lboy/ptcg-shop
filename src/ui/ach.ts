@@ -2,11 +2,11 @@
 // label off a graded-card slab. Earned: white label stock, navy print, the inset navy frame, a cert number and the day; the grade
 // on the right is the achievement's word in the card-name 黑体. Not yet: the blank label (hairline frame, muted) with its progress.
 // Achievements are judged (check) only outside a reveal, so the pop never gives away a pull before its card is flipped;
-// the per-pack counters (note) are kept on every open.
+// the counters (note, watch) are kept on every emit.
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import * as FX from '../fx.ts';
-import { ACH, GROUPS, check, note, type Ach } from '../achievements.ts';
+import { ACH, GROUPS, check, note, watch, type Ach } from '../achievements.ts';
 import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
 
@@ -84,7 +84,7 @@ function flush() {
 }
 
 export function initAch() {
-  G.on(ev => { if (ev?.open) note(G, ev.open); flush(); });
+  G.on(ev => { if (ev?.open) note(G, ev.open); watch(G); flush(); });
   document.addEventListener('ptcg:release', flush);
   // Tapping anywhere else puts the label away (on a phone it sits over the bottom of the mat); following its link goes to the page.
   document.addEventListener('pointerdown', e => { if (showing && !(e.target as Element).closest('#ach-pop')) next(); });

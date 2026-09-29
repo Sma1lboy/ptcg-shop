@@ -358,7 +358,7 @@ console.log('ok luck percentile');
   assert.ok(A.ACH.every(a => a.cash >= 0 && a.seal.length <= 4 && A.GROUPS.some(([g]) => g === a.group) && (a.group !== 'hidden' || a.hint)), 'every achievement has a reward ≥ 0, a short seal, a group, and a hint if hidden');
   assert.deepEqual(A.check(G), [], 'a fresh shop has earned nothing');
 
-  // One pack: 开张 is stamped once, its reward paid once, and it is not revenue (set unlocks stay put).
+  // One pack: 开张 is earned once, its reward paid once, and it is not revenue (set unlocks stay put).
   G.buy('sv08', 1); const cash0 = st().cash, rev0 = G.revenue(); G.open('sv08', 1);
   const got = A.check(G); assert.ok(ids(got).includes('open-1'), 'first pack earns 开张');
   const paid = got.reduce((a, x) => a + x.cash, 0);
@@ -366,9 +366,10 @@ console.log('ok luck percentile');
   assert.equal(st().ach['open-1'], T);
   assert.deepEqual(A.check(G), [], 'checked again: nothing new'); assert.ok(Math.abs(st().cash - cash0 - paid) < 1e-9, 'never paid twice');
   // A listener that re-checks from inside the bonus's own emit (what ui/ach.ts does) finds nothing and pays nothing.
-  { let inner = []; const off = G.on(() => { inner = inner.concat(A.check(G)); }); st().earned.sealed = 1000; const c0 = st().cash;
-    const outer = A.check(G); assert.deepEqual(ids(outer), ['rev-1k']); assert.deepEqual(inner, [], 're-entrant check is empty');
-    assert.ok(Math.abs(st().cash - c0 - 30) < 1e-9, 'paid once through a re-entrant emit'); }
+  { const R = createGame({ ...env, storage: { getItem: () => null, setItem() {} } }); let inner = []; R.on(() => { inner = inner.concat(A.check(R)); });
+    R.state.earned.sealed = 1000; const c0 = R.state.cash;
+    const outer = A.check(R); assert.deepEqual(ids(outer), ['rev-1k']); assert.deepEqual(inner, [], 're-entrant check is empty');
+    assert.ok(Math.abs(R.state.cash - c0 - 30) < 1e-9, 'paid once through a re-entrant emit'); }
 
   // Per-pack counters from open events, with synthetic packs: double hit, 10-pack with 3 gold stars, 10-pack blank, dry streaks.
   const card = kind => ({ set: 'sv08', n: '1', name: 'x', r: kind, kind, price: 1 });
@@ -385,8 +386,8 @@ console.log('ok luck percentile');
 
   // State-derived: revenue, dex, a named card, and customers per calendar day (the count starts over at midnight).
   st().earned.sealed = 1e4; assert.ok(ids(A.check(G)).includes('rev-10k'));
-  const pika = PTCG_DATA.sv08.cards.find(c => c.name.startsWith('Pikachu')); st().dex[`sv08|${pika.n}|${pika.r}`] = { c: 1, p: 1 };
-  const pk = A.check(G); assert.ok(st().ach.pikachu, `pikachu ${ids(pk)} ${Object.keys(st().ach)}`);
+  const zard = PTCG_DATA['sv03.5'].cards.find(c => c.name.startsWith('Charizard')); assert.ok(!st().ach.charizard);
+  st().dex[`sv03.5|${zard.n}|${zard.r}`] = { c: 1, p: 1 }; assert.ok(ids(A.check(G)).includes('charizard'), 'a pulled Charizard');
   st().customers += 99; A.check(G); assert.ok(!st().ach['day-100'], '99 today');
   T += 24 * 3600e3; st().customers += 5; A.check(G); assert.equal(st().feat.dayBest, 99, 'a new day starts from zero');
   st().customers += 100; assert.ok(ids(A.check(G)).includes('day-100'));
@@ -400,7 +401,7 @@ console.log('ok luck percentile');
   // Old saves: no ach/feat keys. They load, earn what they already did (paid once), and a reload pays nothing again.
   store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 150 }, tally: { RR: 20, SIR: 1 }, customers: 40, earned: { sealed: 3000, singles: 0 } });
   const O = createGame(env); assert.deepEqual([O.state.ach, O.state.feat], [{}, {}], 'old save gets empty achievements');
-  const old = ids(A.check(O)); assert.ok(['open-1', 'hit-1', 'sir-1', 'packs-100', 'sale-1', 'rev-1k'].every(k => old.includes(k)), `retro stamps (${old})`);
+  const old = ids(A.check(O)); assert.ok(['open-1', 'hit-1', 'sir-1', 'packs-100', 'sale-1', 'rev-1k'].every(k => old.includes(k)), `retro achievements (${old})`);
   const oc = O.state.cash; assert.equal(oc, 10 + A.ACH.filter(a => old.includes(a.id)).reduce((x, a) => x + a.cash, 0));
   const O2 = createGame(env); assert.deepEqual(A.check(O2), [], 'reloaded: nothing re-earned'); assert.equal(O2.state.cash, oc);
   delete store['ptcg-shop-v1'];

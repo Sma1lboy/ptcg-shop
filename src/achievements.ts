@@ -1,5 +1,5 @@
-// 成就 (集章卡): which stamps the shop has earned, judged from the game's state plus a few counters kept from pack-open events.
-// Owns G.state.ach (id → when it was stamped) and G.state.feat (the counters). Rewards are one-off cash via G.bonus; nothing
+// 成就: which achievements the shop has earned, judged from the game's state plus a few counters kept from pack-open events.
+// Owns G.state.ach (id → when it was earned) and G.state.feat (the counters). Rewards are one-off cash via G.bonus; nothing
 // here touches pack odds, prices or any other game number. Browser and node alike: the ui wires it up (src/ui/ach.ts), tests call it directly.
 import type { Game } from './game.ts';
 import { DATA, SETS } from './sets.ts';
@@ -8,9 +8,9 @@ import type { Pull } from './sim.ts';
 
 export interface Ach {
   id: string; group: string; seal: string; name: string; desc: string; cash: number;
-  hint?: string;                         // hidden until stamped: this vague line is all the card shows
+  hint?: string;                         // hidden until earned: this vague line is all the label shows
   money?: boolean;                       // progress is in dollars
-  prog: (G: Game) => [number, number];   // [now, goal]; stamped once now >= goal
+  prog: (G: Game) => [number, number];   // [now, goal]; earned once now >= goal
 }
 
 export const GROUPS: [string, string][] = [['open', '开包'], ['luck', '欧气'], ['dex', '收藏'], ['shop', '经营'], ['hidden', '隐藏']];
@@ -54,7 +54,7 @@ export const ACH: Ach[] = [
   { id: 'dex-50', group: 'dex', seal: '半本', name: '半本图鉴', desc: '任一系列图鉴收录 50%', cash: 50, prog: G => [Math.min(Math.round(bestDex(G) * 100), 50), 50] },
   { id: 'master-1', group: 'dex', seal: '大师套', name: '第一套大师套', desc: '收齐一个系列的每一张卡', cash: 500, prog: G => [Math.min(masters(G), 1), 1] },
   { id: 'master-3', group: 'dex', seal: '三套', name: '三套大师套', desc: '收齐三个系列', cash: 1500, prog: G => [Math.min(masters(G), 3), 3] },
-  { id: 'master-all', group: 'dex', seal: '全图鉴', name: '全图鉴', desc: `${SETS.length} 个系列全部收齐（只有章，没有奖金）`, cash: 0, prog: G => [masters(G), SETS.length] },
+  { id: 'master-all', group: 'dex', seal: '全图鉴', name: '全图鉴', desc: `${SETS.length} 个系列全部收齐（只有标签，没有奖金）`, cash: 0, prog: G => [masters(G), SETS.length] },
   { id: 'trophy', group: 'dex', seal: '镇店', name: '镇店之宝', desc: '第一次摆上镇店之宝', cash: 10, prog: G => yes(!!G.state.trophy) },
   { id: 'case-full', group: 'dex', seal: '满柜', name: '展示柜摆满', desc: '展示柜每一格都有卡', cash: 30, prog: G => [Math.min(G.state.shown.length, G.slots()), G.slots()] },
   { id: 'big-card', group: 'dex', seal: '大货', name: '开出大货', desc: '开出一张市值 $250 以上的卡', cash: 300, money: true, prog: G => [Math.min(G.state.hits[0]?.price || 0, 250), 250] },
@@ -71,7 +71,7 @@ export const ACH: Ach[] = [
   { id: 'offline-1k', group: 'shop', seal: '躺赚', name: '打烊也赚', desc: '一张打烊小票入账 $1,000 以上', cash: 100, money: true, prog: G => [Math.min(f(G, 'off'), 1e3), 1e3] },
   { id: 'all-sets', group: 'shop', seal: '全系列', name: '全系列在售', desc: `${SETS.length} 个系列同时摆在货架上`, cash: 500, prog: G => [SETS.filter(s => G.shelfQty(s.id) > 0).length, SETS.length] },
   { id: 'level-20', group: 'shop', seal: '老店', name: '二十级老店', desc: '店铺等级 20（成长页的升级和技能级数之和）', cash: 300, prog: G => [Math.min(level(G), 20), 20] },
-  { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡铺', desc: '店铺等级升满（只有章，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
+  { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡铺', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
 
   { id: 'flipped', group: 'hidden', seal: '被扫货', name: '被倒爷扫了货', desc: '标价低到倒爷一口气扫走一个系列', hint: '有人专挑便宜货下手', cash: 20, prog: G => yes(Object.keys(G.state.flipT).length > 0) },
   { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张 RR 以上都没有', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },
@@ -94,19 +94,25 @@ export function note(G: Game, opened: Pull[][]) {
   if (opened.length === 10) { c.ten = (c.ten || 0) + 1; bump('tenGold', gold); if (!hits) c.tenBlank = (c.tenBlank || 0) + 1; }
 }
 
-// Stamps every achievement whose goal is now met, pays their rewards in one G.bonus, returns them (empty: nothing new).
-// All are marked before the bonus emits, so a listener that calls check() again from that emit finds nothing.
-export function check(G: Game): Ach[] {
+// Counters read off the state that may not last until the next check (today's customers, the receipt before it is put away,
+// a collector's sale before it leaves state.recent). Cheap: the ui calls it on every emit, even mid-reveal; check() calls it too.
+export function watch(G: Game) {
   const st = G.state, c = st.feat, d = new Date(G.now()), day = d.getFullYear() * 1e4 + (d.getMonth() + 1) * 100 + d.getDate();
   if (c.day !== day) { c.day = day; c.day0 = st.customers; }
   c.dayBest = Math.max(c.dayBest || 0, st.customers - c.day0);
   c.off = Math.max(c.off || 0, st.offline?.revenue || 0);
   c.coll = Math.max(c.coll || 0, ...st.recent.filter(v => v.t === 'collector' && v.r === 'sold').map(v => v.gain || 0));
-  const got = ACH.filter(a => !st.ach[a.id] && done(a, G));
+}
+
+// Earns every achievement whose goal is now met, pays their rewards in one G.bonus, returns them (empty: nothing new).
+// All are marked before the bonus emits, so a listener that calls check() again from that emit finds nothing.
+export function check(G: Game): Ach[] {
+  watch(G);
+  const st = G.state, got = ACH.filter(a => !st.ach[a.id] && done(a, G));
   if (!got.length) return got;
   for (const a of got) st.ach[a.id] = G.now();
   const cash = got.reduce((s, a) => s + a.cash, 0);
-  G.bonus(cash, got.length === 1 ? `集章：${got[0].name}` : `集章 ${got.length} 枚：${got.map(a => a.name).join('、')}`);
+  G.bonus(cash, got.length === 1 ? `成就：${got[0].name}` : `成就 ${got.length} 个：${got.map(a => a.name).join('、')}`);
   return got;
 }
 export const done = (a: Ach, G: Game) => { const [now, goal] = a.prog(G); return now >= goal; };
