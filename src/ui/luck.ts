@@ -27,8 +27,11 @@ function label(g: Grade) {
 }
 
 // Exact binomial tail for one rarity: how likely a player is to be at least this lucky (or unlucky).
+// Kept until packsBy changes (a pack is opened): the panel re-renders on every tick, the tail only moves when packs do.
+let tails: Record<string, number> = {}, tailsOf = '';
 function tailLabel(k: string, got: number, exp: number) {
-  const p = S.hitTail(G.state.packsBy, k, got), pct = p * 100;
+  const by = JSON.stringify(G.state.packsBy); if (by !== tailsOf) { tails = {}; tailsOf = by; }
+  const p = tails[`${k}:${got}`] ??= S.hitTail(G.state.packsBy, k, got), pct = p * 100;
   return `${got >= exp ? '≥' : '≤'}${got}　${pct < 0.1 ? '<0.1' : pct < 10 ? pct.toFixed(1) : pct.toFixed(0)}%`;
 }
 export function renderLuck() {
