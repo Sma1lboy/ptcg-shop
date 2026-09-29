@@ -257,8 +257,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before) log(master(id)
-    ? `大师套：${setById(id).name} 收齐了！回头客 +${Math.round(dexBonusOf(id) * 100)}%，这个系列的拆包玩家肯多付 ${MASTER.tol * 100}%`
-    : `图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%`, 'hit'); };
+    ? `大师套：${setById(id).name} 收齐了！回头客 +${Math.round(dexBonusOf(id) * 100)}%${crowdRaw() > CROWD_KNEE ? `（全店客流过 ×${CROWD_KNEE} 后递减，现在 ×${crowdMult().toFixed(2)}）` : ''}，这个系列的拆包玩家肯多付 ${MASTER.tol * 100}%`
+    : `图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%${crowdRaw() > CROWD_KNEE ? `（全店过 ×${CROWD_KNEE} 后递减，现在 ×${crowdMult().toFixed(2)}）` : ''}`, 'hit'); };
 
   // 图鉴补卡: missing hits of a set, cheapest first, at today's market price.
   const missing = (id: string) => DATA[id].cards.filter(c => BUY_R.includes(c.r) && !state.dexSeen[`${id}|${c.n}`])

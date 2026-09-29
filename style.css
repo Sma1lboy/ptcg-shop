@@ -417,7 +417,6 @@ button:disabled { cursor: not-allowed; }
 .coach h3 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); }
 .coach p { margin: 0; text-wrap: pretty; }
 .coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-.coach .co-btns button:not(.ghost) { background: none; border: 1px solid var(--line-strong); border-radius: var(--r); padding: 4px 12px; color: var(--ink); font-size: var(--fs-cap); }
 .coach-on { outline: 2px dashed var(--sticker-edge); outline-offset: 3px; }
 .nav a.coach-on { outline-offset: -6px; }
 

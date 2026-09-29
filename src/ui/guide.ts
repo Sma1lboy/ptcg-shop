@@ -23,7 +23,7 @@ const firstShelved = () => G.shelves().find(r => r.id)?.id;
 
 type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null };
 const STEPS: Step[] = [
-  { page: 'shelf', h: '进货', done: () => sum(G.state.stock) + G.shelves().reduce((a, r) => a + r.qty, 0) + sum(G.state.opened) > 0,
+  { page: 'shelf', h: '进货', done: () => sum(G.state.stock) + sum(G.state.opened) > 0 || G.shelves().some(r => r.id), // a labelled shelf stays labelled once it sells out
     at: () => pick('#shelf .set .primary[data-act="buy"]', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
     p: el => { const id = (el as HTMLElement | null)?.dataset.id;
       return html`点「进 10」从批发商进一箱。${id ? `${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，` : '进货价比市价低，'}差价就是卖一包的毛利。`; } },
@@ -31,7 +31,7 @@ const STEPS: Step[] = [
     at: () => pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'),
     p: () => (sum(G.state.stock) ? '点「摆上空货架」。仓库里的包顾客看不到，只有货架上的才卖得出去。' : '仓库空了：先进货，再点「摆上空货架」。只有货架上的包才卖得出去。') },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
-    at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.parentElement ?? null) : null; },
+    at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
     p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认等于市价${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
@@ -71,8 +71,8 @@ export function renderGuide() {
     <h3>${step.h}${here ? nothing : html`<small>：到「${TAB[step.page]}」页</small>`}</h3>
     <p>${step.p(here)}</p>
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
-      ${n ? html`<button type="button" data-coach="next">${end ? '完成' : '下一步'}</button>`
-        : step.h === '定价' && here ? html`<button type="button" data-coach="price">先按这个价卖</button>` : nothing}</div>`, pop);
+      ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
+        : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
   place();
   // a new step whose button is below the fold: bring it into view once
