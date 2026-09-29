@@ -32,7 +32,7 @@ const maxLevel = (G: Game) => Object.values(G.UPGRADES).reduce((a, u) => a + u.c
 
 // Game settings (rewards are invented, shown in the footer). Paced for a player's first 10 minutes, first hour and first 10 hours.
 export const ACH: Ach[] = [
-  { id: 'open-1', group: 'open', seal: '开张', name: '开张第一包', desc: '开第一包', cash: 5, prog: G => [Math.min(packs(G), 1), 1] },
+  { id: 'open-1', group: 'open', seal: '开张', name: '开张第一包', desc: '店里拆开的第一包', cash: 5, prog: G => [Math.min(packs(G), 1), 1] },
   { id: 'hit-1', group: 'open', seal: '初闪', name: '第一张闪卡', desc: '开出 RR 或更稀有的卡', cash: 5, prog: G => [Math.min(tally(G, S.HITS), 1), 1] },
   { id: 'ten-1', group: 'open', seal: '十连', name: '第一次十连', desc: '一次开 10 包', cash: 10, prog: G => [Math.min(f(G, 'ten'), 1), 1] },
   { id: 'double', group: 'open', seal: '双闪', name: '一包双闪', desc: '同一包里开出两张 RR 或更稀有的卡', cash: 30, prog: G => [Math.min(f(G, 'dbl'), 2), 2] },

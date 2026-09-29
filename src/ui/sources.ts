@@ -3,6 +3,7 @@ import { html, render } from 'lit-html';
 import { SETS, DATA, packsUpdated } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
+import { ACH } from '../achievements.ts';
 
 const maxM = () => S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
 
@@ -19,7 +20,8 @@ export function renderSources() {
       图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）；收齐（大师套）后这个系列的拆包玩家再肯多付 ${G.MASTER.tol * 100} 个百分点、专程来买的人 ×${G.MASTER.w}。
       图鉴补卡：${G.BUY_R.join('/')} 可以按当前单卡市价从同行买进图鉴册，只进图鉴，不能再卖、上柜或当镇店之宝；普通、非普通、稀有只能开包收。店员每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，给勾选系列的货架进货（1 级补到半满，2 级补满），不领工资。
       技能用现金升级，第 L+1 级的价格 = 首级价 × 倍数^L：${Object.values(G.SKILLS).map(k => `${k.name}（${k.group}，${k.max} 级，首级 $${k.base}${k.max > 1 ? `、每级 ×${k.grow}` : ''}；1 级 ${k.fx(1)}${k.max > 1 ? `，满级 ${k.fx(k.max)}` : ''}）`).join('；')}。
-      手气只改你开包时用的概率：每种闪卡（${S.HITS.join('/')}）的实测概率乘同一个系数，例如${SETS[0].name} SIR ${SETS[0].rates.SIR}% 满级变成 ${(SETS[0].rates.SIR * maxM()).toFixed(2)}%；实测概率本身不变，欧气检测按每一包开的时候的概率和模拟玩家比。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>`, $('sources'));
+      手气只改你开包时用的概率：每种闪卡（${S.HITS.join('/')}）的实测概率乘同一个系数，例如${SETS[0].name} SIR ${SETS[0].rates.SIR}% 满级变成 ${(SETS[0].rates.SIR * maxM()).toFixed(2)}%；实测概率本身不变，欧气检测按每一包开的时候的概率和模拟玩家比。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>
+      <p>成就（游戏设定）：${ACH.length} 个，每个解锁时发一次现金奖金，从 ${money(Math.min(...ACH.filter(a => a.cash).map(a => a.cash)))} 到 ${money(Math.max(...ACH.map(a => a.cash)))}，全部加起来 ${money(ACH.reduce((s, a) => s + a.cash, 0))}；「全图鉴」「满级卡铺」只有标签没有奖金。奖金不算营业额（不提前解锁系列），不改开包概率、价钱和顾客；欧气类成就（欧洲人、欧皇本皇、非酋补贴）开满 30 包后按欧气检测的百分位算，手气加成开的包照旧只和同样加成的模拟玩家比。隐藏成就解锁前只露一句提示。清空存档会连成就一起清掉。</p>`, $('sources'));
 }
 
 export function renderBasis() {

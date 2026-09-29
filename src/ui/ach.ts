@@ -1,78 +1,78 @@
-// 成就 page (#ach) and the unlock pop. The metaphor is the shop's stamp card (集章卡): one paper card per group, a stamp slot per
-// achievement; a stamped slot carries the rubber stamp in card-back blue ink with the day it was stamped. When a stamp is earned
-// a small stamp card slides onto the counter and the stamp comes down on it. Stamps are judged (check) only outside a reveal,
-// so the pop never gives away a pull before its card is flipped; the per-pack counters (note) are kept on every open.
-import { html, render, nothing } from 'lit-html';
+// 成就 page (#ach) and the unlock pop, in the grading-label language of 欧气鉴定 (DESIGN.md「成就」): every achievement is a small
+// label off a graded-card slab. Earned: white label stock, navy print, the inset navy frame, a cert number and the day; the grade
+// on the right is the achievement's word in the card-name 黑体. Not yet: the blank label (hairline frame, muted) with its progress.
+// Achievements are judged (check) only outside a reveal, so the pop never gives away a pull before its card is flipped;
+// the per-pack counters (note) are kept on every open.
+import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import * as FX from '../fx.ts';
 import { ACH, GROUPS, check, note, type Ach } from '../achievements.ts';
 import { G, $, money } from './common.ts';
 import { hold } from './mat.ts';
 
-const day = (t: number) => { const d = new Date(t); return `${String(d.getMonth() + 1).padStart(2, '0')}·${String(d.getDate()).padStart(2, '0')}`; };
-const rot = (id: string) => [...id].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 23 - 11; // each stamp lands a little crooked, always the same way
+const day = (t: number) => { const d = new Date(t); return `${d.getMonth() + 1} 月 ${d.getDate()} 日`; };
+const cert = (a: Ach, at: number) => String([...a.id + at].reduce((h, ch) => Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0, 2166136261) % 1e8).padStart(8, '0');
 const amount = (a: Ach, v: number) => (a.money ? money(v) : v.toLocaleString('en-US'));
-const secret = (a: Ach) => a.group === 'hidden' && !G.state.ach[a.id];
+const groupName = (g: string) => GROUPS.find(([k]) => k === g)![1];
 
-// The rubber stamp: a double ring, the seal text (2–4 characters) and the date it was stamped. Unstamped: the slot's printed outline.
-function stampOf(a: Ach, at?: number, cls = '') {
-  const txt = secret(a) && !at ? '？' : a.seal;
-  return html`<span class="stamp ${at ? 'inked' : 'empty'} n${Math.min(txt.length, 4)} ${/^[A-Z]+$/.test(txt) ? 'latin' : ''} ${cls}" style="--rot:${rot(a.id)}deg" aria-hidden="true">
-    <b>${txt}</b>${at ? html`<small>${day(at)}</small>` : nothing}</span>`;
-}
-
-function slot(a: Ach) {
-  const at = G.state.ach[a.id], [now, goal] = a.prog(G), hide = secret(a);
-  return html`<li class="slot ${at ? 'got' : ''}">
-    ${stampOf(a, at)}
-    <p class="sl-name">${hide ? '？？？' : a.name}</p>
-    <p class="sl-desc">${hide ? a.hint : a.desc}</p>
-    ${at ? html`<p class="sl-meta">${day(at)} 盖章${a.cash ? html` · <span class="gain">+${money(a.cash)}</span>` : ''}</p>`
-      : html`<p class="sl-meta">${goal > 1 && !hide ? html`<span class="sl-bar" role="img" aria-label="${amount(a, now)}/${amount(a, goal)}"><i style="width:${Math.min(1, now / goal) * 100}%"></i></span>${amount(a, now)} / ${amount(a, goal)} · ` : ''}${a.cash ? `奖金 ${money(a.cash)}` : '只有章'}</p>`}
-  </li>`;
+function label(a: Ach, cls = '') {
+  const at = G.state.ach[a.id], hide = a.group === 'hidden' && !at, word = hide ? '？' : a.seal;
+  const wide = /^[A-Z]+$/.test(word) ? 'tag' : word.length > 3 ? 'long' : ''; // SIR in the price-label numerals, like the grade digits on a slab
+  if (at) return html`<li class="grade ach ${cls}">
+      <div class="g-id"><p class="g-k">欧气卡铺 · ${groupName(a.group)}成就</p><p class="a-name">${a.name}</p><p>${a.desc}</p>
+        <p class="g-cert"><span>No. ${cert(a, at)}</span><span>${day(at)}</span></p></div>
+      <p class="g-grade"><b class=${wide}>${word}</b>${a.cash ? html`<span class="gain">+${money(a.cash)}</span>` : html`<span>荣誉</span>`}</p>
+    </li>`;
+  const [now, goal] = a.prog(G), bar = goal > 1 && !hide;
+  return html`<li class="grade blank ach">
+      <div class="g-id"><p class="g-k">${groupName(a.group)} · 待解锁</p><p class="a-name">${hide ? '？？？' : a.name}</p><p>${hide ? a.hint : a.desc}</p>
+        ${bar ? html`<p class="a-prog"><span class="a-bar" role="img" aria-label="${amount(a, now)}/${amount(a, goal)}"><i style="width:${Math.min(1, now / goal) * 100}%"></i></span>${amount(a, now)} / ${amount(a, goal)}</p>` : ''}</div>
+      <p class="g-grade"><b class=${wide}>${word}</b><span>${a.cash ? `奖金 ${money(a.cash)}` : '荣誉'}</span></p>
+    </li>`;
 }
 
 export function renderAch() {
   const got = G.state.ach, n = ACH.filter(a => got[a.id]).length, paid = ACH.reduce((s, a) => s + (got[a.id] ? a.cash : 0), 0);
   const last = ACH.filter(a => got[a.id]).sort((a, b) => got[b.id] - got[a.id])[0];
-  // the nearest visible stamp that is not in yet, by share of its goal (the incremental "almost there")
+  // the visible achievement closest to done, by share of its goal (the incremental "almost there", like 成长's 下一个目标)
   const near = ACH.filter(a => !got[a.id] && a.group !== 'hidden').map(a => { const [x, g] = a.prog(G); return { a, x, g, p: x / g }; }).filter(o => o.p < 1).sort((p, q) => q.p - p.p)[0];
   render(html`<header class="grow-head ach-head">
-      <p class="gh-lv"><span>集章</span><b>${n}</b><small>/ ${ACH.length} 枚</small></p>
-      <span class="gh-bar" role="img" aria-label="${n}/${ACH.length}"><i style="--p:${n / ACH.length}"></i></span>
+      <div class="gh-lv"><p><span>成就</span><b>${n}</b><small>/ ${ACH.length}</small></p>
+        <span class="gh-bar" role="img" aria-label="${n}/${ACH.length}"><i style="--p:${n / ACH.length}"></i></span></div>
+      ${near ? html`<div class="gh-goal"><p class="gg-k">离得最近</p>
+        <p class="gg-what"><b>${near.a.name}</b><span>${near.a.desc}</span></p>
+        ${near.g > 1 ? html`<span class="gt-save" role="img" aria-label="${Math.round(near.p * 100)}%"><i style="width:${near.p * 100}%"></i></span><small>${amount(near.a, near.x)} / ${amount(near.a, near.g)} · ${near.a.cash ? `奖金 ${money(near.a.cash)}` : '荣誉'}</small>` : ''}</div>` : html`<p class="gh-goal gg-k">看得见的都解锁了。</p>`}
       <dl class="gh-now">
         <div><dt>奖金已领</dt><dd>${money(paid)}</dd></div>
-        <div><dt>最近一枚</dt><dd>${last ? `${last.name} · ${day(got[last.id])}` : '还没有'}</dd></div>
-        ${near ? html`<div><dt>离得最近</dt><dd>${near.a.name} · ${near.g > 1 ? `${amount(near.a, near.x)}/${amount(near.a, near.g)}` : '差一步'}</dd></div>` : ''}
+        <div><dt>最近一个</dt><dd>${last ? last.name : '还没有'}</dd></div>
+        <div><dt>隐藏成就</dt><dd>${ACH.filter(a => a.group === 'hidden' && got[a.id]).length} / ${ACH.filter(a => a.group === 'hidden').length}</dd></div>
       </dl>
     </header>
-    <div class="scards">${GROUPS.map(([g, label]) => {
+    ${GROUPS.map(([g, name]) => {
       const list = ACH.filter(a => a.group === g), k = list.filter(a => got[a.id]).length;
-      return html`<article class="scard" aria-label="${label}集章卡">
-        <header><b>欧气卡铺</b><span>${label} · 集章卡</span><small>${k} / ${list.length}</small></header>
-        <ol class="slots">${list.map(slot)}</ol>
-        ${g === 'hidden' ? html`<footer>隐藏的章盖上之前只露一句提示。</footer>` : ''}
-      </article>`;
-    })}</div>
-    <p class="muted ach-note">盖章就发奖金（一次性现金，写在页脚「游戏设定」里），不改开包概率、不改价钱。清空存档会连章一起清掉。</p>`, $('stamps'));
+      // earned first (newest first), then the rest in their designed order
+      const sorted = [...list.filter(a => got[a.id]).sort((a, b) => got[b.id] - got[a.id]), ...list.filter(a => !got[a.id])];
+      return html`<section class="ach-group"><h2>${name} <small>${k} / ${list.length}${g === 'hidden' ? ' · 解锁之前只有一句提示' : ''}</small></h2>
+        <ul class="ach-grid">${sorted.map(a => label(a))}</ul></section>`;
+    })}
+    <p class="muted ach-note">解锁就发一次奖金（游戏设定，见页脚），不改开包概率、不改价钱。清空存档会连成就一起清掉。</p>`, $('achs'));
 }
 
-// ---------- unlock pop: one stamp card at a time; a burst of more than three (an old save's first visit) comes as one card ----------
+// ---------- unlock pop: the label prints out at the counter's edge, one at a time; more than three at once (an old save's
+// first visit) come as one label ----------
 let queue: Ach[] = [], showing = false, timer = 0;
 function next() {
-  const el = $('stamp-pop');
+  const el = $('ach-pop');
   if (!queue.length) { showing = false; el.hidden = true; return; }
   showing = true;
-  const many = queue.length > 3 ? queue.splice(0) : [queue.shift()!], a = many[0], at = G.state.ach[a.id], cash = many.reduce((s, x) => s + x.cash, 0);
+  const many = queue.length > 3 ? queue.splice(0) : [queue.shift()!], a = many[0], cash = many.reduce((s, x) => s + x.cash, 0);
   el.hidden = false;
-  render(keyed(`${a.id}${many.length}`, html`<a class="sp-card" href="#ach">
-      <span class="sp-stamps">${many.slice(0, 3).map((x, i) => stampOf(x, at, `slam d${i}`))}</span>
-      <span class="sp-txt"><small>${many.length > 1 ? `一次盖了 ${many.length} 枚章` : `${GROUPS.find(([g]) => g === a.group)![1]} · 集章卡`}</small>
-        <b>${many.length > 1 ? many.slice(0, 3).map(x => x.name).join('、') + (many.length > 3 ? ' 等' : '') : a.name}</b>
-        ${many.length === 1 ? html`<span>${a.desc}</span>` : ''}
-        ${cash ? html`<em class="gain">奖金 +${money(cash)}</em>` : html`<em>只有章，没有奖金</em>`}</span>
-    </a>`), el);
-  FX.stamp();
+  render(keyed(`${a.id}${many.length}`, many.length === 1
+    ? html`<a href="#ach"><ul>${label(a, 'pop')}</ul></a>`
+    : html`<a href="#ach"><ul><li class="grade ach pop">
+        <div class="g-id"><p class="g-k">欧气卡铺 · 成就</p><p class="a-name">一次解锁 ${many.length} 个成就</p><p>${many.slice(0, 4).map(x => x.name).join('、')}${many.length > 4 ? ' 等' : ''}</p></div>
+        <p class="g-grade"><b>${many.length}</b>${cash ? html`<span class="gain">+${money(cash)}</span>` : ''}</p></li></ul></a>`), el);
+  FX.award();
   clearTimeout(timer); timer = window.setTimeout(next, many.length > 1 ? 6500 : 4800);
 }
 
@@ -86,8 +86,8 @@ function flush() {
 export function initAch() {
   G.on(ev => { if (ev?.open) note(G, ev.open); flush(); });
   document.addEventListener('ptcg:release', flush);
-  // Tapping anywhere else puts the card away (on a phone it sits over the bottom of the mat); following its link goes to the page.
-  document.addEventListener('pointerdown', e => { if (showing && !(e.target as Element).closest('#stamp-pop')) next(); });
-  $('stamp-pop').addEventListener('click', () => { queue = []; next(); });
+  // Tapping anywhere else puts the label away (on a phone it sits over the bottom of the mat); following its link goes to the page.
+  document.addEventListener('pointerdown', e => { if (showing && !(e.target as Element).closest('#ach-pop')) next(); });
+  $('ach-pop').addEventListener('click', () => { queue = []; next(); });
   flush();
 }
