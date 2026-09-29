@@ -58,6 +58,10 @@ function wall() {
 const unfold = new Set<string>();
 let primed = false;
 const unfolded = (id: string) => unfold.has(id);
+// Two columns and up never fold (style.css @container), so there the fold buttons are inert: not ten empty tab stops. The width is
+// the shelf's own, watched, since the page may be hidden (0 wide) when it renders and the receipt narrows it on desktop.
+let wide = false;
+new ResizeObserver(([e]) => { const w = e.contentRect.width; if (w && (w >= 700) !== wide) { wide = w >= 700; draw(); } }).observe($('shelf'));
 
 export function renderShelf() {
   const first = G.shelves().find(r => r.id)?.id;
@@ -75,7 +79,7 @@ function draw() {
     const heat = s.heat[set.id];
     // sum + go: the folded row on a one-column shelf (style.css): where the set stands and the one next step, the rest behind the name
     const head = (tag?: string, sum?: unknown, go?: unknown) => html`<div class="s-id"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
-        <div class="set-name"><h3>${sum ? html`<button type="button" class="fold" aria-expanded="${unfolded(set.id)}" @click=${() => { if (!unfold.delete(set.id)) unfold.add(set.id); draw(); }}>${set.name}</button>` : set.name}${heat && tag ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}</h3>
+        <div class="set-name"><h3>${sum ? html`<button type="button" class="fold" ?inert=${wide} aria-expanded="${unfolded(set.id)}" @click=${() => { if (!unfold.delete(set.id)) unfold.add(set.id); draw(); }}>${set.name}</button>` : set.name}${heat && tag ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}</h3>
           <span class="s-en">${set.en} · ${set.released.slice(0, 4)}${tag ? html` · <span title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${tag}</span>` : ''}</span>${sum ? html`<span class="s-sum">${sum}</span>` : nothing}</div>${go ?? nothing}</div>`;
     if (!G.unlocked(set.id)) return html`<article class="set locked">${head()}
         <p class="set-mkt">累计营业额 ${money(G.unlockAt(set.id))} 解锁进货（现在 ${money(G.revenue())}）</p></article>`;
@@ -83,7 +87,10 @@ function draw() {
     const next = !stock ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
     const sum = html`${own ? html`仓库 <b>${stock}</b> · 货架 ${onShelf ? html`<b>${onShelf}</b>/${own * deep}` : html`<b>卖空了</b>`} <span class="sticker">${money(G.ask(set.id))}</span>`
       : html`没上架 · 仓库 <b>${stock}</b>`}${miss ? html` · <b>${miss}</b> 位没买到` : nothing}`;
-    const go = next === 'buy' ? html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${can(10) ? 10 : 1}" ?disabled=${!can(1)}>进 ${can(10) ? 10 : 1}</button>`
+    // later on, when filling the back room costs under a quarter of the cash, the next step is 进满, not ten packs at a time
+    const fill = full.n === room && full.n > 10 && full.n * w * 4 <= s.cash;
+    const go = next === 'buy' ? (fill ? html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>`
+      : html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${can(10) ? 10 : 1}" ?disabled=${!can(1)}>进 ${can(10) ? 10 : 1}</button>`)
       : next === 'shelve' ? html`<button type="button" class="primary" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}">${shelveLabel(set.id, own > 0 || !free)}</button>`
       : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
     return html`<article class="set ${unfolded(set.id) ? 'open' : ''}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
@@ -91,8 +98,8 @@ function draw() {
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>
-            <button type="button" class="${can(10) ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
-            ${full.n > 10 ? html`<button type="button" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>` : nothing}</span>
+            <button type="button" class="${can(10) && !fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
+            ${full.n > 10 ? html`<button type="button" class="${fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>` : nothing}</span>
         </div>
         <div class="verb v-shelf" role="group" aria-label="${set.name} 货架">
           <span class="v-k">货架</span><span class="v-n">${own ? html`<b>${onShelf}</b>/${own * deep}${own > 1 ? html`<small>${own} 个货架</small>` : nothing}`

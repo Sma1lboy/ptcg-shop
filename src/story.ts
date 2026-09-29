@@ -6,8 +6,9 @@ import type { DebtBeat } from './debt.ts';
 export type Who = 'jiu' | 'adou' | 'you' | ''; // '' = narration
 export type Bg = 'street' | 'shop' | 'dark';
 // Context the ui fills in before playing, already formatted: bill = the next bill's amount, week = its week, card/price = a pull, set = a set name;
-// for 还清 / 开分店: bills = bills paid in this shop, fame = 名气 branching now would take, debt = what the (next) shop owes, shop = its number (1-based)
-export interface Ctx { bill?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number }
+// for 还清 / 开分店: bills = bills paid in this shop, fame = 名气 branching now would take, debt = what the (next) shop owes, shop = its number (1-based),
+// street / streetSay = that shop's street and what is different about it (no streetSay on 老街, where the numbers are the first shop's)
+export interface Ctx { bill?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string }
 export interface Line { who: Who; t: string | ((c: Ctx) => string) }
 export interface Scene { bg: Bg; lines: Line[] }
 
@@ -105,7 +106,7 @@ export const SCENES: Record<string, Scene[]> = {
     ] },
     { bg: 'street', lines: [
       L('', '九姐走到门口，又停下来。'),
-      L('jiu', '城东有个铺面，比这间大。上一个老板……也说去进货了。'),
+      L('jiu', c => `${c.street ?? '城东'}有个铺面，比这间大。上一个老板……也说去进货了。`),
       L('jiu', c => `本钱我出${c.debt ? `，${c.debt}` : ''}，照旧记账上。你在这攒的名气带得走${c.fame ? `——现在是 ${c.fame}` : ''}。`),
       L('jiu', '不急。这店多开一天，你带走的就多一点。'),
       L('', '债还清了：这家店不再有账单。「成长」页的「开分店」随时能去，这家店的营业额越高，带走的名气越多。'),
@@ -118,6 +119,7 @@ export const SCENES: Record<string, Scene[]> = {
     L('you', '自己人也要还钱？'),
     L('jiu', c => `自己人也要还。本钱 ${c.debt ?? '照旧'}，还是分期、不算利息。`),
     L('jiu', terms),
+    L('jiu', c => (c.streetSay ? `${c.street}的客人跟老街不一样。${c.streetSay}。` : c.street ? `又是${c.street}，跟第一家隔两个门面。` : '这条街的客人跟老街不一样。')),
     L('jiu', '名气是你的，账也是你的。开张吧，老板。'),
     L('adou', '（小声）她对上一个老板说的是「开张吧」。后面没有「老板」。'),
   ] }],

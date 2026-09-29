@@ -70,6 +70,25 @@ function nextStep() {
   return { ...(live[0] || all[0]), why: '' };
 }
 
+// 名气 one more takes, and roughly how long this shop needs for it at its best week's pace (a week is G.WEEK seconds).
+function fameAhead() {
+  const fame = G.fameFor(), rev = G.revenue(), more = (fame + 1) ** 2 * G.FAME_UNIT - rev, perH = G.state.best * 3600 / G.WEEK;
+  return { fame, more, hours: perH > 0 ? more / perH : null };
+}
+const hrs = (h: number) => h < 1 ? `${Math.max(1, Math.round(h * 60))} 分钟` : `${+h.toFixed(h < 10 ? 1 : 0)} 小时`;
+export const nextStreet = () => G.street(G.state.branch.n + 1);
+
+// The header's 下一步 once the debt is paid: 开分店 is the move (a new shop takes about as long as one more 名气 here, and pays several).
+function branchGoal() {
+  const { fame, more, hours } = fameAhead(), take = fame + G.handFame(), st = nextStreet();
+  return html`<div class="gh-goal">
+    <p class="gg-k">下一步：这家店还清了</p>
+    <p class="gg-what"><b>开第 ${G.state.branch.n + 2} 家店 · ${st.name}</b><span>带走 <b>${take} 名气</b></span></p>
+    <button type="button" class="primary" data-act="branch">${armedNow() ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${take} 名气`}</button>
+    <small>留在这里：再做 ${money(more)} 营业额才多 1 名气${hours != null ? `，按最好一周的生意约 ${hrs(hours)}` : ''}。</small>
+  </div>`;
+}
+
 // Short money for the milestone track on phones, where seven thresholds share the width.
 const kMoney = (v: number) => v >= 1000 ? `$${v / 1000}k` : `$${v}`;
 
@@ -95,7 +114,7 @@ export function renderUpgrades() {
   render(html`<header class="grow-head">
       <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b> 没花` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
         <span class="gh-bar" role="img" aria-label="${lv}/${max}"><i style="--p:${lv / max}"></i></span></div>
-      ${goal ? html`<div class="gh-goal">
+      ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? '下一步，现在就能升' : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
         <p class="gg-what"><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span></p>
         ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
@@ -122,16 +141,25 @@ export function renderUpgrades() {
 
 // 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
 let armed = 0;
+const armedNow = () => Date.now() - armed < 3000;
 export function branchClick() {
-  if (Date.now() - armed < 3000) { armed = 0; G.branch(); return; }
-  armed = Date.now(); renderBranch(); setTimeout(renderBranch, 3100);
+  if (armedNow()) { armed = 0; G.branch(); return; }
+  armed = Date.now(); renderUpgrades(); setTimeout(renderUpgrades, 3100); // the header's 开分店 and the panel's both say 再点一次
+}
+
+// A street's per-set tilt in words: which sets draw more (or fewer) pack buyers there than on 老街.
+function streetSets(st: ReturnType<typeof G.street>) {
+  const by = (up: boolean) => Object.entries(st.sets!).filter(([, x]) => x.w != null && (x.w > 1) === up).map(([id]) => G.setById(id).name).join('、');
+  const up = by(true), down = by(false);
+  return [up && `${up} 来的人多`, down && `${down} 来的人少`].filter(Boolean).join('；');
 }
 
 // 开分店 (prestige): how far this shop is from the gate, what branching now would pay, what carries over, and the 名气 perks.
 function renderBranch() {
   const b = G.state.branch, rev = G.revenue(), d0 = G.debt0(), paid = Math.max(0, Math.min(1, 1 - G.state.debt / d0)), can = G.canBranch(), fame = G.fameFor(), hand = G.handFame();
   const nextAt = (fame + 1) ** 2 * G.FAME_UNIT, perks = Object.entries(G.PERKS), pts = (v: number) => `${v} 名气`;
-  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店 · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把欠九姐的钱还清，这家店就是你的；她会出本钱让你去新街口再开一家'}</small></h2>
+  const here = G.street(), there = nextStreet();
+  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店在${here.name} · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把欠九姐的钱还清，这家店就是你的；她会出本钱让你去别的街口再开一家'}</small></h2>
     <div class="br-now">
       <div class="br-prog">
         <p><span>这家店的债</span> <b>${can ? '还清了' : `还欠 ${money(G.state.debt)}`}</b> <small>/ ${money(d0)}</small></p>
@@ -140,9 +168,10 @@ function renderBranch() {
           : html`按现在的营业额（${money(rev)}），还清时能带走至少 ${pts(fame)}。破产的店一点名气都没有。`}${!can && hand ? ` 另有亲手开齐的 ${pts(hand)}等着：开分店时一起拿，破产也不丢。` : ''}</p>
       </div>
     <div class="br-go">
+        <p class="br-street"><b>下一家在${there.name}</b>${there.say}${there.sets ? html`<small>${streetSets(there)}</small>` : ''}</p>
         <p class="br-keep"><b>带走</b>卡册和展示柜里的卡、图鉴、成就、欧气检测的全部记录、名气</p>
         <p class="br-keep"><b>留下</b>现金、仓库和货架上的包、店铺升级、技能、营业额（后面的系列要重新解锁）</p>
-        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : Date.now() - armed < 3000 ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame + hand)}`}</button>
+        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : armedNow() ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame + hand)}`}</button>
       </div>
     </div>
     ${b.got ? html`<h3 class="br-h">名气 <small>永久加成，每家新店都有 · 手上 ${pts(b.fame)}</small></h3>

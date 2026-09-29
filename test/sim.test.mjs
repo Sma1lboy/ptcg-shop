@@ -796,3 +796,19 @@ console.log('ok luck percentile');
   assert.ok(ms < 100 && ms2 < 400, `luckPercentile took ${ms.toFixed(0)} ms on 88k packs, ${ms2.toFixed(0)} ms on 20 keys × 1500`);
   console.log(`ok luckPercentile: normal to ±2.5pp at 88k packs, matches openPack players at 1000; ${ms.toFixed(0)} ms / ${ms2.toFixed(0)} ms`);
 }
+
+// 街口 (GAMEPLAY.md §6.2): shop n stands on STREETS[n % 4]. The first shop (老街) is the old numbers exactly; later streets tilt
+// pack demand, and a bankruptcy keeps the street. The pure manager who branches as soon as the debt is paid still clears every
+// shop in 6–11 h (「每家店用时大致不变」) and takes 名气 from each.
+{
+  const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(3), storage: null });
+  assert.equal(Z.street().name, '老街');
+  for (const s of PTCG_SETS) assert.deepEqual(Z.demand(s.id), Z.DEMAND[s.id], `老街 leaves ${s.id} as it was`);
+  const r0 = Z.rate(); Z.state.branch.n = 2; assert.ok(Math.abs(Z.rate() / r0 - Z.STREETS[2].crowd) < 1e-9, '夜市 walk-ins');
+  Z.state.branch.n = 1; assert.equal(Z.demand('sv09').w, Z.DEMAND.sv09.w * Z.STREETS[1].sets.sv09.w, '学校旁 sv09 demand');
+  Z.state.branch.n = 4; assert.equal(Z.street().name, '老街', 'the fifth shop is back on 老街');
+  const { play } = await import('../scripts/autoplay.mjs'), shops = []; let t0 = 0, got = 0;
+  play({ hours: 34, openShare: 0, pct: 0.95, reserve: 1, repay: true, branch: 'paid', log: 3600, hook: G => { let n = 0; return t => { if (G.state.branch.n !== n) { shops.push({ h: (t - t0) / 3600, fame: G.state.branch.got - got }); t0 = t; got = G.state.branch.got; n = G.state.branch.n; } }; } });
+  assert.ok(shops.length >= 4 && shops.every(s => s.h >= 6 && s.h <= 11 && s.fame >= 5), `shops: ${JSON.stringify(shops)}`);
+  console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
+}
