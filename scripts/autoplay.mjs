@@ -34,8 +34,8 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
     if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
     if (best && st.cash >= best[1]) { spent += best[1]; if (best[0].startsWith('skill:')) G.learn(best[0].slice(6)); else G.upgrade(best[0]); best = null; }
-    const leaving = off && (t + step) % 3600 >= (60 - off) * 60; // last visit before going away: fill the shelves, save later
-    const hold = best && !leaving && st.cash > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
+    const leaving = off && (t + step) % 3600 >= (60 - off) * 60; // last visit before going away: fill the shelves, save later (unless a set is waiting for a shelf)
+    const hold = best && (!leaving || best[0] === 'racks') && st.cash > best[1] * 0.4 ? best[1] : 0; // saving for the next upgrade: stop pouring cash into stock and packs
     pot += (G.revenue() - rev) * masterShare; rev = G.revenue(); // the master-set budget: a share of what came in since last visit
     const goal = SETS.filter(x => G.unlocked(x.id) && !G.master(x.id)).sort((a, b) => a.packPrice * baseLeft(a.id) - b.packPrice * baseLeft(b.id))[0];
     if (goal && masterShare) { // pull the C/U/R by opening packs, then buy the missing hits cheapest first
@@ -45,12 +45,14 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     const ids = SETS.filter(x => G.unlocked(x.id)).map(x => x.id).reverse(), racksOf = id => G.shelves().filter(s => s.id === id).length;
     for (const id of ids) if (!racksOf(id)) { const i = G.shelves().findIndex(s => !s.id || racksOf(s.id) > 1); if (i >= 0) G.place(i, id); } // a newly unlocked set takes a doubled-up shelf
     G.shelves().forEach((s, i) => { if (!s.id && ids.length) G.place(i, ids.reduce((a, b) => (racksOf(b) < racksOf(a) ? b : a))); });
-    for (const id of ids) {
-      G.setPrice(id, pctOf(id));
-      const clerked = G.lvl('clerk') > 0 && st.auto[id];
-      if (!clerked) { // by hand: fill the set's shelves
-        const room = racksOf(id) * G.depth() - G.shelfQty(id), n = Math.min(room, Math.floor(Math.max(0, st.cash - (G.shelfQty(id) < 10 ? 0 : hold)) / G.wholesale(id)));
-        if (n > 0 && G.buy(id, n)) G.shelve(id, n);
+    for (const id of ids) G.setPrice(id, pctOf(id));
+    for (const id of ids) if (st.stock[id] > 0) G.shelve(id, st.stock[id]); // leftovers in the back room go out first
+    const byHand = ids.filter(id => !(G.lvl('clerk') > 0 && st.auto[id])); // the rest the clerk restocks
+    for (let more = true; more;) { // fill the shelves 5 packs a set at a time, so a short budget is spread over every set
+      more = false;
+      for (const id of byHand) {
+        const room = racksOf(id) * G.depth() - G.shelfQty(id), n = Math.min(5, room, Math.floor(Math.max(0, st.cash - (G.shelfQty(id) < 10 ? 0 : hold)) / G.wholesale(id)));
+        if (n > 0 && G.buy(id, n)) { G.shelve(id, n); more = true; }
       }
     }
     if (!hold) for (const set of SETS) { const n = Math.floor(G.shelfQty(set.id) * openShare); if (n > 0) { G.unshelve(set.id, n); G.open(set.id, n); } }

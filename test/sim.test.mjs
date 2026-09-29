@@ -214,6 +214,8 @@ console.log('ok luck percentile');
   assert.ok(G.dexBonus() > 0 && G.rate() > r0, 'collecting raises word-of-mouth'); assert.ok(G.dexCount('sv08') > G.dexTotal('sv08') * 0.75);
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; G.buy('sv08', 1); G.shelve('sv08', 1); G.upgrade('clerk');
   assert.ok(st().auto.sv08, 'first clerk level turns auto-restock on for sets already in use');
+  G.buy('sv10', 1); G.place(1, 'sv10'); assert.ok(st().auto.sv10, 'a set put on a shelf later is restocked too');
+  G.setAuto('sv10', false); G.place(1, null); G.place(1, 'sv10'); assert.equal(st().auto.sv10, false, 'unless the player turned it off');
   T += 3 * 3600e3; G.tick(); assert.ok(G.shelfQty('sv08') > 0 || st().earned.sealed > 1e6, 'clerk keeps the shelf stocked while the shop is closed');
   assert.ok(st().offline.sales > 20, `a clerk lets a closed shop keep selling past one shelf (${st().offline.sales} sales)`);
   // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.

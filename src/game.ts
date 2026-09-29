@@ -78,7 +78,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
-    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(300 * 2.5 ** i)) }, // up to one per set: a second shelf of a set is only more depth
+    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i)) }, // up to one per set: a second shelf of a set is only more depth
     depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640] },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
@@ -182,10 +182,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     for (const s of shelves()) if (s.id === id) { const k = Math.min(left, depth() - s.qty); s.qty += k; left -= k; }
     const moved = Math.min(n, state.stock[id] || 0) - left; state.stock[id] -= moved; return moved;
   }
+  // A set put on a shelf is one the clerk restocks, unless the player turned that off for it.
+  const label = (s: Shelf, id: string | null) => { s.id = id; if (id && state.auto[id] == null && lvl('clerk')) state.auto[id] = true; };
   // Fills the shelves this set already has; a set with none takes the first empty shelf. More shelves for one set: place().
   function shelve(id: string, n: number) {
     if (!(state.stock[id] > 0)) return false;
-    if (!shelves().some(s => s.id === id)) { const free = shelves().find(s => !s.id); if (free) free.id = id; }
+    if (!shelves().some(s => s.id === id)) { const free = shelves().find(s => !s.id); if (free) label(free, id); }
     if (!fill(id, n)) return false;
     emit(); return true;
   }
@@ -200,7 +202,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function place(i: number, id: string | null) {
     const s = shelves()[i]; if (!s || (id && !unlocked(id))) return false;
     if (s.qty && s.id !== id) { const back = s.id!; if ((state.stock[back] || 0) + s.qty > WAREHOUSE) return false; state.stock[back] = (state.stock[back] || 0) + s.qty; s.qty = 0; }
-    s.id = id;
+    label(s, id);
     if (id) { const k = Math.min(state.stock[id] || 0, depth() - s.qty); s.qty += k; state.stock[id] = (state.stock[id] || 0) - k; }
     emit(); return true;
   }
