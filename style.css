@@ -999,7 +999,7 @@ button:disabled { cursor: not-allowed; }
 .due.late { background: var(--danger-face); color: var(--danger-ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 0 1px #0A1226; }
 .due.late :is(.k, small) { color: var(--danger-ink); }
 .due:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
-@media (max-width: 779px) { .due { padding: 3px 8px; gap: 4px; } .due small { display: none; } .due b { min-width: 0; font-size: var(--fs-body); } }
+@media (max-width: 779px) { .due { padding: 3px 8px; gap: 4px; } .due small, .due:not(.late) .k { display: none; } .due b { min-width: 0; font-size: var(--fs-body); } }
 
 .page-grow > .ledger { grid-column: 1 / -1; }
 .lg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 40px; }
