@@ -12,6 +12,7 @@
 | 构建 | `npm run build`：先 `tsc` 类型检查，再出 `dist/index.html`。双击能玩（卡图走 TCGdex CDN）；`npm run preview` 或任何静态服务器开 `dist/` 用本地镜像 |
 | CodePen 单文件 | `npm run pen` → `dist/pen.html`，超过 1,000,000 字符构建直接失败 |
 | 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
+| 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
@@ -29,7 +30,7 @@
   - 技能「手气」是标明的游戏加成：只在开包时把闪卡概率乘系数（`sim.ts` 的 `openPack(id, r, m)`），`rates` 本身不动；每包按 `rateKey(set, m)` 记进 `state.packsBy`，欧气检测、期望、尾概率都按开包时的概率算。m = 1 的输出由测试里的哈希锁定，别往这条路径加随机数调用。
   - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.ts` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
 - **改完必须跑** `npm test`（20 万包/系列，每个稀有度都要落在 TCGplayer 95% 置信区间内）。改了模拟逻辑就在这个文件里加断言，不要另起测试框架。`src/game.ts` 不直接碰 `Date.now` / `Math.random` / `localStorage`，一律走 `createGame({ now, random, storage })` 的参数，测试和 autoplay 靠它注入假时钟和种子随机数。
-- 视觉：颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对；强调色只有价格贴纸橙，稀有度用银/金（对应卡面上的银星/金星），盈亏用 gain/loss 语义色。别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
+- 视觉：先读 `DESIGN.md`（每个 token 对应柜台上哪件实物、管什么、不许干什么）。颜色全部走 `style.css` 顶部的 token，浅色/深色两套都要对，改了颜色 token 跑 `node scripts/contrast.mjs`。强调色只有卡框黄（玩家定的价签 + 每组一个主按钮），稀有度用银/金（对应卡面上的银星/金星），钱用 gain/loss（进账红、出账冷灰）。不许圆角卡片加左侧彩条，别往 AI 默认审美上靠（紫蓝渐变、emoji 当图标、全部居中、每块都加圆角阴影）。
 - **卡图和 Logo 从本地服务器出，不要直连 TCGdex**（用户要求：别把 API 打爆）。`node scripts/fetch-images.mjs` 把全部卡图（low/high webp）和 logo 镜像到仓库根的 `assets/tcg/`（约 90 MB，gitignored；新 worktree 由 `.rove/init.sh` 软链到主仓库的镜像）。**别挪进 `public/`**，那样每次构建都往 `dist/` 拷 88 MB；dev 服务器直接出根目录下的它（`vite.config.ts` 让 watcher 忽略这个目录），`npm run build` 在 `dist/assets/tcg` 放一个指回去的软链。代码里一律用 `src/assets.ts` 的 `card(set, n, size)` / `logo(set)`，不要自己拼 URL。只有 `file://` 打开和 pen（`--mode pen` 把 `__REMOTE_ASSETS__` 定为 true）会退回 CDN；CDN 地址不许带 query string。本地同源的图做 canvas / WebGL 贴图没有 CORS 问题，所以要看 3D/分享效果请用 `npm run dev` 或 `npm run preview`。
 
 ## 文件分工（并行 worker 按这个认领，动别人的文件要在报告里说明）
@@ -41,7 +42,7 @@
 | `src/game.ts` | `createGame()`：存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
 | `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
-| `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/图鉴（含补卡）/店员，`skills` 是技能页（经营类 + 手气，带官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径 |
+| `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客（货柜页）/图鉴含补卡（欧气页）/店员（货柜页），`upgrades` + `skills` 是成长页（店铺等级、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
 | `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, onHold, reducedMotion })` → `{ showPack, showBatch, flip, flipAll, resize, dispose }`；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
@@ -49,9 +50,12 @@
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
-| `index.html` | 外壳，Vite 入口 |
+| `index.html` | 外壳，Vite 入口：顶栏（含四页导航）、四页（开包 / 货柜 / 欧气 / 成长）、页脚。面板容器的 id 就是各面板 `render()` 的目标 |
+| `src/ui/layout.ts` | 四页的 hash 路由（`#open #shelf #luck #grow`，只隐藏不重渲染，翻牌进度不丢）、从别页开包先切到开包页、导航上成长的可买数 |
+| `src/ui/rail.ts` | 开包页右边的窄栏：仓库里的包（换系列开）、欧气结论 |
+| `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
-| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay） |
+| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

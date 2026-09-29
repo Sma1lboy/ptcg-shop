@@ -1,4 +1,4 @@
-// 顾客 + 图鉴 + 店员 panel (#goals). Frozen while a pack is being revealed (dex progress would spoil the pull).
+// 顾客 (#customers) and 店员 (#clerk) on the 货柜 page, 图鉴 (#dex) on the 欧气 page. Frozen while a pack is being revealed (dex progress would spoil the pull).
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money } from './common.ts';
@@ -30,7 +30,7 @@ function dex() {
 
 // 图鉴补卡: buy the missing hits at market into the binder (never resellable); C/U/R only come from packs. 100% = 大师套.
 function collect(id: string) {
-  if (G.master(id)) return html`<small class="gain">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
+  if (G.master(id)) return html`<small class="master">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
   const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
   const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
   if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
@@ -48,9 +48,9 @@ function clerk() {
 
 function renderGoals() {
   if (hold) return;
-  render(html`<h2 class="eyebrow">顾客 · 最近成交</h2>${customers()}
-      <h2 class="eyebrow">图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%</span></h2><ul class="dex">${dex()}</ul>
-      <h2 class="eyebrow">店员 · 自动进货</h2>${clerk()}`, $('goals'));
+  render(html`<h2>顾客 · 最近成交</h2>${customers()}`, $('customers'));
+  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%</span></h2><ul class="dex">${dex()}</ul>`, $('dex'));
+  render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
 }
 
 export function initGoals() {
