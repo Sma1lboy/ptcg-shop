@@ -665,7 +665,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     for (const c of state.trophy ? [...state.shown, state.trophy] : state.shown) { const { key, pct, ...o } = c as Shown; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder
     restart({ ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue() }, singles);
     log(`开了第 ${state.branch.n + 1} 家店，带来名气 ${fame}。九姐出的本钱：$${state.debt.toLocaleString('en-US')}`, 'hit');
-    emit(); return true;
+    pending.push({ type: 'story', id: 'branch', week: 1, amount: state.debt }); flush(); return true;
   }
   // 破产: 九姐 takes the shop and everything in it (cash, stock, the binder and the case), this shop's revenue earns no 名气, and
   // you start the same shop number over, owing its opening debt again, with a mark that raises every later loan's interest.
