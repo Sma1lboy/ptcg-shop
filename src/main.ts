@@ -16,12 +16,13 @@ import { renderSources, renderBasis } from './ui/sources.ts';
 import { renderMat, refreshIdle, bindMatInput, hold } from './ui/mat.ts';
 import { bindEvents } from './ui/events.ts';
 import { bindLayout, renderTabs } from './ui/layout.ts';
+import { renderRail } from './ui/rail.ts';
 import { renderGuide } from './ui/guide.ts';
 import { renderShare } from './ui/share.ts';
 import { initGoals } from './ui/goals.ts';
 
 // While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderCase(); renderNotice(); refreshIdle(); }
+function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);

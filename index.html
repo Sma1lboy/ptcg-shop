@@ -11,45 +11,56 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Layout (DESIGN.md): shelf | the playmat stage (viewport-high, sticky) | binder tabs (欧气 / 顾客 / 单卡 / 成长: upgrades + skills). Phones: one column, the mat opens as a full-screen layer. -->
+<!-- Four pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #luck #grow) so switching never loses state (DESIGN.md「布局」).
+     The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
-  <button class="mat-close" type="button" data-act="closemat">‹ 货架</button>
   <h1 class="brand">欧气卡铺</h1>
+  <nav class="nav" aria-label="页面">
+    <a href="#open">开包</a>
+    <a href="#shelf">货柜</a>
+    <a href="#luck">欧气</a>
+    <a href="#grow">成长<b class="tab-n" id="grow-n" hidden></b></a>
+  </nav>
   <div class="stats" id="stats"></div>
 </header>
-<main class="shop">
-  <section class="shelf" aria-labelledby="shelf-h">
-    <div class="notice" id="notice" hidden></div>
-    <section class="guide" id="guide" hidden></section>
-    <h2 id="shelf-h">货架 · 进货</h2>
-    <div id="shelf"></div>
+<div class="notice" id="notice" role="status" hidden></div>
+<main>
+  <section class="page page-open" id="page-open" aria-label="开包">
+    <section class="mat" id="mat" aria-live="polite"></section>
+    <aside class="rail">
+      <section id="rail"></section>
+      <section class="guide" id="guide" hidden></section>
+    </aside>
   </section>
-  <section class="mat" id="mat" aria-live="polite"></section>
-  <aside class="side">
-    <div class="tabs" role="tablist" aria-label="店里的记录">
-      <button type="button" role="tab" id="t-luck" aria-controls="p-luck" aria-selected="true">欧气</button>
-      <button type="button" role="tab" id="t-shop" aria-controls="p-shop" aria-selected="false" tabindex="-1">顾客</button>
-      <button type="button" role="tab" id="t-cards" aria-controls="p-cards" aria-selected="false" tabindex="-1">单卡</button>
-      <button type="button" role="tab" id="t-grow" aria-controls="p-grow" aria-selected="false" tabindex="-1">成长<b class="tab-n" id="grow-n" hidden></b></button>
-    </div>
-    <div class="pane" role="tabpanel" id="p-luck" aria-labelledby="t-luck">
-      <section id="luck" aria-labelledby="luck-h"></section>
-      <section id="share" hidden></section>
-      <section id="binder"></section>
-    </div>
-    <div class="pane" role="tabpanel" id="p-shop" aria-labelledby="t-shop" hidden>
-      <section id="goals"></section>
-      <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
-    </div>
-    <div class="pane" role="tabpanel" id="p-cards" aria-labelledby="t-cards" hidden>
+  <section class="page page-shelf" id="page-shelf" aria-label="货柜" hidden>
+    <section class="shelf" aria-labelledby="shelf-h">
+      <h2 id="shelf-h">货架 · 进货</h2>
+      <div id="shelf"></div>
+    </section>
+    <div class="col">
       <section id="casepanel"></section>
       <section id="singles"></section>
     </div>
-    <div class="pane" role="tabpanel" id="p-grow" aria-labelledby="t-grow" hidden>
-      <section id="upgrades"></section>
-      <section id="skills"></section>
+    <div class="col">
+      <section id="customers"></section>
+      <section id="clerk"></section>
+      <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
     </div>
-  </aside>
+  </section>
+  <section class="page page-luck" id="page-luck" aria-label="欧气" hidden>
+    <div class="col">
+      <section id="luck" aria-labelledby="luck-h"></section>
+      <section id="share" hidden></section>
+    </div>
+    <div class="col">
+      <section id="binder"></section>
+      <section id="dex"></section>
+    </div>
+  </section>
+  <section class="page page-grow" id="page-grow" aria-label="成长" hidden>
+    <section id="upgrades"></section>
+    <section id="skills"></section>
+  </section>
 </main>
 <footer class="foot">
   <details><summary>数据来源与游戏设定</summary><div id="sources"></div></details>

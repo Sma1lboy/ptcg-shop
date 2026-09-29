@@ -269,7 +269,7 @@ export function bindMatInput() {
   document.addEventListener('click', e => { if (!ripMoved || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
 
   document.addEventListener('keydown', e => {
-    if (e.code !== 'Space' || (e.target as Element).closest('input, textarea')) return;
+    if (e.code !== 'Space' || (e.target as Element).closest('input, textarea') || $('mat').closest('[hidden]')) return; // not while another page is showing
     FX.unlock();
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }

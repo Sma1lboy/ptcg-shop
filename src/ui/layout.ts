@@ -1,44 +1,23 @@
-// Page layout behaviour (DESIGN.md「布局」): the right column's binder tabs, and on phones the playmat as a full-screen layer.
+// Page layout behaviour (DESIGN.md「布局」): four pages kept in the DOM, one shown per URL hash, and the 成长 nav badge.
+// Pages are only hidden, never re-rendered, so a pack mid-reveal on 开包 is exactly where it was when the player comes back.
 import { html, render } from 'lit-html';
 import { G, $ } from './common.ts';
 
-// Tabs: click or arrow keys; the selected tab is the only one in the tab order.
-function bindTabs() {
-  const tabs = [...document.querySelectorAll<HTMLButtonElement>('.tabs [role="tab"]')];
-  const pick = (t: HTMLButtonElement, focus?: boolean) => tabs.forEach(x => {
-    const on = x === t;
-    x.setAttribute('aria-selected', String(on)); x.tabIndex = on ? 0 : -1;
-    $(x.getAttribute('aria-controls')!).hidden = !on;
-    if (on && focus) x.focus();
-  });
-  tabs.forEach((t, i) => {
-    t.addEventListener('click', () => pick(t));
-    t.addEventListener('keydown', e => {
-      const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-      if (d) { e.preventDefault(); pick(tabs[(i + d + tabs.length) % tabs.length], true); }
-    });
-  });
-}
+const PAGES = ['open', 'shelf', 'luck', 'grow'];
+const current = () => (PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'open');
 
-// Phones: the mat takes no room until a pack opens, then covers the page under the top bar (which keeps cash and a way back).
-// The rest of the page is inert and the scroll position is kept, so closing lands the player where they tapped.
-const phone = matchMedia('(max-width: 779px)');
-const behind = () => document.querySelectorAll<HTMLElement>('.shelf, .side, .foot');
-let from: HTMLElement | null = null;
-function openMat(trigger: HTMLElement) {
-  const root = document.documentElement;
-  if (!phone.matches || root.classList.contains('mat-open')) return;
-  from = trigger; root.classList.add('mat-open'); behind().forEach(el => { el.inert = true; });
-  document.querySelector<HTMLElement>('.mat-close')!.focus();
+// Page ids are page-<name>, not <name>: #shelf and #luck are also panel ids, and a same-named target would make the browser scroll to it.
+function route() {
+  const id = current();
+  if (document.documentElement.dataset.page === id) return;
+  document.documentElement.dataset.page = id;
+  document.querySelectorAll<HTMLElement>('.page').forEach(p => { p.hidden = p.id !== `page-${id}`; });
+  document.querySelectorAll('.nav a').forEach(a => { if (a.getAttribute('href') === `#${id}`) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  scrollTo(0, 0);
 }
-function closeMat() {
-  const root = document.documentElement;
-  if (!root.classList.contains('mat-open')) return;
-  root.classList.remove('mat-open'); behind().forEach(el => { el.inert = false; });
-  from?.focus({ preventScroll: true }); from = null;
-}
+export const go = (id: string) => { if (current() !== id) { location.hash = id; route(); } };
 
-// 成长 tab badge: how many upgrades / skills the cash on hand can buy right now (the incremental loop's nudge).
+// 成长 badge: how many upgrades / skills the cash on hand can buy right now (the incremental loop's nudge).
 export function renderTabs() {
   const cash = G.state.cash, el = $('grow-n');
   const n = Object.keys(G.UPGRADES).filter(k => { const c = G.upgradeCost(k); return c != null && cash >= c; }).length
@@ -47,12 +26,11 @@ export function renderTabs() {
 }
 
 export function bindLayout() {
-  bindTabs();
+  addEventListener('hashchange', route); route();
+  // Opening a pack from any page lands on 开包 first. Capture phase: the page must be visible before events.ts mounts the 3D table,
+  // or the table would be sized against a hidden (0×0) host.
   document.addEventListener('click', e => {
-    const b = (e.target as Element).closest<HTMLElement>('[data-act]'); if (!b) return;
-    if (/^(open1|open10|buyopen)$/.test(b.dataset.act!)) openMat(b);
-    else if (b.dataset.act === 'closemat') closeMat();
-  });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMat(); });
-  phone.addEventListener('change', () => { if (!phone.matches) closeMat(); });
+    const b = (e.target as Element).closest<HTMLElement>('[data-act]');
+    if (b && /^(open1|open10|buyopen)$/.test(b.dataset.act!)) go('open');
+  }, true);
 }

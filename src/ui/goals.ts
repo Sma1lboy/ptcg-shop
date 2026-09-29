@@ -1,4 +1,4 @@
-// 顾客 + 图鉴 + 店员 panel (#goals). Frozen while a pack is being revealed (dex progress would spoil the pull).
+// 顾客 (#customers) and 店员 (#clerk) on the 货柜 page, 图鉴 (#dex) on the 欧气 page. Frozen while a pack is being revealed (dex progress would spoil the pull).
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money } from './common.ts';
@@ -48,9 +48,9 @@ function clerk() {
 
 function renderGoals() {
   if (hold) return;
-  render(html`<h2>顾客 · 最近成交</h2>${customers()}
-      <h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%</span></h2><ul class="dex">${dex()}</ul>
-      <h2>店员 · 自动进货</h2>${clerk()}`, $('goals'));
+  render(html`<h2>顾客 · 最近成交</h2>${customers()}`, $('customers'));
+  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%</span></h2><ul class="dex">${dex()}</ul>`, $('dex'));
+  render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
 }
 
 export function initGoals() {
