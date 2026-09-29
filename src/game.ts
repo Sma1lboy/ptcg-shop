@@ -63,7 +63,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     sv09: { tag: '平价好开', w: 0.9, tol: -0.03, budget: 0.7, crowd: 0.1 }, // cheapest pack, a double rare in 1 of 5: kids on pocket money, shopping around
     me01: { tag: '新世代', w: 1.2, tol: 0.04, budget: 1.2, crowd: 0.1 },    // first Mega Evolution set: everyone wants a look at the new series
     me02: { tag: '追喷火龙', w: 1.4, tol: 0.12, budget: 1.5, crowd: 0.1 },   // Mega Charizard X SIR is the chase card of the era: chasers pay over market
-    me03: { tag: '便宜没大卡', w: 0.9, tol: -0.04, budget: 0.8, crowd: 0.1 }, // cheapest Mega set, no chase card over ~$100: bought on price
+    me03: { tag: '便宜没大卡', w: 0.9, tol: -0.04, budget: 0.8, crowd: 0.1 }, // cheapest Mega set, its best cards (Meowth ex SIR, Mega Zygarde MHR) only ~$100: bought on price
     me04: { tag: '追忍蛙', w: 1.2, tol: 0.08, budget: 1.3, crowd: 0.1 },     // Mega Greninja ex SIR and MHR (~$150 each): fans pay a little over market
     me05: { tag: '新品上市', w: 1.3, tol: 0.03, budget: 1, crowd: 0.1 },     // newest release (Mega Darkrai ex): the most asked-for set, at a normal price
   };
