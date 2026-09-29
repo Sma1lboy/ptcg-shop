@@ -55,7 +55,7 @@ async function drawCard() {
     x.textAlign = 'left'; x.font = `28px ${body}`; x.fillStyle = muted; x.fillText(k, 80 + i * 320, 660);
     x.font = `600 46px ${num}`; x.fillStyle = ink; x.fillText(v, 80 + i * 320, 720);
   });
-  const hitsLine = [['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']].filter(([k]) => t[k]).map(([k, n]) => `${n} ×${t[k]}`).join('  ') || '这次没出大货';
+  const hitsLine = [['MHR', '超级金卡'], ['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']].filter(([k]) => t[k]).map(([k, n]) => `${n} ×${t[k]}`).join('  ') || '这次没出大货';
   x.fillStyle = line; x.fillRect(80, 780, W - 160, 2);
   drawArt(x, art, 700, 830, 300, best && best.name);
   const wrap = art ? 30 : 60; // art takes the right column, so long card names break earlier

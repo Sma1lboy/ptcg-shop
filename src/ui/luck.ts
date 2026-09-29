@@ -12,7 +12,7 @@ function tailLabel(k: string, got: number, exp: number) {
 export function renderLuck() {
   const L = G.luck(), e = G.expectedTally(), t = G.state.tally;
   const pct = L.pct == null ? null : L.pct * 100;
-  const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR'].filter(k => e[k] > 0 || t[k]);
+  const rows = ['RR', 'ACE', 'PB', 'UR', 'IR', 'MB', 'SIR', 'HR', 'MHR'].filter(k => e[k] > 0 || t[k]);
   render(html`<h2 class="eyebrow" id="luck-h">欧气检测</h2>
       <p class="verdict ${pct == null ? '' : pct >= 70 ? 'lucky' : pct < 30 ? 'unlucky' : ''}">${L.title}</p>
       <p class="verdict-sub">${pct == null ? '开几包就能测。拿你开出的总市值，和同样开了这些包的几千个模拟玩家比（每个系列先抽 6 万包建分布）。'
