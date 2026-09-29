@@ -1348,7 +1348,7 @@ function world() {
     ins.position.copy(at).add(new V3(0, 0, .02)); ins.quaternion.copy(q); show.add(ins);
     loadImg(ASSETS.card(set, n, 'low')).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
   });
-  show.add(slabs, led, new T.Mesh(pane, glass));
+  show.add(slabs, led, new T.Mesh(pane, [glass])); // an array, or three draws the whole box and ignores the groups
 
   // a 4-pocket binder, back left, with index tabs
   const bg = new T.ExtrudeGeometry(roundRect(21, 26, 1.1), { depth: 2.6, bevelEnabled: true, bevelThickness: .35, bevelSize: .35, bevelSegments: 3, curveSegments: 6 });
@@ -1366,7 +1366,7 @@ function world() {
   const tl = place(tops, 24, TOP, -39, -.3);
   const kept = new T.Texture(),  inTop = new T.Mesh(new T.PlaneGeometry(CW, CH), new T.MeshStandardMaterial({ map: kept, roughness: .5, envMapIntensity: .4 }));
   inTop.rotation.x = -Math.PI / 2; inTop.position.set(0, .1 + 6 * .16 + .02, 0); tl.add(inTop);
-  kept.colorSpace = T.SRGBColorSpace; // no image until the scan loads (an 8×8 stand-in fixed the GPU texture at 8×8: the card came out a grey square)
+  kept.colorSpace = T.SRGBColorSpace; kept.anisotropy = renderer.capabilities.getMaxAnisotropy(); // no image until the scan loads (an 8×8 stand-in fixed the GPU texture at 8×8: the card came out a grey square)
   loadImg(ASSETS.card('sv08', '219', 'low')).then(img => { if (img) { kept.image = img; kept.needsUpdate = true; wake(100); } });
   const slvC = canvasOf(256, 340), slvMap = canvasTex(slvC), slvSide = new T.MeshStandardMaterial({ color: css('--stock'), transparent: true, opacity: .5, roughness: .3 });
   place(new T.Mesh(new T.BoxGeometry(7.2, 1.1, 9.6), [slvSide, slvSide, new T.MeshStandardMaterial({ map: slvMap, roughness: .45, envMapIntensity: .4 }), slvSide, slvSide, slvSide]), 33, TOP + .55, -45, .45);
