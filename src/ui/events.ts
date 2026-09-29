@@ -29,7 +29,6 @@ export function bindEvents() {
       case 'untrophy': G.clearTrophy(); break;
       case 'shelve': G.shelve(id, +b.dataset.n!); break;
       case 'unshelve': G.unshelve(id, +b.dataset.n!); break;
-      case 'place': G.place(+b.dataset.i!, id || null); break;
       case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d! * G.PCT_STEP); break;
       case 'cprice': G.setCardPrice(+b.dataset.i!, G.cardPct(G.state.shown[+b.dataset.i!]) + +b.dataset.d! * G.PCT_STEP); break;
       case 'up': G.upgrade(b.dataset.k!); break;
@@ -41,5 +40,11 @@ export function bindEvents() {
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }
         break;
     }
+  });
+  // The shelf wall's <select>: put a set on a shelf, swap it, or clear it (value ""). A refused move (the back room cannot take
+  // the packs back) changes nothing and emits nothing, so put the select back by hand.
+  document.addEventListener('change', e => {
+    const sel = (e.target as Element).closest<HTMLSelectElement>('select[data-act="place"]'); if (!sel || sel.value === '-') return;
+    if (!G.place(+sel.dataset.i!, sel.value || null)) sel.value = sel.dataset.cur || '-';
   });
 }
