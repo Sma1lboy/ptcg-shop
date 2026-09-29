@@ -2,6 +2,7 @@
 // 顾客 reads the last MISS_WINDOW of walk-ins (G.state.recent; 没买到 is G.missed, the shelf wall's count) by what they came for: pack buyers per set, each set with a price rail (every
 // customer's ceiling against your tag), then the case browsers by the rarity they asked for. Each group says what to change.
 import { html, render } from 'lit-html';
+import { live } from 'lit-html/directives/live.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
@@ -16,13 +17,18 @@ const tally = (parts: [string, number][]) => parts.filter(([, n]) => n).map(([k,
 
 // The shelf-edge price rail, MIN_PCT…MAX_PCT of market in the shelf's PCT_STEP steps: one dot per customer, stacked on the step
 // of the most they would pay (ink = buys at the tag as it is now), the flippers' zone along the low end, your yellow tag clipped on.
+// The rail is also the price control: a see-through range input over it (whole percents, so steps match the shelf's clampPct),
+// click a step or drag the tag and the shelf price moves there; arrow keys step by 5%.
 const DOT = 7; // px per stacked dot
 function priceRail(id: string, vs: Visit[], flip: number) {
   const steps = Math.round((G.MAX_PCT - G.MIN_PCT) / G.PCT_STEP), step = (p: number) => Math.min(steps, Math.max(0, Math.round((p - G.MIN_PCT) / G.PCT_STEP)));
   const at = (p: number) => `${step(p) / steps * 100}%`, pct = G.pctOf(id), mkt = G.sealedPrice(id), near = (p: number) => Math.abs(p - pct) < 0.13;
   const stack: number[] = [], dots = [...vs].sort((a, b) => a.max! - b.max!).map(v => ({ v, k: stack[step(v.max!)] = (stack[step(v.max!)] ?? -1) + 1 }));
   const buy = vs.filter(v => v.max! >= pct - 1e-9).length, h = Math.min(8, Math.max(2, ...Object.values(stack)) + 1) * DOT; // stack is sparse: Object.values skips the empty steps
-  return html`<div class="c-rule" style="--h:${h}px" role="img" aria-label="${vs.length} 位顾客最多肯出 ${spread(vs.map(v => v.max! * mkt))}，你标 ${money(G.ask(id))}，其中 ${buy} 位会买">
+  const lo = Math.round(G.MIN_PCT * 100), hi = Math.round(G.MAX_PCT * 100), at100 = Math.round(pct * 100);
+  return html`<div class="c-rule" style="--h:${h}px" role="group" aria-label="${vs.length} 位顾客最多肯出 ${spread(vs.map(v => v.max! * mkt))}，你标 ${money(G.ask(id))}，其中 ${buy} 位会买">
+      <input class="c-set" type="range" min="${lo}" max="${hi}" step="${Math.round(G.PCT_STEP * 100)}" .value=${live(String(at100))} data-id="${id}"
+        aria-label="${G.setById(id).name}标价" aria-valuetext="${money(G.ask(id))}，市价的 ${at100}%，${buy} 位会买">
       ${flip ? html`<span class="c-flip" style="width:${at(flip)}"></span>` : ''}<span class="c-mkt" style="left:${at(1)}"></span>
       ${dots.map(({ v, k }) => html`<i class=${v.max! >= pct - 1e-9 ? 'buy' : ''} style="left:${at(v.max!)};bottom:calc(100% - var(--h) + ${Math.min(k, 7) * DOT}px)" title="最多肯出 ${money(v.max! * mkt)}（市价的 ${pc(v.max!)}）"></i>`)}
       <span class="sticker" style="left:clamp(26px, ${(pct - G.MIN_PCT) / (G.MAX_PCT - G.MIN_PCT) * 100}%, calc(100% - 26px))">${money(G.ask(id))}</span>
@@ -35,7 +41,7 @@ function packs(rec: Visit[]) {
   const flip = Math.max(0, ...flippers.map(v => v.max!)), racks = G.shelves(), free = racks.some(r => !r.id);
   const ids = SETS.map(x => x.id).filter(id => G.unlocked(id) && (racks.some(r => r.id === id) || G.missed(id) || openers.some(v => v.set === id)));
   if (!ids.length) return '';
-  return html`<h3 class="c-h">来买整包的 <small>一个点是一位顾客最多肯出的价：实的按现在的标价会买，淡的不会</small></h3>
+  return html`<h3 class="c-h">来买整包的 <small>一个点是一位顾客最多肯出的价：实的按现在的标价会买，淡的不会。点轨上哪一档，标价就改到哪一档</small></h3>
     <ul class="c-sets">${ids.map(id => {
       const mine = openers.filter(v => v.set === id), missed = G.missed(id), sold = count(mine, 'sold');
       const dear = mine.filter(v => v.r === 'pricey' && !v.why), broke = count(mine, 'pricey', 'budget');
@@ -129,12 +135,15 @@ function clerk() {
 function renderGoals() {
   if (hold) return;
   render(customers(), $('customers'));
-  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%</span></h2><ul class="dex">${dex()}</ul>`, $('dex'));
+  // 回头客 is the nominal sum; past CROWD_KNEE the whole walk-in multiplier (图鉴 × 人气 × 新系列) is damped, so say what it adds up to
+  const capped = G.crowdRaw() > G.CROWD_KNEE;
+  render(html`<h2>图鉴 · 口碑 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="客流加成（图鉴 × 人气 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${G.crowdCap()}；成长页的店面扩建能抬上限">（全店客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2><ul class="dex">${dex()}</ul>`, $('dex'));
   render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
 }
 
 export function initGoals() {
   document.addEventListener('change', e => { const b = (e.target as Element).closest<HTMLInputElement>('[data-act="auto"]'); if (b) G.setAuto(b.dataset.id!, b.checked); });
+  document.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) G.setPrice(r.dataset.id!, +r.value / 100); });
   document.addEventListener('ptcg:release', renderGoals);
   G.on(renderGoals); renderGoals();
 }
