@@ -35,8 +35,8 @@
   --back-2: #0E214D;
   --back-ring: #E9ECF2;
   --foil-1: #C9D1DC; --foil-2: #F4F6F9; --foil-3: #9AA6B5;
-  --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the shop lamp over the playmat, warm white; same in both themes like the mat */
-  --lamp-fill: #DCE4EF;   /* sky fill from the room */
+  --lamp: #FFF3E4;        /* 3D mat (src/table3d.js): the shop lamp over the playmat, warm white by day */
+  --lamp-fill: #DCE4EF;   /* daylight fill from the room */
   --lamp-rim: #CFDDF5;    /* back light that outlines the pack's edges */
   /* type (DESIGN.md「字」): system body for everything incl. small numbers; the heavy 黑体 printed on card names for the sign and verdicts;
      condensed POP-label numerals for prices and the big numbers */
@@ -55,12 +55,14 @@
   --line: rgba(238, 241, 247, .12); --line-strong: rgba(238, 241, 247, .32); --hover: rgba(238, 241, 247, .06);
   --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B;
   --gain: #FF6E5E; --loss: #A9BBDD; --mat: #060B17; --paper: #E6E9EF; color-scheme: dark;
+  --lamp: #FFE8CC; --lamp-fill: #AEBACC; --lamp-rim: #B9CBEB; /* 3D mat by night: warmer lamp, dimmer room */
 } }
 :root[data-theme="dark"] {
   --bg: #172443; --panel: #1F2D50; --ink: #EEF1F7; --muted: #A3AEC6;
   --line: rgba(238, 241, 247, .12); --line-strong: rgba(238, 241, 247, .32); --hover: rgba(238, 241, 247, .06);
   --sticker: #FFD91A; --sticker-edge: #FFD91A; --silver: #C5CCD8; --gold: #F2A93B;
   --gain: #FF6E5E; --loss: #A9BBDD; --mat: #060B17; --paper: #E6E9EF; color-scheme: dark;
+  --lamp: #FFE8CC; --lamp-fill: #AEBACC; --lamp-rim: #B9CBEB; /* 3D mat by night: warmer lamp, dimmer room */
 }
 
 * { box-sizing: border-box; }
@@ -179,7 +181,7 @@ button:disabled { cursor: not-allowed; }
 .face { transform: rotateY(180deg); background: var(--foil-3); }
 .face img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .energy { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 6px; background: var(--foil-2); color: var(--back-2); font-size: var(--fs-cap); }
-.energy b { font: 700 40px/1 var(--font-body); }
+.energy svg { width: 62%; margin: 0 auto; }
 /* foil sheen on reverse holos and hits; SIR/HR get a gold edge */
 .t1 .face::after, .t2 .face::after, .t3 .face::after, .t4 .face::after, .t5 .face::after {
   content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: color-dodge; opacity: .28;
