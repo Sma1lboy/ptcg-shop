@@ -35,3 +35,59 @@ for (const set of PTCG_SETS) {
 const p = S.luckPercentile({ sv08: 36 }, 0);
 assert.equal(p, 0, 'zero value must be the unluckiest');
 console.log('ok luck percentile');
+
+// ---------- economy (src/game.js) ----------
+{
+  let T = 1_700_000_000_000;
+  const store = {};
+  const gctx = { window: {}, localStorage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } }, Date: { now: () => T }, Math };
+  gctx.window.window = gctx.window; vm.createContext(gctx);
+  for (const f of readdirSync('data').filter(f => f.endsWith('.js'))) vm.runInContext(readFileSync('data/' + f, 'utf8'), gctx);
+  for (const f of ['src/sets.js', 'src/sim.js', 'src/game.js']) vm.runInContext(readFileSync(f, 'utf8'), gctx);
+  const G = gctx.window.PTCG_GAME, st = () => G.state;
+
+  // 1. No money pump: even at the best supplier level, opening a pack and selling the hits at the top display-case
+  //    price (bulk goes to peers at BUYLIST) returns less than the pack cost.
+  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length;
+  const topMult = Math.max(...G.CASE_PRICING.map(t => t.mult));
+  for (const set of PTCG_SETS) {
+    assert.ok(S.packEV(set.id) * topMult < set.packPrice * bestWholesale, `${set.id}: opening packs must stay negative EV`);
+  }
+  assert.ok(bestWholesale > G.BUYLIST * 0.8, 'supplier discount must not undercut what the sealed sale is worth');
+  assert.ok(G.CASE_PRICING.every(t => t.buy > 0 && t.buy <= 1) && G.CASE_PRICING.every((t, i, a) => !i || (t.mult > a[i - 1].mult && t.buy < a[i - 1].buy)),
+    'higher case price must mean lower sale chance');
+  for (const [k, u] of Object.entries(G.UPGRADES)) assert.ok(u.costs.every((c, i, a) => !i || c > a[i - 1]), `${k} costs must increase`);
+
+  // 2. Shelf capacity and set unlocks.
+  assert.equal(G.buy('sv08.5', 1), false, 'locked set cannot be stocked');
+  st().cash = 1; assert.equal(G.buy('sv08', 999), false, 'cannot afford it');
+  st().cash = 1e6;
+  G.buy('sv08', 999);
+  assert.equal(st().stock.sv08, G.SHELF_BASE, 'buy clamps to shelf capacity');
+  assert.equal(G.buy('sv08', 1), false, 'full shelf');
+  const cash0 = st().cash; assert.ok(G.upgrade('shelf')); assert.equal(st().cash, cash0 - G.UPGRADES.shelf.costs[0]);
+  assert.equal(G.capacity(), G.SHELF_BASE + 20);
+  st().earned.sealed = 400; assert.ok(G.unlocked('sv08.5'));
+
+  // 3. Idle shop: an hour closed sells at most the stock, credits at most what was stocked, and never goes negative.
+  G.buy('sv08', 40); const stocked = st().stock.sv08, before = st().cash;
+  T += 3600e3; G.tick();
+  assert.ok(st().stock.sv08 >= 0 && st().stock.sv08 < stocked, 'customers bought packs while closed');
+  assert.ok(st().cash - before <= stocked * 8.47 * 1.15 + 1e-6, 'offline revenue cannot exceed stock value');
+  assert.ok(st().offline && st().offline.sales > 0, 'offline report recorded');
+  T += 30 * 86400e3; st().stock.sv08 = 5; G.tick();
+  assert.ok(st().lost > 0, 'empty shelf turns customers away');
+  assert.ok(st().offline.secs <= G.OFFLINE_CAP * 2 + 1, 'offline credit is capped per absence');
+
+  // 4. Display case: slots limit, price tier changes take-home, trophy bonus stays bounded.
+  const hit = { set: 'sv08', n: '1', kind: 'SIR', r: 'SIR', name: 'test', price: 100, count: 3 };
+  st().singles.a = hit;
+  for (let i = 0; i < 10; i++) G.list('a');
+  assert.equal(st().shown.length, G.CASE_BASE, 'case slots cap listings');
+  G.unlist(0); assert.equal(st().shown.length, G.CASE_BASE - 1);
+  assert.ok(!G.list('nope'));
+  st().singles.b = { ...hit, price: 1e7, count: 1 }; G.setTrophy('b');
+  assert.ok(G.trophyBonus() < 0.5, 'trophy bonus is bounded');
+  const rate0 = G.rate(); G.clearTrophy(); assert.ok(G.rate() < rate0 && st().singles.b.count === 1, 'trophy returns to stock');
+  console.log('ok economy');
+}

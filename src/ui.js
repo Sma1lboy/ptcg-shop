@@ -26,7 +26,7 @@
     const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0);
     const held = Object.values(s.singles).reduce((a, c) => a + c.price * c.count, 0);
     $('stats').innerHTML = [
-      ['现金', money(s.cash)], ['货架', `${stock} 包`], ['来客', s.customers], ['手上单卡市值', money(held)],
+      ['现金', money(s.cash)], ['货架', `${stock} 包`], ['客流', `${(G.rate() * 60).toFixed(1)}/分`], ['来客', s.customers], ['手上单卡市值', money(held)],
     ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
   }
 
@@ -35,13 +35,17 @@
     const s = G.state;
     $('shelf').innerHTML = SETS.map(set => {
       const w = G.wholesale(set.id), ev = S.packEV(set.id), stock = s.stock[set.id] || 0;
-      const can = n => s.cash >= w * n;
+      const room = G.capacity() - stock, can = n => room > 0 && s.cash >= w * Math.min(n, room);
+      if (!G.unlocked(set.id)) return `<article class="set locked"><img class="logo" src="${logoUrl(set.id)}" alt="${esc(set.en)}" loading="lazy">
+        <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
+        <div class="set-stock">累计营业额 <b>${money(G.unlockAt(set.id))}</b> 解锁进货（现在 ${money(G.revenue())}）</div></article>`;
+      const heat = s.heat[set.id], sp = G.sealedPrice(set.id);
       return `<article class="set">
         <img class="logo" src="${logoUrl(set.id)}" alt="${esc(set.en)}" loading="lazy">
         <div class="set-name"><h3>${set.name}</h3><span>${set.en} · ${set.released.slice(0, 4)}</span></div>
-        <div class="set-price"><span class="sticker">${money(set.packPrice)}</span>
+        <div class="set-price"><span class="sticker">${money(sp)}</span>${heat ? `<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：柜台售价 ${heat > 1 ? '+15%' : '−10%'}（游戏设定）">${heat > 1 ? '热销' : '滞销'}</span>` : ''}
           <span>进货 ${money(w)}</span><span title="按 TCGplayer 市价 × 实测概率算出的单包期望">开出期望 ${money(ev)}</span></div>
-        <div class="set-stock">库存 <b>${stock}</b> 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>
+        <div class="set-stock">库存 <b>${stock}</b>/${G.capacity()} 包${s.opened[set.id] ? ` · 已开 ${s.opened[set.id]}` : ''}</div>
         <div class="btns">
           <button type="button" data-act="buy" data-id="${set.id}" data-n="1" ${can(1) ? '' : 'disabled'}>进 1 包</button>
           <button type="button" data-act="buy" data-id="${set.id}" data-n="10" ${can(10) ? '' : 'disabled'}>进 10 包</button>
@@ -168,7 +172,41 @@
         <span class="glyph t${rar(c).t}">${rar(c).g}</span>
         <span class="s-name">${esc(c.name)}<small>${G.setById(c.set).name} #${c.n} · ${rarLabel(c.kind)}</small></span>
         <span class="s-count">×${c.count}</span>
-        <button type="button" data-act="sell" data-key="${esc(k)}">卖 ${money(c.price * G.BUYLIST)}</button></li>`).join('')}</ul>`;
+        <span class="s-btns"><button type="button" data-act="list" data-key="${esc(k)}" ${G.state.shown.length >= G.slots() ? 'disabled' : ''} title="挂进展示柜慢慢卖">上柜</button>
+        <button type="button" data-act="trophy" data-key="${esc(k)}" title="当镇店之宝，吸引客流，但不再出售">镇店</button>
+        <button type="button" data-act="sell" data-key="${esc(k)}" title="立刻卖给同行">卖 ${money(c.price * G.BUYLIST)}</button></span></li>`).join('')}</ul>`;
+  }
+
+  // ---------- shop management: upgrades, display case, offline report ----------
+  function renderUpgrades() {
+    $('upgrades').innerHTML = `<h2 class="eyebrow">店铺升级</h2><ul class="ups">${Object.entries(G.UPGRADES).map(([k, u]) => {
+      const lv = G.lvl(k), cost = G.upgradeCost(k);
+      return `<li><span class="u-name">${u.name}<small>${u.desc}</small></span><span class="u-lv">Lv${lv}/${u.costs.length}</span>
+        ${cost == null ? '<span class="muted">已满级</span>' : `<button type="button" data-act="up" data-k="${k}" ${G.state.cash >= cost ? '' : 'disabled'}>${money(cost)}</button>`}</li>`;
+    }).join('')}</ul>`;
+  }
+
+  function renderCase() {
+    const s = G.state, t = s.trophy, tiers = G.CASE_PRICING;
+    $('casepanel').innerHTML = `<h2 class="eyebrow">展示柜 ${s.shown.length}/${G.slots()} · 镇店之宝</h2>
+      <div class="tiers" role="group" aria-label="展示柜定价">${tiers.map((p, i) =>
+        `<button type="button" data-act="tier" data-i="${i}" aria-pressed="${s.casePrice === i}">${p.name} ${Math.round(p.mult * 100)}%</button>`).join('')}</div>
+      <p class="muted">逛柜台的顾客约 ${Math.round(G.BROWSE * 100)}%；${tiers[s.casePrice].name}档每位逛柜的顾客有 ${Math.round(tiers[s.casePrice].buy * 100)}% 会买下一张。价越高卖得越慢，占着柜位。</p>
+      <ul class="singles">${s.shown.map((c, i) => `<li><span class="glyph t${rar(c).t}">${rar(c).g}</span>
+        <span class="s-name">${esc(c.name)}<small>${G.setById(c.set).name} #${c.n}</small></span>
+        <span class="s-count">${money(c.price * tiers[s.casePrice].mult)}</span>
+        <button type="button" data-act="unlist" data-i="${i}">撤下</button></li>`).join('') || '<li class="muted">空着。在单卡库存里点「上柜」。</li>'}</ul>
+      <div class="trophy">${t ? `<img src="${imgUrl(t)}" alt="${esc(t.name)}"><span>${esc(t.name)} ${money(t.price)}<small>客流 +${Math.round(G.trophyBonus() * 100)}%，不会被卖掉</small></span>
+        <button type="button" data-act="untrophy">收回</button>` : '<span class="muted">没有镇店之宝。单卡越值钱，加成越高（上限 +50%）。</span>'}</div>`;
+  }
+
+  function renderNotice() {
+    const o = G.state.offline, el = $('notice');
+    if (!o) { el.hidden = true; return; }
+    const h = o.secs >= 3600 ? `${(o.secs / 3600).toFixed(1)} 小时` : `${Math.round(o.secs / 60)} 分钟`;
+    el.hidden = false;
+    el.innerHTML = `<p>打烊 ${h}：卖出 <b>${o.sales}</b> 件，入账 <b class="gain">${money(o.revenue)}</b>${o.lost ? `，货架空了，错过 <b class="loss">${o.lost}</b> 位顾客` : ''}。</p>
+      <button type="button" class="ghost" data-act="ack">知道了</button>`;
   }
 
   function renderSources() {
@@ -176,10 +214,10 @@
     $('sources').innerHTML = `<p>单卡价：TCGplayer 市价（经 <a href="https://tcgdex.dev" target="_blank" rel="noopener">TCGdex</a>，${upd}）。
       开包概率：TCGplayer 实开统计 ${SETS.map(s => `<a href="${s.rateSource}" target="_blank" rel="noopener">${s.name}</a>（${s.sample.toLocaleString()} 包）`).join('、')}。
       整包市价：${SETS.map(s => `<a href="${s.priceSource}" target="_blank" rel="noopener">PriceCharting ${s.name}</a>`).join('、')}。</p>
-      <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%，同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%，平均每 ${Math.round(1 / G.CUSTOMERS_PER_SEC)} 秒来一位顾客。卡图 © Pokémon / Nintendo / Creatures / GAME FREAK，本页仅供娱乐。</p>`;
+      <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%，平均每 ${Math.round(1 / G.CUSTOMERS_PER_SEC)} 秒来一位顾客（招牌每级 +${G.SIGN_STEP * 100}%）。卡图 © Pokémon / Nintendo / Creatures / GAME FREAK，本页仅供娱乐。</p>`;
   }
 
-  function renderAll() { renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); }
+  function renderAll() { renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderCase(); renderNotice(); }
 
   // ---------- input ----------
   let resetArmed = 0;
@@ -196,6 +234,13 @@
       case 'flipall': mat.cards.forEach((_, i) => mat.up.add(i)); renderMat(); break;
       case 'sell': G.sell(b.dataset.key); break;
       case 'bulk': G.sellBulk(); break;
+      case 'list': G.list(b.dataset.key); break;
+      case 'unlist': G.unlist(+b.dataset.i); break;
+      case 'trophy': G.setTrophy(b.dataset.key); break;
+      case 'untrophy': G.clearTrophy(); break;
+      case 'tier': G.setCasePrice(+b.dataset.i); break;
+      case 'up': G.upgrade(b.dataset.k); break;
+      case 'ack': G.ackOffline(); break;
       case 'reset':
         if (Date.now() - resetArmed < 3000) { G.reset(); mat = { mode: 'idle' }; renderMat(); b.textContent = '清空存档'; resetArmed = 0; }
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }
@@ -217,5 +262,5 @@
 
   G.on(renderAll);
   setInterval(() => G.tick(1), 1000);
-  renderAll(); renderMat(); renderSources();
+  G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 })();

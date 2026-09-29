@@ -172,6 +172,30 @@ button:disabled { opacity: .4; cursor: not-allowed; }
 .s-count { font-family: var(--font-num); color: var(--muted); }
 .glyph.t3 { color: var(--silver); } .glyph.t4, .glyph.t5 { color: var(--gold); }
 
+/* management: upgrades, display case, offline notice, market heat (economy pass) */
+.notice { max-width: 1440px; margin: 0 auto 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; padding: 8px 14px; border: 1px solid var(--line); border-left: 3px solid var(--gain); border-radius: var(--r); background: var(--panel); }
+.notice[hidden] { display: none; }
+.notice p { margin: 0; }
+.heat { font-size: 11px; font-weight: 600; } .heat.hot { color: var(--gain); } .heat.cold { color: var(--loss); }
+.set.locked { opacity: .6; }
+#upgrades { margin-top: 16px; }
+.ups { list-style: none; margin: 0; padding: 0; }
+.ups li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.ups small { display: block; color: var(--muted); font-size: 11px; }
+.u-lv { font: 12px var(--font-num); color: var(--muted); }
+.ups button, .tiers button, .trophy button { border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 5px 10px; font-size: 13px; font-family: var(--font-num); }
+.ups button:disabled { opacity: .45; cursor: default; }
+.tiers { display: flex; gap: 6px; margin-bottom: 6px; }
+.tiers button { flex: 1; font-family: var(--font-body); }
+.tiers button[aria-pressed="true"] { border-color: var(--ink); font-weight: 600; }
+#casepanel .singles { max-height: 220px; }
+#casepanel p { margin: 0 0 6px; font-size: 12px; }
+.trophy { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; margin-top: 8px; font-size: 13px; }
+.trophy img { width: 44px; aspect-ratio: 63 / 88; object-fit: cover; border-radius: 3px; background: var(--line); }
+.trophy small { display: block; color: var(--muted); font-size: 11px; }
+.trophy > .muted { grid-column: 1 / -1; font-size: 12px; }
+.s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+
 .sources { max-width: 1440px; margin: 24px auto 0; font-size: 12px; color: var(--muted); }
 .sources p { margin: 0 0 6px; max-width: 110ch; }
 
