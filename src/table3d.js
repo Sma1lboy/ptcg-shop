@@ -4,9 +4,9 @@
 // reports progress through callbacks. It never reads the game or src/sim.ts and has no say in what a pack contains.
 // Before the first pack it shows every set's sealed packs on the mat (showShelf); which ones and how many is mat.ts's call.
 // Plain JS (tsconfig allowJs, not type-checked). Interface, used by src/ui/mat.ts:
-//   mountTable(el, { onTear, onFlip(i, card), onDone, onPick?(k), onLost?, onHold?, reducedMotion })
+//   mountTable(el, { onTear, onFlip(i, card, quiet), onDone, onPick?(k), onLost?, onHold?, reducedMotion })
 //     → { showShelf(items), hover(k), showPack(set, cards), showBatch(set, packs, picks), flip(i), flipAll(), resize(), dispose() } | null
-//   (onHold: a batch's best card is being lifted face down, the caption of the previous one should go;
+//   (quiet: turned in a sweep with others, no caption or flip sound of its own; onHold: a batch's best card is being lifted face down, the caption of the previous one should go;
 //    onPick(k): shelf item k's pack was tapped. showShelf items: [{ set, n (packs in the stack), off (can't be opened) }])
 // three.js: node_modules in dev, the import map vite.config.ts injects in builds (CDN, same pinned version). mountTable returns
 // null while three is still loading, if it failed to load, or without WebGL; mat.ts then keeps the 2D mat.
@@ -649,6 +649,7 @@ async function reveal(run, i) {
   const lock = celebrate(run, i, t);
   await wait(lock); if (R !== run || run.stage !== 'cards') return;
   run.busy = false;
+  if (run.skip && i < run.n - 1) return revealAll(run);
   if (i === run.n - 1) { await wait(t >= 4 ? 2200 : t >= 2 ? 1300 : 800); if (R === run && run.stage === 'cards' && !run.busy) toSpread(run); }
 }
 // The show, by rarity tier (0 bulk … 5 SIR/HR). It starts only once the card is fully uncovered.
@@ -767,6 +768,9 @@ async function look(run, card) {
 // finger passes). Only the picks ui/mat.ts hands over (the hits, cheapest first) slide out of their packs and fly
 // face-down into a fan at the front; bulk cards never leave the packs. Each tap turns the next pick where it lies; the
 // last (best) one is lifted to the eye face-down and held a beat before it turns, the same wait for every batch.
+// Picks come plain first (mat.ts): the first tap turns every plain pick (new to 亲手开出, not a hit) in one sweep, so a first
+// batch of a set is 1 tap + one per hit instead of one per new card. 全部翻开 skips the bulk, never a UR-or-better: each of those
+// still turns on its own with its show, the best one lifted to the eye (a 连开 round, quick, sweeps everything).
 const BATCH_PITCH = 1.05, FAN_R = 34;
 const qY = a => new T.Quaternion().setFromAxisAngle(new V3(0, 1, 0), a);
 const faceDown = q => q.clone().multiply(qY(Math.PI));
@@ -885,16 +889,31 @@ function flipNext(run) {
   if (run.stage !== 'cards' || run.busy) return false;
   const i = run.cur + 1;
   if (i >= run.n) { batchSpread(run); return true; }
-  run.busy = true; run.cur = i;
+  run.busy = true;
+  if (run.tiers[i] < 2 && i < run.n - 1) { let j = i; while (j + 1 < run.n - 1 && run.tiers[j + 1] < 2) j++; plainSweep(run, i, j); return true; }
+  run.cur = i;
   (i === run.n - 1 ? flipBest : flipPick)(run, i);
   return true;
+}
+// Picks from…to turn over in one wave, about a second whatever the count; only the last gets a caption and a flip sound.
+function sweep(run, from, to) {
+  const step = Math.min(70, 1100 / (to - from + 1));
+  for (let k = from; k <= to; k++) wait((k - from) * step).then(() => { if (R === run) turnOver(run, k, 380, () => opts.onFlip(k, run.data[k], k < to)); });
+  run.cur = to;
+  return wait((to - from) * step + 420);
+}
+async function plainSweep(run, from, to) {
+  mood('base', 250); FX().slide();
+  await sweep(run, from, to); if (R !== run) return;
+  run.busy = false;
+  if (run.skip) revealRest(run);
 }
 async function flipPick(run, i) {
   const t = run.tiers[i];
   mood('base', 250);
   await turnOver(run, i, t >= 2 ? 520 : 360, () => opts.onFlip(i, run.data[i]));
   if (R !== run) return;
-  await wait(Math.min(celebrate(run, i, t), 700)); if (R !== run) return;
+  await wait(Math.min(celebrate(run, i, t), t >= 3 ? 1700 : 700)); if (R !== run) return; // a second big hit in the fan gets its whole show
   run.busy = false;
   if (run.skip) revealRest(run);
 }
@@ -921,9 +940,14 @@ async function flipBest(run, i) {
 function revealRest(run) {
   run.skip = true;
   if (run.stage !== 'cards' || run.busy) return;
-  const from = run.cur + 1; run.busy = true; run.cur = run.n - 1;
-  for (let i = from; i < run.n; i++) { opts.onFlip(i, run.data[i]); wait((i - from) * 70).then(() => { if (R === run) turnOver(run, i, 380); }); }
-  wait((run.n - from) * 70 + 420).then(() => { if (R === run) { run.busy = false; batchSpread(run); } });
+  const from = run.cur + 1; if (from >= run.n) return batchSpread(run);
+  const hit = run.quick ? -1 : run.tiers.findIndex((t, k) => k >= from && t >= 3), to = hit < 0 ? run.n - 1 : hit - 1;
+  run.busy = true;
+  (to >= from ? sweep(run, from, to) : Promise.resolve()).then(() => {
+    if (R !== run) return;
+    if (hit < 0) { run.busy = false; batchSpread(run); return; }
+    run.cur = hit; (hit === run.n - 1 ? flipBest : flipPick)(run, hit); // they end in revealRest again (run.skip)
+  });
 }
 async function batchSpread(run) {
   if (run.stage === 'spread') return;
@@ -1481,8 +1505,13 @@ function revealAll(run) {
   if (run?.batch) { if (run.stage === 'tearing' || run.stage === 'extract') run.skip = true; else if (run.stage === 'cards') revealRest(run); return; }
   if (!run || run.stage === 'spread' || run.stage === 'pack' || run.stage === 'enter' || run.stage === 'tearing') return;
   if (run.stage === 'extract') { run.skip = true; return; }
-  for (let i = run.cur + 1; i < run.n; i++) opts.onFlip(i, run.data[i]);
-  toSpread(run);
+  run.skip = true; if (run.busy) return; // the card being uncovered lands first, then this runs again
+  // 全部翻开 skips the bulk, not the hit: the cards before a UR-or-better go to the pile, then it is revealed with its show
+  const k = run.tiers.findIndex((t, j) => j > run.cur && t >= 3);
+  if (k < 0) { for (let i = run.cur + 1; i < run.n; i++) opts.onFlip(i, run.data[i], true); return toSpread(run); }
+  run.busy = true;
+  for (let j = run.cur; j < k - 1; j++) { const c = run.cards[j]; opts.onFlip(j + 1, run.data[j + 1], true); wait((j - run.cur) * 60).then(() => { if (R === run) toss(run, c); }); }
+  run.cur = k - 1; reveal(run, k);
 }
 
 // ---------- the one export ----------
@@ -1533,7 +1562,7 @@ function mountTable(el, o) {
       if (opts !== o) return;
       const froms = R?.shelf ? takeFromShelf(R, set, packs.length) : [];
       fresh(quick);
-      R = buildBatch(set, packs, picks, news); enterBatch(R, froms);
+      R = buildBatch(set, packs, picks, news); R.quick = quick; enterBatch(R, froms);
     },
     // Once the batch is laid out, pick k is lifted to the camera as a tap on it would (tap again to put it back). Resolves when it's up.
     async lookAt(k) {
