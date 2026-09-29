@@ -1,9 +1,10 @@
 // Pulls card lists, rarities and TCGplayer market prices from TCGdex and writes data/cards-<set>.json (imported by src/sets.ts).
-// Usage: node scripts/fetch-data.mjs   (raw responses are cached in data/raw/, delete it to refresh)
+// Usage: node scripts/fetch-data.mjs [set ids…]   (default: every set; raw responses are cached in data/raw/, delete it to refresh)
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-const SETS = ['sv08', 'sv10', 'sv08.5', 'sv03.5']; // keep in sync with src/sets.ts (not imported: it needs the files this script writes)
+const ALL = ['sv08', 'sv10', 'sv08.5', 'sv03.5', 'sv09', 'me01', 'me02']; // keep in sync with src/sets.ts (not imported: it needs the files this script writes)
+const SETS = process.argv.length > 2 ? process.argv.slice(2) : ALL;
 const API = 'https://api.tcgdex.net/v2/en';
 
 async function getJSON(url, cacheFile) {
@@ -31,6 +32,7 @@ async function pool(items, n, fn) {
 const RARITY = {
   'Common': 'C', 'Uncommon': 'U', 'Rare': 'R', 'Double rare': 'RR', 'Ultra Rare': 'UR',
   'Illustration rare': 'IR', 'Special illustration rare': 'SIR', 'Hyper rare': 'HR', 'ACE SPEC Rare': 'ACE',
+  'Mega Hyper Rare': 'MHR', // Mega Evolution series: replaces Hyper Rare
 };
 
 // TCGplayer keys per printing → our short keys

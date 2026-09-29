@@ -25,17 +25,27 @@ for (const set of PTCG_SETS) {
     const got = (hits[k] || 0) / N * 100;
     assert.ok(Math.abs(got - pct) <= set.ci[k], `${set.id} ${k}: sim ${got.toFixed(2)}% vs measured ${pct}% ± ${set.ci[k]}`);
   }
+  // Mega Hyper Rare sits where the Hyper Rare it replaced sat: the second reverse slot (position 9 of the reveal order).
+  if (set.rates.MHR) {
+    const r2 = S.rng(3); let n = 0;
+    for (let i = 0; i < 20000; i++) S.openPack(set.id, r2).forEach((c, j) => { if (c.kind === 'MHR') { n++; assert.equal(j, 9, `${set.id} MHR in slot ${j}`); } });
+    assert.ok(n > 0, `${set.id}: no MHR in 20k packs`);
+  }
   const ev = S.packEV(set.id), mean = value / N;
   assert.ok(Math.abs(mean - ev) / ev < 0.05, `${set.id} EV ${ev.toFixed(2)} vs sim mean ${mean.toFixed(2)}`);
   console.log(`ok ${set.id.padEnd(7)} EV $${ev.toFixed(2)} / pack $${set.packPrice} (${(ev / set.packPrice * 100).toFixed(0)}%)`);
 }
 // 手气 (game bonus) must leave the measured odds alone: with no bonus, openPack is byte-identical to the pre-手气 code
 // (hash recorded from that code, 2000 packs per set, seed 42), and the default argument is the same as m = 1.
+// Sets are locked in groups so adding a set never moves an existing digest: the first four sets, then the three added with MHR.
 {
-  for (const m of [undefined, 1]) {
+  const LOCK = [[['sv08', 'sv10', 'sv08.5', 'sv03.5'], '321b156f4309598b9545f432c25e2ae6fa16e292adf9bb8643c5a5e6c7df7254'],
+    [['sv09', 'me01', 'me02'], 'fbedfccba29145577bd60d0040e7a88b3a6615c1c359e8afdb0c978ccd524953']];
+  assert.deepEqual(LOCK.flatMap(([ids]) => ids), PTCG_SETS.map(s => s.id), 'every set is hash-locked');
+  for (const [ids, digest] of LOCK) for (const m of [undefined, 1]) {
     const h = createHash('sha256');
-    for (const set of PTCG_SETS) { const r = S.rng(42); for (let i = 0; i < 2000; i++) for (const c of S.openPack(set.id, r, m)) h.update(set.id + c.n + c.kind + '|'); }
-    assert.equal(h.digest('hex'), '321b156f4309598b9545f432c25e2ae6fa16e292adf9bb8643c5a5e6c7df7254', `no-bonus packs changed (m=${m})`);
+    for (const id of ids) { const r = S.rng(42); for (let i = 0; i < 2000; i++) for (const c of S.openPack(id, r, m)) h.update(id + c.n + c.kind + '|'); }
+    assert.equal(h.digest('hex'), digest, `no-bonus packs changed (${ids}, m=${m})`);
   }
   console.log('ok 手气 off = official odds, byte for byte');
 }
@@ -230,6 +240,7 @@ console.log('ok luck percentile');
   // 9. No single right price: undercutting into flipper range stops paying (flippers flip a set once per FLIP_COOLDOWN),
   //    and sets have their own buyers, so the best price differs per set. Profit of one set over 2 sim-hours, shelves kept full.
   {
+    seed = 12345; // its own random stream: the margins are narrow, so how many rolls earlier blocks used must not decide it
     const PCTS = [0.85, 0.9, 1, 1.1];
     const profitAt = (id, pct) => {
       G.reset(); st().cash = 1e9; st().earned.sealed = 1e6; st().up.racks = G.UPGRADES.racks.costs.length; st().up.depth = G.UPGRADES.depth.costs.length; T += 1;
@@ -290,6 +301,19 @@ console.log('ok luck percentile');
     }
     assert.ok(Math.abs(fair - 0.5) < 0.1 && naive > fair + 0.06, `手气 players sit mid-pack among boosted peers (${fair.toFixed(2)}), not above official ones (${naive.toFixed(2)})`);
     store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 7 } }); assert.deepEqual(createGame(env).state.packsBy, { sv08: 7 }, 'old saves: all packs at official odds'); delete store['ptcg-shop-v1'];
+  }
+  // 12. Later sets: each has its buyers, unlocks after the first four in release order, and once unlocked brings its own walk-ins
+  //     (their packs are cheaper than the first four's average, so without them unlocking a set would cut a shop's income).
+  //     Their Mega Hyper Rares can be bought for the 图鉴 like any other hit.
+  {
+    G.reset(); T += 1; const r0 = G.rate();
+    assert.equal(G.lineup(), 0, 'no new-set crowd before anything unlocks');
+    const late = PTCG_SETS.filter(s => G.DEMAND[s.id]?.crowd).sort((a, b) => a.released.localeCompare(b.released));
+    assert.ok(PTCG_SETS.every(s => G.DEMAND[s.id]) && late.length === 3, 'every set has buyers');
+    assert.ok(late.every((s, i) => G.unlockAt(s.id) > G.unlockAt('sv03.5') && (!i || G.unlockAt(s.id) > G.unlockAt(late[i - 1].id))), 'later releases unlock later');
+    st().earned.sealed = G.unlockAt(late[0].id); assert.ok(Math.abs(G.rate() / r0 - 1 - G.DEMAND[late[0].id].crowd) < 1e-9, 'one new set, its crowd');
+    st().earned.sealed = 1e9; assert.ok(Math.abs(G.rate() / r0 - 1 - late.reduce((a, s) => a + G.DEMAND[s.id].crowd, 0)) < 1e-9, 'all of them');
+    assert.deepEqual(G.missing('me02').filter(c => c.r === 'MHR').map(c => c.n), ['130'], 'MHR is collectable');
   }
   console.log('ok economy');
 }

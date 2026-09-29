@@ -44,14 +44,19 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   };
   // Per-set pack demand. w = share of pack buyers who come for this set, tol = added to how far over market they will pay,
   // budget = multiplier on their spending money. Flavour from where each set sits in the real market, not market data.
-  const DEMAND: Record<string, { tag: string; w: number; tol: number; budget: number }> = {
+  // crowd = extra walk-ins once the set is unlocked (a new release brings its own customers). Only the later sets have it:
+  // their packs cost less than the average of the first four, so without new customers unlocking them would cut income.
+  const DEMAND: Record<string, { tag: string; w: number; tol: number; budget: number; crowd?: number }> = {
     sv08: { tag: '货足比价', w: 1.2, tol: -0.06, budget: 1 },      // plentiful main set: players shop around
-    sv10: { tag: '新系列', w: 1, tol: 0, budget: 1 },
+    sv10: { tag: '行情平稳', w: 1, tol: 0, budget: 1 },
     'sv08.5': { tag: '断货抢手', w: 1.3, tol: 0.14, budget: 1.6 }, // sold out for most of 2025: players pay over market, and bring more money
     'sv03.5': { tag: '老粉收藏', w: 0.7, tol: 0.06, budget: 2.4 }, // out of print; adult collectors with deeper pockets
+    sv09: { tag: '平价好开', w: 0.9, tol: -0.03, budget: 0.7, crowd: 0.1 }, // cheapest pack, a double rare in 1 of 5: kids on pocket money, shopping around
+    me01: { tag: '新世代', w: 1.2, tol: 0.04, budget: 1.2, crowd: 0.1 },    // first Mega Evolution set: everyone wants a look at the new series
+    me02: { tag: '追喷火龙', w: 1.4, tol: 0.12, budget: 1.5, crowd: 0.1 },   // Mega Charizard X SIR is the chase card of the era: chasers pay over market
   };
   const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
-  const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
+  const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
   const SIGN_STEP = 0.04;                 // signage: customers pay +4% more per level, and more seekers/collectors come
   // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
@@ -65,12 +70,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +38% per set.
   const DEX_TIERS: [number, number][] = [[0.25, 0.02], [0.5, 0.03], [0.75, 0.05], [0.9, 0.08], [1, 0.2]];
   // Hits (RR and up) can also be bought from other shops at market price, into the binder only; C/U/R only come from packs.
-  const BUY_R = ['RR', 'ACE', 'UR', 'IR', 'SIR', 'HR'];
+  const BUY_R = ['RR', 'ACE', 'UR', 'IR', 'SIR', 'HR', 'MHR'];
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
   const CLERK_ROUND = 300;                // the clerk goes round the shelves every 5 minutes: a shelf has to last until the next round (why 加层 pays late)
-  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000 }; // lifetime revenue needed before a set can be stocked
+  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000 }; // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
     racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(300 * 2.5 ** i)) }, // up to one per set: a second shelf of a set is only more depth
@@ -119,7 +124,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
-  const rate = () => ARRIVAL * (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')); // walk-ins per second: 图鉴 word of mouth × 人气
+  const lineup = () => SETS.reduce((a, s) => a + (unlocked(s.id) ? DEMAND[s.id]?.crowd || 0 : 0), 0);
+  const rate = () => ARRIVAL * (1 + dexBonus()) * (1 + SKILLS.crowd.step * skill('crowd')) * (1 + lineup()); // walk-ins per second: 图鉴 word of mouth × 人气 × new sets
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {} });
 
@@ -474,7 +480,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     get state() { return state; }, on: (f: () => void) => listeners.push(f),
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
-    demand, sealedPrice, ask, cardAsk, shelfQty, facings, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
+    demand, lineup, sealedPrice, ask, cardAsk, shelfQty, facings, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };
 }

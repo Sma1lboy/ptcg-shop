@@ -23,7 +23,8 @@
 - **面板用 lit-html 的 `html` 模板 + `render()` 渲染，不用 `innerHTML` 拼字符串。** lit 自己转义文本和属性，别再套 escape；条件属性写 `?disabled=${…}`，表单状态写 `.checked=${…}`。例外：开包台 `#mat`（含 2D 的 `#stage` 和 3D 的 `#scene3d` 画布）和分享面板/弹窗是命令式 DOM（克隆、定时翻牌、原地插入、WebGL），不许用 lit 渲染进去。弹窗用原生 `<dialog>` / `popover`。
 - **界面只有中文**，不做多语言（全局 i18n 规则不适用于本项目）。
 - **数据要公正，这是产品的底线：**
-  - `data/cards-*.json` 由 `node scripts/fetch-data.mjs` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。
+  - `data/cards-*.json` 由 `node scripts/fetch-data.mjs [系列 id…]` 生成，**不许手改**。要刷新价格就删 `data/raw/` 重跑。整包价 `data/packs.json` 由 `node scripts/fetch-packs.mjs` 从各系列的 `priceSource`（PriceCharting）抓，同样不许手改。
+  - 新系列必须有 TCGplayer 实开统计文章（正文用 `https://infinite-api.tcgplayer.com/content/article/<uuid>/?source=infinite-content` 拿）；有稀有度没测出概率的系列（如黑闪/白焰的 BWR）不加，不许估。
   - `src/sets.ts` 里的 `rates` 是 TCGplayer 实开统计的百分比，**不许为了手感改概率**。改动必须附来源链接（写在 `rateSource` 或注释里）。
   - 技能「手气」是标明的游戏加成：只在开包时把闪卡概率乘系数（`sim.ts` 的 `openPack(id, r, m)`），`rates` 本身不动；每包按 `rateKey(set, m)` 记进 `state.packsBy`，欧气检测、期望、尾概率都按开包时的概率算。m = 1 的输出由测试里的哈希锁定，别往这条路径加随机数调用。
   - 游戏设定（进货折扣、收卡价、客流、升级数值等）可以自由设计，但要在 `src/game.ts` 里标明是游戏设定，并在页脚「游戏设定」里向玩家说明。
@@ -42,7 +43,7 @@
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度符号和名字 |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/图鉴（含补卡）/店员，`skills` 是技能页（经营类 + 手气，带官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
-| `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, reducedMotion })` → `{ showPack, flip, flipAll, resize, dispose }` |
+| `src/table3d.js` | 开包台的 three.js 3D 场景：铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的那包卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onLost, onHold, reducedMotion })` → `{ showPack, showBatch, flip, flipAll, resize, dispose }`；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
 | `src/fx.ts` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
@@ -50,7 +51,7 @@
 | `style.css` | 全部样式与 token |
 | `index.html` | 外壳，Vite 入口 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
-| `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay） |
+| `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay） |
 | `test/sim.test.mjs` | 唯一的测试 |
 
 ## 在 Rove 里干活

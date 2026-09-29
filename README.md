@@ -10,11 +10,11 @@ npm run dev                     # http://localhost:5173
 
 `npm run build` 生成 `dist/index.html`：一个文件装下全部代码和数据，双击就能玩（卡图走 TCGdex CDN）；`npm run preview` 用本地卡图打开它。`npm test` 跑公平性和经济测试。
 
-开包台是 three.js 的 3D 场景（`src/table3d.js`；开发时用 node_modules 里的 three，构建出的页面从 jsdelivr 按同一固定版本加载）：撕封口、抽卡、闪卡材质、按稀有度分级的出货演出。没有 WebGL、系统开了「减少动态效果」、或 CDN 加载失败时，自动退回 2D 开包台。
+开包台是 three.js 的 3D 场景（`src/table3d.js`；开发时用 node_modules 里的 three，构建出的页面从 jsdelivr 按同一固定版本加载）：撕封口、抽卡、闪卡材质、按稀有度分级的出货演出。开 10 包时十包一起摆上胶垫，一次撕开，只有好卡按价格从低到高飞到前面的扇形里逐张翻，最贵的那张最后翻；翻完点卡能拿起来细看。画面静止时不渲染。没有 WebGL、系统开了「减少动态效果」、或 CDN 加载失败时，自动退回 2D 开包台。
 
 - 开包概率：TCGplayer 实开统计（每个系列 1,200–8,000 包），模拟结果由 `npm test` 校验落在其 95% 置信区间内。
 - 单卡价格：TCGplayer 市价，经 TCGdex API 抓取（`node scripts/fetch-data.mjs`）。
-- 整包价格：PriceCharting。
+- 整包价格：PriceCharting 散包价（`node scripts/fetch-packs.mjs` 刷新到 `data/packs.json`）。
 - 欧气检测：拿你开出的总市值，和开了同样包数的 400 个模拟玩家比，给出百分位。
 - 口径：欧气检测按当前单卡市价重算你开出的每张卡，再和模拟玩家比；期望市值只有整包标价的四成多，原因和没建模的神包见页脚「价格口径」。
 
