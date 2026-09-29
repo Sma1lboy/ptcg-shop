@@ -22,12 +22,38 @@
       <p class="muted">卡价和开包概率都是真实统计；每位顾客有自己的来意和预算，嫌贵就走：上架的整包和展示柜里的卡自己定价。</p>`;
   }
 
+  // ---------- card art for share images ----------
+  // assets.tcgdex.net answers with access-control-allow-origin: *, so a CORS-mode load keeps the canvas exportable.
+  // ui.js loads card art with crossorigin="anonymous", so the cached copy passes CORS. No query string here:
+  // assets.tcgdex.net answers query-string URLs with a doubled Access-Control-Allow-Origin, which browsers reject.
+  // The CDN sometimes sends the CORS header twice for a given card/format, which browsers reject, so try other formats before giving up.
+  const loadOne = url => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url; });
+  async function loadArt(url) {
+    const base = url.replace(/\/(high|low)\.webp$/, '');
+    for (const f of ['high.webp', 'high.png', 'low.webp', 'low.png']) { const i = await loadOne(`${base}/${f}`); if (i) return i; }
+    return null;
+  }
+  const roundRect = (x, px, y, w, h, r) => { x.beginPath(); x.roundRect(px, y, w, h, r); };
+  function drawArt(x, img, px, py, w, name) { // card art with a soft shadow; a plain frame with the card name when the image can't load (offline)
+    const h = img ? w * img.height / img.width : w * 1.4;
+    if (!img) {
+      roundRect(x, px, py, w, h, w * .046); x.fillStyle = 'rgba(255,255,255,.06)'; x.fill(); x.strokeStyle = css('--mat-gold'); x.lineWidth = 3; x.stroke();
+      x.fillStyle = css('--mat-muted'); x.textAlign = 'center'; x.font = `${Math.round(w / 12)}px ${css('--font-body')}`;
+      (name ? nameLines(name, 18) : []).forEach((l, i) => x.fillText(l, px + w / 2, py + h / 2 + i * w / 10));
+      return h;
+    }
+    x.save(); x.shadowColor = 'rgba(0,0,0,.35)'; x.shadowBlur = 40; x.shadowOffsetY = 16; roundRect(x, px, py, w, h, w * .046); x.fillStyle = '#000'; x.fill(); x.restore();
+    x.save(); roundRect(x, px, py, w, h, w * .046); x.clip(); x.drawImage(img, px, py, w, h); x.restore();
+    return h;
+  }
+
   // ---------- share card ----------
   let img = '', shownAt = -1;
   async function drawCard() {
     await (document.fonts && document.fonts.ready);
     const L = G.luck(), t = G.state.tally, best = G.state.hits[0];
-    const W = 1080, H = 1080, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const art = best ? await loadArt(`https://assets.tcgdex.net/en/sv/${best.set}/${best.n}/high.webp`) : null;
+    const W = 1080, H = 1330, c = document.createElement('canvas'); c.width = W; c.height = H;
     const x = c.getContext('2d'), pct = L.pct * 100;
     const ink = css('--ink'), muted = css('--muted'), line = css('--line');
     const tone = pct >= 70 ? css('--gold') : pct < 30 ? css('--loss') : ink;
@@ -50,11 +76,49 @@
     });
     const hitsLine = [['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']].filter(([k]) => t[k]).map(([k, n]) => `${n} ×${t[k]}`).join('  ') || '这次没出大货';
     x.fillStyle = line; x.fillRect(80, 780, W - 160, 2);
-    T(best ? `最贵：${best.name}  ${money(best.price)}` : '', 36, 850);
-    T(hitsLine, 32, 905, { c: muted });
-    T('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计', 26, 1010, { c: muted });
+    drawArt(x, art, 700, 830, 300, best && best.name);
+    const wrap = art ? 30 : 60; // art takes the right column, so long card names break earlier
+    if (best) { T('开出过最贵的', 28, 850, { c: muted }); nameLines(best.name, wrap).forEach((l, i) => T(l, 40, 905 + i * 52)); T(money(best.price), 56, 1040 + (nameLines(best.name, wrap).length - 1) * 52, { f: num, w: 600, c: css('--gold') }); }
+    T(hitsLine, 30, 1200, { c: muted });
+    T('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计', 26, 1285, { c: muted });
     return c.toDataURL('image/png');
   }
+
+  // Chinese/English mixed names have no spaces to break on: split by character count.
+  const nameLines = (name, n) => name.match(new RegExp(`.{1,${n}}`, 'g')) || [name];
+
+  // One pack or one batch, straight from the mat: the best card is the poster.
+  async function drawPack(d) {
+    await (document.fonts && document.fonts.ready);
+    const art = await loadArt(d.img), W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+    const x = c.getContext('2d'), ink = css('--ink'), muted = css('--muted'), line = css('--line'), gold = css('--mat-gold'), loss = css('--mat-loss'), gain = css('--mat-gain');
+    const disp = css('--font-display'), num = css('--font-num'), body = css('--font-body');
+    const T = (s, px, y, o = {}) => { x.font = `${o.w || 400} ${px}px ${o.f || body}`; x.fillStyle = o.c || ink; x.textAlign = o.a || 'left'; x.fillText(s, o.a === 'right' ? W - 80 : o.a === 'center' ? W / 2 : 80, y); };
+    x.fillStyle = css('--mat'); x.fillRect(0, 0, W, H); // same dark playmat as the page, both themes
+    const g = x.createRadialGradient(W / 2, 560, 60, W / 2, 560, 720); g.addColorStop(0, 'rgba(255,255,255,.14)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = g; x.fillRect(0, 0, W, H);
+    const mi = css('--mat-ink'), mm = css('--mat-muted');
+    T(`欧气卡铺 · ${d.set}${d.n > 1 ? ` × ${d.n} 包` : ''}`, 34, 100, { c: mm });
+    const aw = 470, ay = 150 + drawArt(x, art, (W - aw) / 2, 150, aw, d.best.name);
+    T(d.best.name, 46, ay + 80, { a: 'center', c: mi });
+    T(money(d.best.price), 92, ay + 180, { a: 'center', f: num, w: 600, c: gold });
+    T(d.n > 1 ? `最好的一包 ${money(d.bestPack)} · ${d.rank}` : d.rank, d.rank.length > 26 ? 32 : 38, ay + 250, { a: 'center', c: mi });
+    const diff = d.value - d.cost;
+    T(`${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, 30, ay + 310, { a: 'center', c: diff >= 0 ? gain : loss });
+    T('卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', 24, H - 44, { a: 'center', c: mm });
+    return c.toDataURL('image/png');
+  }
+
+  // A modal with the finished image: on phones long-press saves it, on desktop the buttons do.
+  async function showPack(d) {
+    let dlg = $('share-pop');
+    if (!dlg) { dlg = document.createElement('dialog'); dlg.id = 'share-pop'; dlg.addEventListener('click', e => { if (e.target === dlg || e.target.dataset.close) dlg.close(); }); document.body.append(dlg); }
+    dlg.innerHTML = '<p class="muted">正在生成…</p>'; dlg.showModal();
+    const url = await drawPack(d), text = `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}），${d.rank}`;
+    dlg.innerHTML = `<img src="${url}" alt="${text}"><div class="btns"><a class="dl" href="${url}" download="ouqi-pack.png">下载 PNG</a><button type="button" id="pop-copy">复制文字</button><button type="button" class="ghost" data-close="1">关闭</button></div>`;
+    $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { e.target.textContent = '已复制'; });
+  }
+  window.PTCG_SHARE = { pack: showPack };
 
   async function renderShare() {
     const el = $('share'), n = opened();
@@ -79,6 +143,20 @@
     if (b && /^(open1|open10|buyopen)$/.test(b.dataset.act) && matchMedia('(max-width: 779px)').matches)
       $('mat').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
+
+  // ---------- footer: what each number means and what is not modelled ----------
+  function renderBasis() {
+    const S = PTCG_SETS, ev = id => PTCG_SIM.packEV(id);
+    const rows = S.map(s => `<tr><td>${s.name}</td><td>${money(s.packPrice)}</td><td>${money(ev(s.id))}</td><td>${Math.round(ev(s.id) / s.packPrice * 100)}%</td></tr>`).join('');
+    $('basis').innerHTML = `<summary>价格口径与没建模的东西</summary>
+      <p>单卡是 TCGplayer 市价（成交均价），整包是 PriceCharting 的散包价，两个来源不同。下表「期望市值」= 每个槽位的概率 × 该稀有度卡池的平均单卡市价，不含任何游戏设定。</p>
+      <table class="tally"><thead><tr><th>系列</th><th>整包标价</th><th>期望市值</th><th>占比</th></tr></thead><tbody>${rows}</tbody></table>
+      <p>期望只有标价的四成多。这个差距是两个口径直接算出来的，不是游戏调的：整包标价里含密封品本身的溢价（收藏、囤货、抽奖的人愿意多付），拆开后只剩单卡的价值。另外单卡市价是成交价，不扣平台费和运费，你在游戏里卖给同行只拿 ${Math.round(G.BUYLIST * 100)}%。</p>
+      <p>欧气检测把你开出的每张卡按<b>当前</b>单卡市价重算再和模拟玩家比，所以刷新价格数据不会让旧存档的百分位错位。只有本功能上线前开的包，无法重算，仍按开包当时的价格。</p>
+      <p>没建模：棱镜进化的 Demigod（3 张 SIR）/ God Pack 和 151 的 God Pack。TCGplayer 的文章明说样本里没开出 God Pack，给不出可靠概率，所以不编数字；文章里的 SIR 概率已经包含了这类包的贡献，因此单包期望大体不受影响，只是没有这种「一包全是大货」的极端开局。</p>
+      <p>游戏设定（不是市场数据）：展示柜共 ${G.CASE_BASE} 个柜位（展示柜每级 +2），货架每系列 ${G.SHELF_BASE} 包起（每级 +20），仓库每系列 ${G.WAREHOUSE} 包；每 ${G.HEAT_EVERY / 60} 分钟行情重排一次，一个系列热销（市价 +15%、顾客多一倍）、一个滞销（−10%、顾客少一半）；棱镜进化累计营业额 ${money(G.unlockAt('sv08.5'))}、151 累计 ${money(G.unlockAt('sv03.5'))} 后才能进货；离线收益最多按 ${G.OFFLINE_CAP / 3600} 小时结算。顾客的来意、预算、肯付的价、图鉴口碑和店员的规则见页面最下方的说明。</p>`;
+  }
+  renderBasis();
 
   G.on(() => { renderGuide(); renderShare(); });
   renderGuide(); renderShare();

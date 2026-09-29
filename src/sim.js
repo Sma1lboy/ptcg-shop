@@ -36,6 +36,14 @@
     return p.h ?? p.n ?? 0;
   }
 
+  // Current market price of one pulled card, looked up by (set, number, kind). Energy is a game constant. null = card no longer in the data.
+  function cardPrice(setId, n, kind) {
+    if (kind === 'E') return 0.01;
+    if (kind === 'FE') return 0.5;
+    const card = g.PTCG_DATA[setId]?.cards.find(c => c.n === n);
+    return card ? priceOf(card, kind) : null;
+  }
+
   function slotTables(set) {
     const t = set.rates, pick = keys => Object.fromEntries(keys.filter(k => t[k]).map(k => [k, t[k]]));
     return { rare: pick(['UR', 'RR']), rev1: pick(['ACE', 'PB']), rev2: pick(['HR', 'SIR', 'IR', 'MB']) };
@@ -56,7 +64,7 @@
     out.push(draw(r, setId, roll(r, t.rev2, 'REV')));
     out.push(draw(r, setId, roll(r, t.rare, 'R')));
     const foil = set.rates.FE && r() * 100 < set.rates.FE;
-    out.splice(7, 0, { set: setId, n: 'E', name: `基础${ENERGY[Math.floor(r() * 8)]}能量`, r: 'E', kind: foil ? 'FE' : 'E', price: foil ? 0.5 : 0.01 });
+    out.splice(7, 0, { set: setId, n: 'E', name: `基础${ENERGY[Math.floor(r() * 8)]}能量`, r: 'E', kind: foil ? 'FE' : 'E', price: cardPrice(setId, 'E', foil ? 'FE' : 'E') });
     // reveal order: energy, commons, uncommons, reverses, rare slot
     return [out[7], ...out.slice(0, 7), ...out.slice(8)];
   }
@@ -79,6 +87,14 @@
     const r = rng(0xC0FFEE ^ setId.length), a = new Float64Array(SAMPLES);
     for (let i = 0; i < a.length; i++) a[i] = packValue(openPack(setId, r));
     return (samples[setId] = a);
+  }
+  // Where one pack's value ranks among simulated packs of the same set: share of packs worth less (ties count half).
+  const sorted = {};
+  function packPercentile(setId, value) {
+    const a = sorted[setId] ||= Float64Array.from(valueSamples(setId)).sort();
+    let lo = 0, hi = a.length; while (lo < hi) { const m = (lo + hi) >> 1; if (a[m] < value - 1e-9) lo = m + 1; else hi = m; }
+    let up = lo; while (up < a.length && a[up] <= value + 1e-9) up++;
+    return (lo + (up - lo) / 2) / a.length;
   }
   // Monte-Carlo resamples of the player's pack count; budget ~2M draws so SE stays under ~1pp even at 1000 packs.
   function luckPercentile(counts, value, trials) { // counts: {setId: packs}
@@ -104,5 +120,5 @@
     return k >= mean ? 1 - lt : le;
   }
 
-  g.PTCG_SIM = { rng, openPack, packEV, packValue, luckPercentile, hitTail, RANK, HITS, slotTables, poolsFor };
+  g.PTCG_SIM = { rng, openPack, packEV, cardPrice, packValue, luckPercentile, packPercentile, hitTail, RANK, HITS, slotTables, poolsFor };
 })(typeof window !== 'undefined' ? window : globalThis);

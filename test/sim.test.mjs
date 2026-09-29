@@ -36,6 +36,17 @@ const p = S.luckPercentile({ sv08: 36 }, 0);
 assert.equal(p, 0, 'zero value must be the unluckiest');
 console.log('ok luck percentile');
 
+// Single-pack ranking: monotone, 0 for an empty pack, ~1 for a huge pull, and a fresh pack lands where the sorted samples say (median ≈ 0.5).
+{
+  const id = PTCG_SETS[0].id, r = S.rng(99), vals = [];
+  for (let i = 0; i < 4000; i++) vals.push(S.packValue(S.openPack(id, r)));
+  assert.equal(S.packPercentile(id, 0), 0); assert.equal(S.packPercentile(id, 1e9), 1);
+  const ps = vals.map(v => S.packPercentile(id, v)), mean = ps.reduce((a, b) => a + b, 0) / ps.length;
+  assert.ok(Math.abs(mean - 0.5) < 0.03, `pack percentile mean ${mean.toFixed(3)} should be ~0.5`);
+  assert.ok(S.packPercentile(id, 5) <= S.packPercentile(id, 50), 'pack percentile is monotone');
+  console.log('ok pack percentile');
+}
+
 // Luck statistics: percentile must agree with a fresh, independent simulation, and hitTail with the binomial.
 {
   const counts = { sv08: 30 }, r = S.rng(99), vals = [];
@@ -51,6 +62,14 @@ console.log('ok luck percentile');
   assert.ok(S.hitTail({ sv08: 100 }, 'UR', 20) < 1e-4);
   assert.ok(Math.abs(S.hitTail({ sv08: 100 }, 'UR', 7) - 0.5) < 0.35);
   console.log('ok luck statistics');
+}
+// cardPrice must agree with what openPack stamped on each card, or repricing an old save shifts the luck baseline.
+{
+  const r = S.rng(5);
+  for (const set of PTCG_SETS) for (let i = 0; i < 300; i++) for (const c of S.openPack(set.id, r))
+    assert.equal(S.cardPrice(set.id, c.n, c.kind), c.price, `${set.id} ${c.n} ${c.kind}`);
+  assert.equal(S.cardPrice('sv08', '999', 'RR'), null);
+  console.log('ok cardPrice repricing');
 }
 // ---------- economy (src/game.js) ----------
 {
@@ -136,6 +155,18 @@ console.log('ok luck percentile');
   assert.ok(st().auto.sv08, 'first clerk level turns auto-restock on for sets already in use');
   T += 3 * 3600e3; G.tick(); assert.ok(G.shelfQty('sv08') > 0 || st().earned.sealed > 1e6, 'clerk keeps the shelf stocked while the shop is closed');
   assert.ok(st().offline.sales > 20, `a clerk lets a closed shop keep selling past one shelf (${st().offline.sales} sales)`);
+
+  // 8. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
+  {
+    G.reset(); st().cash = 1e6; G.buy('sv08', 20); G.open('sv08', 20);
+    const v0 = G.luck().value; assert.ok(G.luck().live && Math.abs(v0 - st().pulled) < 1e-6, 'fresh save: repriced value equals snapshot');
+    for (const c of gctx.window.PTCG_DATA.sv08.cards) for (const k in c.p) c.p[k] *= 2; // prices double after a data refresh
+    G.buy('sv08', 1); G.open('sv08', 1); // clears the luck cache
+    const L = G.luck(); assert.ok(L.value > (v0 + 0) * 1.5, 'value follows current prices');
+    st().dexPacks = 0; // pre-dex save: falls back to the snapshot
+    G.open('sv08', 0); G.buy('sv08', 1); G.open('sv08', 1);
+    assert.equal(G.luck().live, false, 'old saves are flagged');
+  }
   console.log('ok economy');
 }
 

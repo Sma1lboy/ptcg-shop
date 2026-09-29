@@ -55,13 +55,13 @@
   const cardPct = c => c.pct ?? 1;
   const cardAsk = c => Math.round(c.price * cardPct(c) * 100) / 100;
   const dexTotal = id => g.PTCG_DATA[id].cards.length;
-  const dexCount = id => Object.keys(state.dex).filter(k => k.startsWith(id + '|')).length;
+  const dexCount = id => Object.keys(state.dexSeen).filter(k => k.startsWith(id + '|')).length;
   const dexShare = id => dexCount(id) / dexTotal(id);
   const dexBonusOf = id => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => g.PTCG_SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
   const rate = () => ARRIVAL * (1 + dexBonus()); // walk-ins per second: only word of mouth (图鉴) grows it
   const fresh = () => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelf: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: Date.now(), offline: null });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: Date.now(), offline: null });
 
   let state = load(), luckCache = null, lastTick = state.savedAt; // first tick after load credits the time the tab was closed
   const listeners = [];
@@ -120,16 +120,17 @@
       packs.push(pack);
       state.pulled += S.packValue(pack);
       for (const c of pack) {
-        if (c.r !== 'E') state.dex[`${c.set}|${c.n}`] = 1;
+        if (c.r !== 'E') state.dexSeen[`${c.set}|${c.n}`] = 1;
         const key = `${c.set}|${c.n}|${c.kind}`;
         (state.singles[key] ||= { ...c, count: 0 }).count++;
+        const d = (state.dex[key] ||= { c: 0, p: c.price }); d.c++; d.p = c.price;
         state.tally[c.kind] = (state.tally[c.kind] || 0) + 1;
         if (S.HITS.includes(c.kind)) state.hits.push({ ...c, t: Date.now() });
       }
     }
     state.hits.sort((a, b) => b.price - a.price); state.hits.length = Math.min(state.hits.length, 24);
     state.costOpened += wholesale(id) * n;
-    state.opened[id] = (state.opened[id] || 0) + n;
+    state.opened[id] = (state.opened[id] || 0) + n; state.dexPacks += n;
     luckCache = null;
     if (dexCount(id) > had) {
       if (dexBonusOf(id) > dex0) log(`图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%`, 'hit');
@@ -323,9 +324,14 @@
     if (luckCache) return luckCache;
     const packs = Object.values(state.opened).reduce((a, b) => a + b, 0);
     const expected = Object.entries(state.opened).reduce((s, [id, n]) => s + n * S.packEV(id), 0);
-    const pct = packs ? S.luckPercentile(state.opened, state.pulled) : null;
+    // Price basis: the simulated players are priced with today's data, so re-price every card ever pulled the same way
+    // (state.pulled is the price at the moment of opening; prices move when data/ is refreshed). Saves from before
+    // state.dex existed only have that snapshot.
+    const live = state.dexPacks === packs;
+    const value = live ? Object.entries(state.dex).reduce((s, [k, d]) => { const [set, n, kind] = k.split('|'); return s + d.c * (S.cardPrice(set, n, kind) ?? d.p); }, 0) : state.pulled;
+    const pct = packs ? S.luckPercentile(state.opened, value) : null;
     const title = pct == null ? '还没开包' : TITLES.find(([p]) => pct >= p)[1];
-    return (luckCache = { packs, pct, title, value: state.pulled, expected, cost: state.costOpened });
+    return (luckCache = { packs, pct, title, value, live, expected, cost: state.costOpened, listEV: Object.entries(state.opened).reduce((s, [id, n]) => s + n * setById(id).packPrice, 0) });
   }
   // Expected count of each hit rarity for the packs opened so far.
   function expectedTally() {
