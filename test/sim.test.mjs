@@ -685,6 +685,17 @@ console.log('ok luck percentile');
   assert.equal(J.state.branch.fame, fame0 + f1, 'paid at the next 开分店'); assert.equal(J.handFame(), 0, 'and only once');
   assert.equal(D.debtBeat(evs[0], J).key, 'story:hand:me02', 'its beat plays once per set');
   assert.ok(A.ACH.find(a => a.id === 'hand-1').prog(J)[0] === 100);
+  // 大师套 by 补卡: the last hit bought fills the set → one 'master' beat (the binder closes, silver stamp); the hand finish above,
+  // which also completed the set, played only 'hand' (the deepEqual above)
+  {
+    const K = createGame({ now: () => 1_700_000_000_000, random: S.rng(9), storage: { getItem: () => null, setItem() {} } }), kev = [];
+    const id = PTCG_SETS.find(s => K.unlocked(s.id)).id; K.on(ev => ev?.type === 'story' && kev.push([ev.id, ev.set]));
+    const last = K.missing(id)[0]; for (const c of PTCG_DATA[id].cards) if (c.n !== last.n) K.state.dexSeen[`${id}|${c.n}`] = 1;
+    K.state.cash = 1e6; assert.ok(!K.master(id)); assert.ok(K.collect(id)); assert.ok(K.master(id));
+    assert.deepEqual(kev, [['master', id]], '补 the last card: one 大师套 beat');
+    assert.equal(ST.sceneFor(D.debtBeat({ type: 'story', id: 'master', set: id }, K), {}), 'master');
+    assert.equal(ST.SCENES.master[0].seal, 'silver'); assert.equal(ST.SCENES.hand[0].seal, 'gold');
+  }
   console.log(`ok 亲手开出: every card pullable, odds match the simulator, 名气 +${J.HAND_FAME} once per set at the next 开分店, kept through bankruptcy`);
 }
 

@@ -401,7 +401,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit({ open: packs }); flush(); return packs;
   }
 
-  const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before) log(master(id)
+  // 大师套 is also a story beat (the binder closes and its cover is stamped, ui/story.ts); a pull that finishes the set by hand
+  // plays only 'hand' (pushed right after, in open())
+  const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before && master(id) && !handDone(id)) pending.push({ type: 'story', id: 'master', set: id }); if (dexBonusOf(id) > before) log(master(id)
     ? `大师套：${setById(id).name} 收齐了！回头客 +${Math.round(dexBonusOf(id) * 100)}%${crowdRaw() > CROWD_KNEE ? `（全店客流过 ×${CROWD_KNEE} 后递减，现在 ×${crowdMult().toFixed(2)}）` : ''}，这个系列的拆包玩家肯多付 ${MASTER.tol * 100}%`
     : `图鉴：${setById(id).name} 收录 ${Math.round(dexShare(id) * 100)}%，客流加成 +${Math.round(dexBonusOf(id) * 100)}%${crowdRaw() > CROWD_KNEE ? `（全店过 ×${CROWD_KNEE} 后递减，现在 ×${crowdMult().toFixed(2)}）` : ''}`, 'hit'); };
 
@@ -416,7 +418,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     state.cash -= cost; for (const c of buy) state.dexSeen[`${id}|${c.n}`] = 1; dexN = null;
     log(`图鉴补卡：${buy.length > 1 ? `${setById(id).name}闪卡 ${buy.length} 张` : buy[0].name}`, '', -cost);
     dexLog(id, before);
-    emit(); return true;
+    emit(); flush(); return true; // flush: the 大师套 beat dexLog may have queued
   }
 
   function sell(key: string, count = Infinity) {

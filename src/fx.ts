@@ -159,6 +159,14 @@ export function shutter() {
   s.connect(f).connect(chop).connect(v).connect(buses.shop); s.start(t); lfo.start(t); lfo.stop(t + dur);
   tone(70, dur - .05, .35, { ...S, gain: .3, to: 38 }); noise(dur - .05, .12, { ...S, gain: .08, from: 900, to: 250 });
 }
+// 收齐 (ui/story.ts, the seal scene; times match the CSS in style.css「收齐」): the binder's padded cover landing shut at 0.85 s
+// (a soft low thump and the air it pushes out), the hot-foil press coming down at 1.5 s (a heavier thud, the platen's hiss), then
+// the foil catching the lamp: gold rings a four-note run, silver two notes
+export function seal(gold: boolean) {
+  tone(88, .85, .24, { ...S, gain: .22, to: 48 }); noise(.85, .2, { ...S, gain: .05, from: 520, to: 180, q: .6 });
+  tone(120, 1.5, .16, { ...S, gain: .3, to: 45 }); noise(1.5, .05, { ...S, gain: .09, from: 2600, to: 700, q: .8 }); noise(1.55, .5, { ...S, gain: .022, from: 5000, to: 7500, q: .5 });
+  (gold ? [C6, E6, G6, C6 * 2] : [G5, C6]).forEach((f, i) => tone(f, 1.85 + i * .1, 1.2, { ...S, type: 'triangle', gain: .06 }));
+}
 // a rubber stamp on paper (the loan's IOU)
 export const stamp = () => { tone(160, 0, .09, { ...S, gain: .18, to: 60 }); noise(0, .045, { ...S, gain: .06, from: 3000, to: 800, q: .7 }); };
 // 九姐's heels on the tiled floor: n clicks at a walking pace, each a hard tick over a small body
