@@ -12,7 +12,7 @@
 // null while three is still loading, if it failed to load, or without WebGL; mat.ts then keeps the 2D mat.
 import * as fx from './fx.ts';
 import * as ASSETS from './assets.ts';
-import { SETS } from './sets.ts';
+import { SETS, LOOK } from './sets.ts'; // LOOK: each set's pack colours and chase card, shared with the shelf wall (shelf.ts)
 import { FOIL, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
 import { money } from './ui/common.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
@@ -124,19 +124,6 @@ function grainTex() {
 }
 
 // ---------- the booster pack ----------
-// Colours read off each set's real booster art; chase = the card whose illustration fronts the pack.
-const LOOK = {
-  sv08: { chase: '238', c: ['#FFE15A', '#F39A1E', '#1E2C57'] },
-  sv10: { chase: '231', c: ['#E4493C', '#6E1624', '#121019'] },
-  'sv08.5': { chase: '161', c: ['#F6C2DB', '#7CC6DB', '#232845'] },
-  'sv03.5': { chase: '199', c: ['#FF8B3D', '#C42B1C', '#1B1A20'] },
-  sv09: { chase: '184', c: ['#F4B8C8', '#4D9C7D', '#1F2B33'] },
-  me01: { chase: '178', c: ['#EFEBE5', '#8F6A85', '#2C2A33'] },
-  me02: { chase: '125', c: ['#4FA2BB', '#2E648A', '#0E0C19'] },
-  me03: { chase: '120', c: ['#F06BC8', '#2F9E6A', '#1A1328'] }, // me03–me05: colours from the chase card's art (Mega Zygarde / Greninja / Darkrai ex SIR)
-  me04: { chase: '116', c: ['#7FD3F0', '#1F6FB5', '#0E1A33'] },
-  me05: { chase: '116', c: ['#D9E07A', '#4A4F57', '#0B0B0E'] },
-};
 const K = 768 / PW; // pack-art pixels per cm
 const artCache = {};
 function crimps(x, W, H, col, stripe) {

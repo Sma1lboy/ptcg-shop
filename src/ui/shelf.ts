@@ -8,27 +8,33 @@
 import { html, render, nothing } from 'lit-html';
 import { live } from 'lit-html/directives/live.js';
 import type { Shelf } from '../game.ts';
-import { SETS } from '../sets.ts';
+import { SETS, LOOK } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, logoUrl, toShelf, shelveLabel, lately, restock } from './common.ts';
+import { G, $, money, logoUrl, imgUrl, toShelf, shelveLabel, lately, restock } from './common.ts';
 import { hold } from './mat.ts';
 
-const FACES = 5; // pack faces per board; each face stands for DEPTH_STEP / FACES packs
+const FACES = 5; // pack faces per board: each face is the front of a row of DEPTH_STEP / FACES packs going back
+// A pack row: its front pack face-out, and up to three packs behind it peeking over its top (the row's depth); rows fill board by
+// board from the bottom, left to right. A full shelf is a wall of packs three deep, an emptying one thins to single packs, then bare back.
+const PEEK = 3;
+const row = (left: number, per: number) => left <= 0 ? '' : `pk d${Math.round((Math.min(left, per) - 1) / (per - 1) * PEEK)}`;
+// the pack's look on the 3D table (sets.ts LOOK): its three foil colours and the chase card's art, as custom properties for style.css
+const look = (id: string) => { const l = LOOK[id]; return l ? `--c0:${l.c[0]};--c1:${l.c[1]};--c2:${l.c[2]};--art:url("${imgUrl({ set: id, n: l.chase })}");` : ''; };
 
 function rack(r: Shelf, i: number, boards: number, deep: number) {
   // flippers who swept this set in the 顾客 window (the same one the 没买到 count uses): the player sees the packs gone and why
   const s = G.state, id = r.id, since = Date.now() - G.MISS_WINDOW * 1000, swept = id ? s.recent.filter(v => v.at > since && v.t === 'flipper' && v.r === 'sold' && v.set === id && v.n) : [];
-  const per = G.DEPTH_STEP / FACES, filled = Math.ceil(r.qty / per), miss = id ? G.missed(id) : 0;
+  const per = G.DEPTH_STEP / FACES, miss = id ? G.missed(id) : 0;
   const others = SETS.filter(x => G.unlocked(x.id) && x.id !== id), clerk = G.lvl('clerk') > 0; // with a clerk, a shelf can wait for the next round's buying
   const opt = (x: typeof SETS[number]) => { const st = s.stock[x.id] || 0, m = G.missed(x.id);
     return html`<option value="${x.id}" .selected=${live(false)} ?disabled=${!st && !clerk}>${id ? '换成' : '摆'}${x.name}（${st ? `仓库 ${st}` : clerk ? '仓库没货，店员进货' : '仓库没货'}${m ? ` · ${m} 位没找到` : ''}）</option>`; };
   const full = !!id && (s.stock[id] || 0) + r.qty > G.WAREHOUSE;
   // Options bind .selected through live(): after a swap the same template re-renders, and lit's cache would skip re-selecting
   // the current set, leaving the option the player clicked (now some other set) shown as chosen.
-  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'}" style="${id ? `--logo:url("${logoUrl(id)}")` : ''}">
+  return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
       <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>
       <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
-        html`<i class="${(boards - 1 - b) * FACES + f < filled ? 'pk' : ''}"></i>`)}</div>`)}${id && !r.qty ? html`<span class="r-out">卖空了</span>` : nothing}</div>
+        html`<i class="${row(r.qty - ((boards - 1 - b) * FACES + f) * per, per)}"></i>`)}</div>`)}${id && !r.qty ? html`<span class="r-out">卖空了</span>` : nothing}</div>
       <p class="r-rail">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>0</b>/${deep}`}</span>` : html`<span>放 ${deep} 包</span>`}</p>
       ${swept.length ? html`<p class="r-miss" title="倒爷只收便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就整架收走，按标价付钱；收过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再收这个系列">倒爷整架收走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
