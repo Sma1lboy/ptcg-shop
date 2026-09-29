@@ -31,6 +31,9 @@ export interface State {
   // borrowed (compounds weekly), debt = owe + loan (the one number the story reads). week = the week whose bill comes next;
   // shopT = the bill clock, seconds since this shop opened (a closed stretch adds one week at most); overdue = a bill that fell due short of cash, with
   // the shop time its grace runs out; wreck = the 破产 statement, shown until acknowledged.
+  // clerkRound: the clerk's last round (at = when, need = what filling the shelves cost, spent = what the till let him buy; need > spent
+  // is the 店员没本钱 pit). 现在补货 adds to spent.
+  clerkRound?: { at: number; need: number; spent: number };
   debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
   overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
 }
@@ -558,20 +561,43 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Between rounds (every tick, and every catch-up slice while closed) the clerk also carries back-room stock of those sets onto
   // their shelves, keeping CLERK_KEEP packs back for the player to open: late in the game a shelf sells out in a minute or two,
   // so a back room the player keeps full is what keeps the shelves from standing empty until the next round. Game setting.
-  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }, t: number) {
+  function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number; short: number }, t: number) {
     const L = lvl('clerk'); if (!L) return;
     if (skill('apprentice')) acc.listed += stockCase(); // 带徒弟: 补满柜位 on every tick
     for (const id of new Set(shelves().filter(sh => sh.id && state.auto[sh.id] && sh.qty < depth() && state.stock[sh.id] > CLERK_KEEP).map(sh => sh.id!))) fill(id, state.stock[id] - CLERK_KEEP);
     if (t >= state.clerkT) {
       state.clerkT = t + CLERK_ROUND * 1000;
-      for (const sh of shelves()) {
-        const id = sh.id, cap = depth(), goal = L >= 2 ? cap : Math.ceil(cap / 2);
-        if (!id || !state.auto[id] || sh.qty >= goal) continue;
-        const n = Math.min(goal - sh.qty, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n, sh) : 0;
-        if (cost) { acc.packs += n; acc.spent += cost; }
-      }
+      const need = clerkNeed(), b = clerkBuy(); acc.packs += b.packs; acc.spent += b.spent; acc.short = clerkNeed();
+      state.clerkRound = { at: t, need, spent: cents(need - acc.short) };
     }
     if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
+  }
+  // The clerk's buying (a round, or 现在补货): every shelf of a set he restocks, up to half full (level 1) or full (level 2), in
+  // shelf order, with the cash there is. clerkNeed = what that would still cost. Late in a shop the shelves sell out in a minute or
+  // two, so a round made with the till emptied by an upgrade leaves them bare until the next one: the 店员没本钱 pit (GAMEPLAY §12).
+  const clerkGoal = () => lvl('clerk') >= 2 ? depth() : Math.ceil(depth() / 2);
+  const clerkNeed = () => lvl('clerk') ? cents(shelves().reduce((a, sh) => a + (sh.id && state.auto[sh.id] && unlocked(sh.id) ? Math.max(0, clerkGoal() - sh.qty) * wholesale(sh.id) : 0), 0)) : 0;
+  function clerkBuy() {
+    let packs = 0, spent = 0;
+    for (const sh of shelves()) {
+      if (!sh.id || !state.auto[sh.id] || sh.qty >= clerkGoal()) continue;
+      const n = Math.min(clerkGoal() - sh.qty, Math.floor(state.cash / wholesale(sh.id))), cost = n > 0 ? stockUp(sh.id, n, sh) : 0;
+      if (cost) { packs += n; spent += cost; }
+    }
+    return { packs, spent };
+  }
+  // What the clerk's last round left unbought for lack of cash (0 = he filled every shelf), while the shelves still lack it.
+  const clerkShort = () => { const r = state.clerkRound; return r && lvl('clerk') ? Math.max(0, Math.min(r.need - r.spent, clerkNeed())) : 0; };
+  // What a round takes to fill the shelves: now, or what the last round needed if more (right after a round the shelves are full,
+  // but they sell down again by the next one). The 成长 page's buy buttons warn when a buy leaves less than this.
+  const clerkBudget = () => lvl('clerk') ? Math.max(clerkNeed(), state.clerkRound?.need || 0) : 0;
+  // 现在补货: the clerk's buying now, with the cash in the till, without waiting for (or moving) his next round.
+  function clerkNow() {
+    if (!lvl('clerk')) return 0;
+    const b = clerkBuy(); if (!b.packs) return 0;
+    if (state.clerkRound) state.clerkRound.spent = cents(state.clerkRound.spent + b.spent);
+    log(`店员提前补货 ${b.packs} 包`, '', -b.spent);
+    emit(); return b.packs;
   }
   // Dead end guard: no cash for the cheapest pack and nothing on the shelves or in the back room. Game setting.
   function bailout() {
@@ -586,7 +612,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const now = clock(), dt = Math.min((now - lastTick) / 1000, offlineCap()); lastTick = now;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0 }, lost0 = state.lost, slice = CLERK_SLICE, away = dt > 30;
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0, short: 0 }, lost0 = state.lost, slice = CLERK_SLICE, away = dt > 30;
     let n = 0, revenue = 0, sales = 0;
     for (let left = dt; left > 0; left -= slice) {
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
@@ -596,7 +622,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       debtWork(away ? len * Math.min(1, WEEK / dt) : len, away); // a closed stretch moves the bill clock one week at most
     }
     if (away && state.overdue) state.overdue.until = Math.max(state.overdue.until, state.shopT + GRACE); // what could not be covered while away gets its grace from the return
-    if (acc.packs) log(`店员进货 ${acc.packs} 包`, '', -acc.spent);
+    if (acc.packs || acc.short) log(`店员进货 ${acc.packs} 包${acc.short ? `，钱不够，货架还差 $${Math.round(acc.short).toLocaleString('en-US')} 的货` : ''}`, acc.short ? 'loss' : '', acc.packs ? -acc.spent : undefined);
     if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
     if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
@@ -607,7 +633,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     const rescued = bailout();
     if (flush()) return;
-    if (n || dt > 30 || acc.packs || acc.bulk || acc.listed || rescued) emit(); else save();
+    if (n || dt > 30 || acc.packs || acc.short || acc.bulk || acc.listed || rescued) emit(); else save();
   }
   // ---------- 债务: weekly bills, loans, bankruptcy (numbers at WEEK above) ----------
   const debtScale = () => 1 + DEBT_STEP * state.branch.n;
@@ -779,7 +805,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, setCasePct, casePct, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
-    nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
+    clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,

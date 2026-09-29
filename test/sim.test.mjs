@@ -820,3 +820,25 @@ console.log('ok luck percentile');
   assert.ok(shops.length >= 4 && shops.every(s => s.h >= 6 && s.h <= 11 && s.fame >= 5), `shops: ${JSON.stringify(shops)}`);
   console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
 }
+
+// 店员没本钱 (GAMEPLAY.md §12.2): the clerk buys with the cash in the till at his round. A round that cannot fill the shelves is
+// recorded (clerkRound, clerkShort) and logged; 现在补货 (clerkNow) is his buying now and does not move his next round. The
+// 普通 player on seed 1 falls into it on the third shop (夜市, 2 级店员 bought with the last $10.4k before a round): shelves stay
+// empty for hours and the loan snowballs. The same player heeding the two notes (no upgrade that leaves less than a round needs;
+// 现在补货 when a round came up short) clears that shop and the next.
+{
+  let T = 1_700_000_000_000; const Z = createGame({ now: () => T, random: S.rng(5), storage: null });
+  Z.state.up.clerk = 2; Z.state.cash = 50; Z.place(0, 'sv10'); Z.state.clerkT = T;
+  T += 1000; Z.tick();
+  const short = Z.clerkShort(), need = Z.clerkNeed();
+  assert.ok(short > 0 && Math.abs(short - need) < 0.01 && Z.state.clerkRound.spent > 0 && Z.state.clerkRound.spent <= 50, `a round with $50 is short: ${short}`);
+  assert.match(Z.state.log.find(l => l.text.startsWith('店员进货')).text, /钱不够/);
+  assert.ok(Z.clerkBudget() >= need, 'the 成长 page warns against what a round takes');
+  const next = Z.state.clerkT; Z.state.cash = need + 1; assert.ok(Z.clerkNow() > 0);
+  assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
+  const { play } = await import('../scripts/autoplay.mjs'), run = heed => play({ hours: 30, seed: 1, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
+  const [blind, heeds] = [run(false), run(true)];
+  assert.ok(blind.G.state.branch.n === 2 && blind.G.state.loan > 20000, `without the notes the 3rd shop is stuck: loan ${blind.G.state.loan | 0}`);
+  assert.ok(heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed / 2, `heeding them clears it: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0}`);
+  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seed 1, 30 h: 3rd shop stuck on a $${Math.round(blind.G.state.loan / 1000)}k loan → heeding the notes reaches shop ${heeds.G.state.branch.n + 1}, borrowed $${Math.round(blind.debt.borrowed / 1000)}k → $${Math.round(heeds.debt.borrowed / 1000)}k`);
+}
