@@ -473,7 +473,8 @@ console.log('ok luck percentile');
   const ach = [], plain = play({ hours: 20, openShare: 0, pct: 1, log: 3600, ...pay }), chase = play({ hours: 20, openShare: 0, pct: 1, masterShare: 0.02, log: 3600, ...pay }); // 2% of the scaled revenue ≈ the dollars 10% was before the ×6 volume: card prices are market data and were not scaled
   const masters = h => chase[h].dex.split('/').filter(x => x === '★').length;
   assert.ok(masters(3) >= 1, `first master set within 3h (${chase[3].dex})`);
-  assert.ok(masters(6) < 4 && masters(10) > masters(3), `still chasing after 6h, and progress keeps coming (${chase[6].dex} → ${chase[10].dex})`);
+  // < 6 (was < 4): 收卡 (GAMEPLAY §14) adds ~8% revenue, so the 2% pot is bigger; on main the 4th set landed just after 6h at 99%
+  assert.ok(masters(6) < 6 && masters(10) > masters(3), `still chasing after 6h, and progress keeps coming (${chase[6].dex} → ${chase[10].dex})`);
   assert.ok(chase[10].net > plain[10].net, `the binder pays for itself by hour 10 (net $${chase[10].net} vs $${plain[10].net} for a shop that never collects)`);
   // Achievements: some in the first 10 minutes, more by the hour, still more to earn at 10 hours. Its own run, so the rewards stay out of the curves above.
   play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.02, log: 36000, ...pay, hook: G => { // ui/ach.ts's wiring
@@ -855,7 +856,8 @@ console.log('ok luck percentile');
   assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
   const { play } = await import('../scripts/autoplay.mjs'), run = heed => play({ hours: 30, seed: 1, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
   const [blind, heeds] = [run(false), run(true)];
-  assert.ok(blind.G.state.branch.n >= 3 && heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed / 2, `heeding them halves the borrowing: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0} vs ${blind.debt.borrowed | 0}`);
+  // was `< blind / 2`: with 收卡 (GAMEPLAY §14) the blind player's borrowing fell $21k → $12.5k on this seed, the heeding one's stayed ~$10k
+  assert.ok(blind.G.state.branch.n >= 3 && heeds.G.state.branch.n >= 3 && heeds.debt.borrowed < blind.debt.borrowed, `heeding them borrows less: shop ${heeds.G.state.branch.n + 1}, borrowed ${heeds.debt.borrowed | 0} vs ${blind.debt.borrowed | 0}`);
   console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seed 1, 30 h: borrowed $${Math.round(blind.debt.borrowed / 1000)}k → $${Math.round(heeds.debt.borrowed / 1000)}k heeding the notes (shop ${blind.G.state.branch.n + 1} / ${heeds.G.state.branch.n + 1})`);
 }
 
@@ -898,6 +900,7 @@ console.log('ok luck percentile');
   assert.deepEqual(D.sellPlan(cards, 0, 0.7).pick, [], 'nothing short: nothing sold');
   let T = 1_700_000_000_000; const G = createGame({ now: () => T, random: S.rng(11), storage: null }), st = () => G.state;
   st().cash = 1e5; st().earned.sealed = 1; G.buy('sv08', 80); G.open('sv08', 60); G.shelve('sv08', 20); // sv08.5 is locked in a new game
+  G.setCasePct(G.MAX_PCT); // the counter binder would sell these hits to seekers over the two weeks (GAMEPLAY §14)
   st().shelves.forEach(s => { s.qty = 0; }); for (let i = 0; i < G.WEEK; i += 20) { T += 20e3; G.tick(); } // week 1 paid out of the big till
   st().shelves.forEach(s => { s.qty = 0; }); st().cash = 0; st().stock.sv08 = 5; for (let i = 0; T < 1_700_000_000_000 + 2 * G.WEEK * 1e3 + 5e3; i++) { T += 20e3; G.tick(); }
   const o = st().overdue; assert.ok(o, 'week 2 is overdue with an empty till');
