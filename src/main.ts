@@ -9,7 +9,6 @@ import { renderLuck } from './ui/luck.ts';
 import { renderBinder, initBinder } from './ui/binder.ts';
 import { renderSingles } from './ui/singles.ts';
 import { renderUpgrades } from './ui/upgrades.ts';
-import { renderSkills } from './ui/skills.ts';
 import { renderCase } from './ui/case.ts';
 import { renderNotice, initSlip } from './ui/notice.ts';
 import { renderSources, renderBasis } from './ui/sources.ts';
@@ -25,7 +24,7 @@ import { renderDue, renderLedger, renderWreck, initLedger } from './ui/ledger.ts
 import { initSound } from './ui/sound.ts';
 
 // While a pack is being revealed only the shelf and the rail update (both with their open buttons off); the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
+function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);

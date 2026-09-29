@@ -1,14 +1,13 @@
-// 成长 page, part 2: 技能 (经营 and 幸运) as pockets, and the 手气 odds next to the official ones.
-import { html, render } from 'lit-html';
+// 成长 page, part 2: the 手气 odds next to the official ones, under the 柜台 line of the tree (the 技能 themselves are nodes there, upgrades.ts).
+import { html } from 'lit-html';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, rarLabel } from './common.ts';
-import { tile, pad, fxOf } from './upgrades.ts';
+import { G, rarLabel } from './common.ts';
 
 const pct = (v: number) => v.toFixed(v >= 10 ? 1 : 2) + '%';
 
 // 官方 / 你现在: every hit rarity of each unlocked set, the measured rate beside the one your packs open with.
-function odds() {
+export function odds() {
   const m = G.luckMult();
   return html`<details><summary>手气：官方概率 / 你现在开包的概率${m > 1 ? `（×${m.toFixed(2)}）` : ''}</summary>
     <p class="muted">官方概率是 TCGplayer 实开统计，不会变；手气只改你开包时用的概率。欧气检测记得每一包是按哪套概率开的，只和同样加成的模拟玩家比，加成开出来的好卡不算你运气好。</p>
@@ -17,11 +16,3 @@ function odds() {
   </details>`;
 }
 
-export function renderSkills() {
-  render(html`<h2>技能 <small>用现金练，改你自己</small></h2>
-    <ul class="grow-grid">${Object.entries(G.SKILLS).map(([k, sk]) => {
-      const lv = G.skill(k);
-      return tile({ name: sk.name, tag: sk.group, desc: sk.desc, lv, max: G.skillMax(k), cost: G.skillCost(k), fx: fxOf(k, lv, sk.fx), act: 'learn', k,
-        blocked: G.canLearn(k) ? '' : '要先雇店员（店铺升级）' });
-    })}${pad(Object.keys(G.SKILLS).length)}</ul>${odds()}`, $('skills'));
-}

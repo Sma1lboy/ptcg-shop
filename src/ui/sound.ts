@@ -77,6 +77,7 @@ export function initSound() {
   seenAt = G.state.recent[0]?.at ?? 0; // after the boot tick: the time the shop was closed plays nothing
   G.on(onEmit);
   document.addEventListener('ptcg:line', onLine);
+  document.addEventListener('ptcg:bought', () => play('stamp', FX.stamp)); // a level lands on the 成长树 (upgrades.ts stamps the node)
   document.addEventListener('ptcg:story', () => { if (!storyOpen()) { walked = ''; FX.setScene(null); } });
   document.addEventListener('ptcg:sound', renderPanel);
   // a week's receipt printing (notice.ts; the paid week's sound waits for it, so a reveal never swallows it): calculator, then till
