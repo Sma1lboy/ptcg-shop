@@ -619,10 +619,10 @@ console.log('ok luck percentile');
   const week = () => { for (let i = 0; i < E.WEEK; i += 20) { T += 20e3; E.tick(); } };
   const owe = n => { E.state.owe = E.state.debt = [0, 1].reduce((a, i) => a + Math.round(E.BILL0 * (1 + E.DEBT_STEP * E.state.branch.n) * E.BILL_G ** (E.state.week - 1 + i)), 0) - n; };
   E.state.cash = 1e6; E.state.earned.sealed = 1; owe(0);
-  week(); assert.deepEqual(played, ['due', 'last'], 'the bill before the last one');
-  week(); assert.deepEqual(played, ['due', 'last', 'debt_cleared'], 'the clearing bill: no 「下周见」 before 还清');
+  week(); assert.deepEqual(played, ['last'], 'the bill before the last one (the till covered it: no 「这周的账」 before it)');
+  week(); assert.deepEqual(played, ['last', 'debt_cleared'], 'the clearing bill: no 「下周见」 before 还清');
   assert.ok(E.branch()); assert.equal(played.at(-1), 'branch'); E.state.cash = 1e6;
-  played.length = 0; week(); assert.equal(played[0], 'due', "shop 2's week 1 is not shop 1's week 1");
+  played.length = 0; week(); assert.ok(['paid1', 'paid', 'paid2'].includes(played[0]), "shop 2's week 1 is not shop 1's week 1");
   E.state.cash = 1e6; owe(0); week(); week(); assert.deepEqual(played.slice(-2), ['last', 'debt_cleared'], 'shop 2 gets its own 还清');
   console.log('ok story beats, and the end of a run: last → 还清 → 开张, per shop');
 }
@@ -638,4 +638,51 @@ console.log('ok luck percentile');
   K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'at CLERK_KEEP the rest is the player\'s');
   K.buy(id, 50); K.setAuto(id, false); T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'auto off: not carried');
   console.log('ok 店员搬货: back room → shelf between rounds, CLERK_KEEP left to open');
+}
+// 亲手开出: the 图鉴 counted only from packs. Every card of every set can be pulled (so the line can be finished at the measured
+// odds), cardOdds matches the simulator, the count is distinct numbers pulled, and a set pulled whole pays 名气 exactly once.
+{
+  const mem = {}, store = { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } };
+  const H = createGame({ now: () => 1_700_000_000_000, random: S.rng(5), storage: store });
+  for (const set of PTCG_SETS) for (const c of PTCG_DATA[set.id].cards) assert.ok(H.cardOdds(set.id, c.n, 1) > 0, `${set.id} ${c.n} can never be pulled`);
+  { // one SIR and one common of sv09, 100k simulated packs: within 4 standard errors of cardOdds
+    const r = S.rng(11), n = 100000, sir = PTCG_DATA.sv09.cards.find(c => c.r === 'SIR').n, com = PTCG_DATA.sv09.cards.find(c => c.r === 'C').n, got = { [sir]: 0, [com]: 0 };
+    for (let i = 0; i < n; i++) { const p = new Set(S.openPack('sv09', r).map(c => c.n)); for (const k in got) if (p.has(k)) got[k]++; }
+    for (const k in got) { const p = H.cardOdds('sv09', k, 1), se = Math.sqrt(p * (1 - p) / n); assert.ok(Math.abs(got[k] / n - p) < 4 * se, `sv09 ${k}: simulated ${got[k] / n}, cardOdds ${p}`); }
+  }
+  H.state.cash = 1e6; H.state.stock.me02 = 10; const packs = H.open('me02', 10);
+  assert.equal(H.handCount('me02'), new Set(packs.flat().filter(c => c.r !== 'E').map(c => c.n)).size, 'hand count = distinct numbers pulled');
+  assert.equal(H.handCount('me02') + H.handMissing('me02').length, H.dexTotal('me02'));
+  assert.equal(H.handCount('sv08'), 0);
+  H.collect('me02', true); assert.equal(H.handCount('me02') + H.handMissing('me02').length, H.dexTotal('me02'), 'bought cards do not count by hand');
+  // every me02 card pulled by hand but the C/U/R ones still missing: opening more finishes the set, 名气 +HAND_FAME once, one story beat
+  const com = new Set(H.handMissing('me02').filter(c => ['C', 'U', 'R'].includes(c.r)).map(c => c.n)); assert.ok(com.size, 'some plain card still missing after 10 packs');
+  for (const c of PTCG_DATA.me02.cards) if (!com.has(c.n)) H.state.dex[`me02|${c.n}|${c.r}`] ||= { c: 1, p: 1 };
+  H.setAuto('me02', true); // saves; a fresh game on the same storage reads the dex from scratch
+  const J = createGame({ now: () => 1_700_000_000_000, random: S.rng(6), storage: store }), evs = [], fame0 = J.state.branch.fame;
+  J.on(ev => ev?.type === 'story' && evs.push(ev));
+  assert.ok(!J.handDone('me02'));
+  for (let i = 0; i < 100 && !J.handDone('me02'); i++) { J.state.stock.me02 = 10; J.open('me02', 10); }
+  assert.ok(J.handDone('me02'), 'the plain cards come within 1,000 packs');
+  assert.equal(J.state.branch.fame, fame0, 'no 名气 mid-shop: spent on perks at once, heavy opening would pay for itself');
+  assert.equal(J.handFame(), J.HAND_FAME); assert.deepEqual(evs.map(e => [e.id, e.set]), [['hand', 'me02']]);
+  J.state.stock.me02 = 10; J.open('me02', 10); assert.equal(J.handFame(), J.HAND_FAME, 'once per set');
+  J.bankrupt(); assert.ok(J.handDone('me02'), 'a bankruptcy keeps the record');
+  assert.equal(J.handFame(), J.HAND_FAME, '...and the 名气 still waits');
+  J.state.owe = J.state.loan = J.state.debt = 0; const f1 = J.fameFor() + J.HAND_FAME; assert.ok(J.branch());
+  assert.equal(J.state.branch.fame, fame0 + f1, 'paid at the next 开分店'); assert.equal(J.handFame(), 0, 'and only once');
+  assert.equal(D.debtBeat(evs[0], J).key, 'story:hand:me02', 'its beat plays once per set');
+  assert.ok(A.ACH.find(a => a.id === 'hand-1').prog(J)[0] === 100);
+  console.log(`ok 亲手开出: every card pullable, odds match the simulator, 名气 +${J.HAND_FAME} once per set at the next 开分店, kept through bankruptcy`);
+}
+
+// A week the till covers plays one beat (收到), not two: 「这周的账」 only when it could not be paid.
+{
+  let T = 1_700_000_000_000; const W = createGame({ now: () => T, random: S.rng(8), storage: { getItem: () => null, setItem() {} } }), kinds = [];
+  W.on(ev => { const b = D.debtBeat(ev, W); if (b) kinds.push(b.kind); });
+  const week = () => { for (let i = 0; i < W.WEEK; i += 20) { T += 20e3; W.tick(); } };
+  W.state.cash = 1e5; week(); assert.ok(kinds.includes('paid') && !kinds.includes('due'), `covered week: ${kinds}`);
+  kinds.length = 0; W.state.cash = 0; W.state.shelves.length = 0; W.state.stock = { sv08: 5 }; week(); // stock in the back room: no 进货钱 bailout
+  assert.deepEqual(kinds.filter(k => k === 'due' || k === 'missed'), ['due', 'missed'], `a short week still says so: ${kinds}`);
+  console.log('ok a covered bill is one beat, a missed one still two');
 }

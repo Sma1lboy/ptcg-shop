@@ -38,12 +38,12 @@ export interface Loan { at: number; week: number; amount: number; forced: boolea
 export interface Wreck { at: number; week: number; shop: number; debt: number; cash: number; goods: number; cards: number; revenue: number }
 // 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
 // shops before this one; perks = 名气 perk levels. Survives every branch; only 清空存档 clears it.
-export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number>; broke?: number } // broke = bankruptcies, ever (征信)
+export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number>; broke?: number; hands?: number } // broke = bankruptcies, ever (征信); hands = 亲手开齐 sets already paid in 名气
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
 export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
 export type Game = ReturnType<typeof createGame>;
 // type = a debt event for the story (bill_due / bill_paid / bill_missed / loan_taken / bankrupt / story), with the bill's week and amount.
-export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean } // what happened, for listeners that need more than the new state (achievements.ts)
+export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean; set?: string } // what happened, for listeners that need more than the new state (achievements.ts)
 
 export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
@@ -108,6 +108,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const DEX_TIERS: [number, number][] = [[0.25, 0.02], [0.5, 0.03], [0.75, 0.05], [0.9, 0.08], [1, 0.2]];
   // Hits (RR and up) can also be bought from other shops at market price, into the binder only; C/U/R only come from packs.
   const BUY_R = ['RR', 'ACE', 'UR', 'IR', 'SIR', 'HR', 'MHR'];
+  // 亲手开出: the same 图鉴, counting only card numbers pulled from a pack (state.dex, which every shop and bankruptcy keeps), not
+  // bought. Every card of every set can be pulled at the measured odds, so it is the long line after 大师套 (one sample: 766–6,787
+  // packs per set, about 24k for all ten). Pulling a whole set by hand earns HAND_FAME 名气, once per set, ever, paid out at the next
+  // 开分店 (never mid-shop: 名气 spent on perks at once would make heavy opening pay for itself inside one shop). Game setting.
+  const HAND_FAME = 2;
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 300;                    // a shop with no cash, stock or cards to sell is lent this much (soft-lock guard; bankrupt if there is no credit left)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
@@ -186,6 +191,21 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const dexCount = (id: string) => (dexN ||= Object.keys(state.dexSeen).reduce((a, k) => { const s = k.split('|')[0]; a[s] = (a[s] || 0) + 1; return a; }, {} as Record<string, number>))[id] || 0;
   const dexShare = (id: string) => dexCount(id) / dexTotal(id);
   const master = (id: string) => dexCount(id) >= dexTotal(id);
+  // distinct card numbers of each set in state.dex (keys set|n|kind; energy is not a card of the set), cleared when a new key appears
+  const handCount = (id: string) => (handN ||= Object.keys(state.dex).reduce((a, k) => { const [s, n] = k.split('|'); if (n !== 'E') (a[s] ||= new Set()).add(n); return a; }, {} as Record<string, Set<string>>))[id]?.size || 0;
+  const handDone = (id: string) => handCount(id) >= dexTotal(id);
+  // Chance that one pack at 手气 m holds card n in any printing: per slot, the chance its rarity roll lands on a pool holding n, over that pool's size.
+  const odds = new Map<string, number>(); // pure in (set, card, m): memoised, the 图鉴 panel asks for every missing card on each render
+  function cardOdds(id: string, n: string, m = luckMult()) {
+    const k = `${id}|${n}|${m}`, hit = odds.get(k); if (hit != null) return hit;
+    const P = S.poolsFor(id), t = S.slotTables(setById(id), m), has = (k: string) => P[k]?.some(c => c.n === n) ? 1 / P[k].length : 0;
+    const slot = (table: Record<string, number>, base: string) => { let rest = 100, p = 0; for (const k in table) { p += table[k] / 100 * has(k); rest -= table[k]; } return p + rest / 100 * has(base); };
+    const miss = (1 - has('C')) ** 4 * (1 - has('U')) ** 3 * (1 - slot(t.rev1, 'REV')) * (1 - slot(t.rev2, 'REV')) * (1 - slot(t.rare, 'R'));
+    odds.set(k, 1 - miss); return 1 - miss;
+  }
+  // Cards of a set not yet pulled by hand, rarest first, with the packs one takes on average at today's 手气.
+  const handMissing = (id: string) => { const have = new Set(Object.keys(state.dex).filter(k => k.split('|')[0] === id).map(k => k.split('|')[1]));
+    return DATA[id].cards.filter(c => !have.has(c.n)).map(c => ({ n: c.n, name: c.name, r: c.r, packs: 1 / cardOdds(id, c.n) })).sort((a, b) => b.packs - a.packs); };
   const demand = (id: string) => { const d = DEMAND[id] || { tag: '', w: 1, tol: 0, budget: 1 }; return master(id) ? { ...d, tol: d.tol + MASTER.tol, w: d.w * MASTER.w } : d; };
   const dexBonusOf = (id: string) => DEX_TIERS.reduce((a, [at, b]) => a + (dexShare(id) >= at - 1e-9 ? b : 0), 0);
   const dexBonus = () => SETS.reduce((a, s) => a + dexBonusOf(s.id), 0);
@@ -199,7 +219,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
     debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null });
 
-  let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
+  let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: ((ev?: GameEvent) => void)[] = [];
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
@@ -291,7 +311,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     n = Math.min(n, state.stock[id] || 0);
     if (!n) return [];
     state.stock[id] -= n;
-    const packs = [], dex0 = dexBonusOf(id), had = dexCount(id), m = luckMult(), key = S.rateKey(id, m);
+    const packs = [], dex0 = dexBonusOf(id), had = dexCount(id), hand0 = handDone(id), m = luckMult(), key = S.rateKey(id, m);
     for (let i = 0; i < n; i++) {
       const pack = S.openPack(id, random, m);
       packs.push(pack);
@@ -300,6 +320,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         if (c.r !== 'E' && !state.dexSeen[`${c.set}|${c.n}`]) { state.dexSeen[`${c.set}|${c.n}`] = 1; dexN = null; }
         const key = `${c.set}|${c.n}|${c.kind}`;
         (state.singles[key] ||= { ...c, count: 0 }).count++;
+        if (!state.dex[key]) handN = null;
         const d = (state.dex[key] ||= { c: 0, p: c.price }); d.c++; d.p = c.price;
         state.tally[c.kind] = (state.tally[c.kind] || 0) + 1;
         if (S.HITS.includes(c.kind)) state.hits.push({ ...c, t: clock() });
@@ -310,9 +331,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     state.opened[id] = (state.opened[id] || 0) + n; state.packsBy[key] = (state.packsBy[key] || 0) + n; state.dexPacks += n;
     luckCache = null;
     if (dexCount(id) > had) dexLog(id, dex0);
+    if (!hand0 && handDone(id)) {
+      log(`亲手开齐：${setById(id).name} ${dexTotal(id)} 张全是自己开出来的。开下一家店时名气 +${HAND_FAME}`, 'hit');
+      pending.push({ type: 'story', id: 'hand', set: id });
+    }
     const best = packs.flat().reduce((a, b) => (b.price > a.price ? b : a));
     log(`开了 ${n} 包${setById(id).name}，最贵：${best.name} $${best.price.toFixed(2)}`, S.HITS.includes(best.kind) ? 'hit' : '');
-    emit({ open: packs }); return packs;
+    emit({ open: packs }); flush(); return packs;
   }
 
   const dexLog = (id: string, before: number) => { if (dexBonusOf(id) > before) log(master(id)
@@ -651,6 +676,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   // ---------- 开分店 ----------
   const fameFor = (rev = revenue()) => Math.floor(Math.sqrt(rev / FAME_UNIT));
+  const handFame = () => HAND_FAME * (SETS.filter(s => handDone(s.id)).length - (state.branch.hands || 0)); // 亲手开齐 名气 waiting for the next 开分店
   const canBranch = () => !state.debt; // the debt is paid: 九姐 has no claim on you, and backs the next shop
 
   const perkCost = (k: string) => perk(k) < PERKS[k].max ? PERKS[k].base + perk(k) : undefined;
@@ -668,9 +694,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   function branch() {
     if (!canBranch()) return false;
-    const fame = fameFor(), b = state.branch, singles = { ...state.singles };
+    const fame = fameFor() + handFame(), b = state.branch, singles = { ...state.singles }, hands = SETS.filter(s => handDone(s.id)).length;
     for (const c of state.trophy ? [...state.shown, state.trophy] : state.shown) { const { key, pct, ...o } = c as Shown; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder
-    restart({ ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue() }, singles);
+    restart({ ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue(), hands }, singles);
     log(`开了第 ${state.branch.n + 1} 家店，带来名气 ${fame}。九姐出的本钱：$${state.debt.toLocaleString('en-US')}`, 'hit');
     pending.push({ type: 'story', id: 'branch', week: 1, amount: state.debt }); flush(); return true;
   }
@@ -698,11 +724,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit(); return true;
   }
 
-  function reset() { state = fresh(); luckCache = null; dexN = null; emit(); }
+  function reset() { state = fresh(); luckCache = null; dexN = handN = null; emit(); }
 
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
-    buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
+    buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
