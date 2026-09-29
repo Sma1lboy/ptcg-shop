@@ -172,7 +172,7 @@ function shelfItems() {
   const s = G.state;
   return SETS.map(x => {
     const n = s.stock[x.id] || 0, w = G.wholesale(x.id), locked = !G.unlocked(x.id), poor = !n && s.cash < w;
-    return { set: x.id, n, off: locked || poor, name: x.name, note: locked ? `营收 ${money(G.unlockAt(x.id))} 解锁` : n ? `仓库 ${n} 包` : poor ? `现金不够进货 · ${money(w)}` : `进 1 包就开 · ${money(w)}` };
+    return { set: x.id, n, off: locked || poor, name: x.name, note: locked ? `营收 ${money(G.unlockAt(x.id))} 解锁` : n ? `仓库 ${n} 包` : poor ? '现金不够进货' : '进 1 包就开', price: locked || n ? '' : money(w) };
   });
 }
 // Imperative like the rest of #scene3d (CLAUDE.md): the buttons are made once, then only their text / action / disabled change.
@@ -189,6 +189,7 @@ function shelf3D() {
     }
     b.dataset.act = it.n ? 'open1' : 'buyopen'; b.dataset.id = it.set; b.disabled = it.off;
     b.children[0].textContent = it.name; b.children[1].textContent = it.note;
+    if (it.price) { const p = b.children[1].appendChild(document.createElement('span')); p.textContent = it.price; } // phones: the price goes on its own line (style.css)
   });
   table!.showShelf(items.map(({ set, n, off }) => ({ set, n, off })));
 }
