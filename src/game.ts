@@ -231,7 +231,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit(); return true;
   }
   const clampPct = (p: number) => Math.round(Math.round(Math.min(MAX_PCT, Math.max(MIN_PCT, p)) / PCT_STEP) * PCT_STEP * 100) / 100;
-  function setPrice(id: string, pct: number) { state.price[id] = clampPct(pct); emit(); }
+  // commit = false while the price rail is being dragged: the tag moves, nothing re-renders or saves until the pointer lets go.
+  function setPrice(id: string, pct: number, commit = true) { state.price[id] = clampPct(pct); if (commit) emit(); }
 
   function open(id: string, n: number) {
     n = Math.min(n, state.stock[id] || 0);

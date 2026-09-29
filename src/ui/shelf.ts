@@ -10,7 +10,7 @@ import { live } from 'lit-html/directives/live.js';
 import type { Shelf } from '../game.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, logoUrl } from './common.ts';
+import { G, $, money, logoUrl, toShelf, shelveLabel } from './common.ts';
 
 const FACES = 5; // pack faces per board; each face stands for DEPTH_STEP / FACES packs
 const MIN = G.MISS_WINDOW / 60;
@@ -74,8 +74,8 @@ export function renderShelf() {
         <div class="verb" role="group" aria-label="${set.name} 货架">
           <span class="v-k">货架</span><span class="v-n">${own ? html`<b>${onShelf}</b>/${own * deep}${own > 1 ? html`<small>${own} 个货架</small>` : nothing}`
             : html`没上架${miss ? html`<small title="最近 ${MIN} 分钟来买这个系列、货架上没有的拆包玩家"><b>${miss}</b> 位没买到</small>` : nothing}`}</span>
-          <span class="v-btns"><button type="button" class="${p('shelve')}" data-act="shelve" data-id="${set.id}" data-n="999" ?disabled=${!canShelve}
-            title="${own ? '从仓库补满这个系列的货架' : free ? '摆上第一个空货架' : '没有空货架：在上面给一个货架换系列，或加一个货架'}">${own || !free ? '上架' : '摆上空货架'}</button></span>
+          <span class="v-btns"><button type="button" class="${p('shelve')}" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}" ?disabled=${!canShelve}
+            title="${!canShelve && !own && !free ? '没有空货架：在上面给一个货架换系列，或加一个货架' : `${own ? '补这个系列的货架' : '摆上第一个空货架'}，仓库留 1 包自己拆；货架上的「补满」全搬上去`}">${shelveLabel(set.id, own > 0 || !free)}</button></span>
         </div>
         <div class="verb" role="group" aria-label="${set.name} 标价">
           <span class="v-k">标价</span><span class="sticker" title="货架标价">${money(G.ask(set.id))}</span>

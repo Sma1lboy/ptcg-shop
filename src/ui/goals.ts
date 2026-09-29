@@ -6,7 +6,7 @@ import { live } from 'lit-html/directives/live.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
-import { G, $, money } from './common.ts';
+import { G, $, money, toShelf, shelveLabel } from './common.ts';
 import { hold } from './mat.ts';
 
 const pc = (x: number) => `${Math.round(x * 100)}%`, MIN = G.MISS_WINDOW / 60;
@@ -50,7 +50,7 @@ function packs(rec: Visit[]) {
       // the notes read the rail: who would balk at the tag as it is now (it may have moved since they came), and who would still buy
       const pct = G.pctOf(id), faint = mine.filter(v => v.max! < pct - 1e-9).map(v => v.max! * mkt), low = Math.min(...mine.map(v => v.max!));
       // what would put the set back on sale: the same moves the shelf above offers
-      const refill = stock ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="999">${racked ? '补满' : '摆上空货架'}</button>`
+      const refill = stock ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${racked ? 999 : toShelf(id)}">${racked ? '补满' : shelveLabel(id, false)}</button>`
         : html`<button type="button" data-act="buy" data-id="${id}" data-n="10" ?disabled=${s.cash < G.wholesale(id) * 10}>进 10 包</button>`;
       const clerk = racked && !stock && G.lvl('clerk') && s.auto[id], act = missed && !shelf && (racked || free) && !clerk ? refill : '';
       const fix = !missed || shelf ? '' : clerk ? '，店员下一轮进货' : racked || free ? `，仓库${stock ? `还有 ${stock} 包` : '也没有'}` : '，货架都摆着别的系列：在上面换一个，或者加一个货架';
@@ -143,7 +143,9 @@ function renderGoals() {
 
 export function initGoals() {
   document.addEventListener('change', e => { const b = (e.target as Element).closest<HTMLInputElement>('[data-act="auto"]'); if (b) G.setAuto(b.dataset.id!, b.checked); });
-  document.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) G.setPrice(r.dataset.id!, +r.value / 100); });
+  // dragging the rail only redraws this panel; letting go (change) commits: every panel re-renders and the save is written once
+  document.addEventListener('input', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) { G.setPrice(r.dataset.id!, +r.value / 100, false); renderGoals(); } });
+  document.addEventListener('change', e => { const r = e.target as HTMLInputElement; if (r.matches?.('.c-set')) G.setPrice(r.dataset.id!, +r.value / 100); });
   document.addEventListener('ptcg:release', renderGoals);
   G.on(renderGoals); renderGoals();
 }
