@@ -282,6 +282,26 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .r-ctl select:hover { filter: brightness(1.15); }
 .r-ctl option { background: var(--hud); color: var(--hud-ink); }
 .page-shelf > .shelf { container-type: inline-size; }
+/* one column of sets (a phone, or the receipt squeezing the page): each set folds to one row — logo, name, where it stands
+   (仓库 · 货架 · the price label, or 没上架 · who missed it) and the one next step as the row's yellow key; tapping the name opens
+   the full controls, and while open the row's key steps aside so the set still has one yellow key. Two columns and up never fold */
+.fold { all: unset; }
+.s-sum, .s-go { display: none; }
+@container (max-width: 699px) {
+  .s-id { position: relative; }
+  .fold { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .fold::before { content: ""; display: inline-block; margin: 0 6px 2px 0; border-left: 6px solid var(--muted); border-block: 4px solid transparent; transition: transform .15s; }
+  .set.open .fold::before { transform: rotate(90deg); }
+  .fold::after { content: ""; position: absolute; inset: -12px 0; } /* the whole row is the fold's hit area, under the key */
+  .fold:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+  .s-go { display: block; position: relative; z-index: 1; flex: none; max-width: 45%; }
+  .s-go button { white-space: normal; }
+  .set:not(.open) { padding: 12px 0; }
+  .set:not(.open, .locked) :is(.s-en, .set-mkt, .verb) { display: none; }
+  .set:not(.open) .s-sum { display: block; font-size: var(--fs-cap); line-height: 1.6; color: var(--muted); }
+  .s-sum b { color: var(--ink); font-weight: 600; } .s-sum .sticker { font-size: var(--fs-cap); margin-left: 2px; }
+  .set.open .s-go { display: none; }
+}
 @container (min-width: 1340px) { /* the table's own width, not the viewport's: the closing receipt narrows the page while it hangs there */
   #shelf { grid-template-columns: minmax(240px, 1fr) repeat(4, auto); column-gap: 16px; }
   .shelf-head, .set { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
@@ -460,7 +480,7 @@ button:disabled { cursor: not-allowed; }
   position: fixed; z-index: 15; top: calc(var(--top-h) + 4px); right: 24px; width: 290px; padding-top: 12px; color: var(--ink); }
 .notice[hidden] { display: none; }
 /* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 340 = its
-   290 width + 24 inset + the slot's 10px overhang + a gap. Phones get it as a sheet over the page instead (below) */
+   290 width + 24 inset + the slot's 10px overhang + a gap. Phones print it into the page above the view instead (below) */
 @media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(340px - max(0px, (100vw - 1680px) / 2))); } }
 .notice::before { content: ""; position: absolute; z-index: 1; top: 0; left: -10px; right: -10px; height: 18px; border: 4px solid var(--trim);
   border-image: url(gen/plate.webp) 22 34 fill / 6px 12px / 0 stretch; background: #0E1830 padding-box; box-shadow: 0 6px 12px rgba(4, 8, 14, .35);
@@ -655,6 +675,11 @@ button:disabled { cursor: not-allowed; }
 .c-h { font-size: var(--fs-cap); color: var(--muted); margin: 0 0 6px; } /* how to read the rails, under the panel's name plate */
 .c-sets, .c-case { list-style: none; margin: 0; padding: 0; }
 .c-sets > li, .c-case > li { padding: 10px 0; border-top: 1px solid var(--line); }
+.c-more { display: none; }
+@media (max-width: 779px) { /* phones: the three sets that lost the most customers, the rest behind 再看 N 个系列 (goals.ts FEW) */
+  .c-sets:not(.all) > li:nth-child(n+4) { display: none; }
+  .c-more { display: block; margin: 4px auto 0; }
+}
 .c-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; } .c-row b { font-weight: 600; } .c-row .muted { font-size: var(--fs-cap); }
 .c-n { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
 .c-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); } .c-note b { color: var(--ink); font-weight: 600; }
@@ -929,7 +954,9 @@ button:disabled { cursor: not-allowed; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
-  .notice { left: 16px; right: 16px; width: auto; max-width: 340px; margin-inline: auto; }
+  /* phones: the receipt prints into the page above the view, not over it — as a fixed sheet it covered the 货架 / 展示柜 tabs and
+     half the screen until 收起. It scrolls away with the page; the sticky top bar stays over it */
+  .notice { position: relative; top: auto; right: auto; z-index: auto; width: auto; max-width: 340px; margin: 12px auto -4px; padding-inline: 12px; }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
