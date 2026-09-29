@@ -48,7 +48,9 @@ function step(from: HTMLElement, key: string, list: HTMLElement[]) {
     if (ahead <= 4) continue;
     // inside a ~63° cone around the arrow beats anything outside it: → from a 3D pack label goes to the rail beside it, not to
     // the footer link that is barely to the right but far below
-    const inCone = side <= ahead * 2, score = ahead + side * 2.5;
+    // the guide's own buttons (跳过引导) sit right under the tab it points at: nearest by geometry, but the page comes first, or
+    // the first ↓ from a tab lands on 跳过引导 and Z skips the guide
+    const inCone = side <= ahead * 2, score = ahead + side * 2.5 + (el.closest('#coach') && !from.closest('#coach') ? 600 : 0);
     if ((inCone && !cone) || (inCone === cone && score < bestScore)) { bestScore = score; best = el; cone = inCone; }
   }
   return best;
