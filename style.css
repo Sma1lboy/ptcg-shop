@@ -100,6 +100,9 @@ small { font-size: var(--fs-cap); }
 main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page { display: grid; gap: 24px 40px; align-items: start; }
 .page[hidden] { display: none; }
+/* #shelf and #luck are both page hashes and panel ids; the browser's scroll-to-fragment on load would land mid-page, so their
+   scroll margin is taller than any offset and the scroll clamps to the top */
+:is(#shelf, #luck) { scroll-margin-top: 100vh; }
 .col, .rail, .shelf { display: flex; flex-direction: column; min-width: 0; }
 :is(.col, .rail) > section:not([hidden]) ~ section:not([hidden]) { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
 .page p { text-wrap: pretty; }
@@ -110,7 +113,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .page-shelf { grid-template-columns: minmax(340px, 1.3fr) minmax(0, 1fr) minmax(0, 1fr); }
 /* 欧气: the detector and share | trophies and the dex */
 .page-luck { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); max-width: 1240px; }
-.page-grow { grid-template-columns: minmax(0, 1fr); max-width: 1240px; }
+.page-grow { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 1179px) {
   .page-open { grid-template-columns: minmax(0, 1fr) 260px; }
   .page-shelf { grid-template-columns: minmax(320px, 1fr) minmax(0, 1fr); }
@@ -472,7 +475,7 @@ button:disabled { cursor: not-allowed; }
 
 /* 成长 (upgrades.ts / skills.ts): the shop's level up top, then each upgrade/skill as a pocket on a binder page —
    hairline seams between pockets, level pips, current → next effect, and a bar filling toward the next price */
-.grow-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 32px; align-items: end; padding-bottom: 28px; margin-bottom: 8px; }
+.grow-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 32px; align-items: end; max-width: 1100px; padding: 12px 0 28px; margin-bottom: 8px; }
 .gh-lv { margin: 0; display: flex; align-items: baseline; gap: 10px; }
 .gh-lv span { font-size: var(--fs-body); color: var(--muted); }
 .gh-lv b { font: 900 56px/1 var(--font-display); }
@@ -483,8 +486,8 @@ button:disabled { cursor: not-allowed; }
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 .page-grow h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 .page-grow > section + section { margin-top: 40px; }
-.grow-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
-.gtile { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; background: var(--bg); min-width: 0; }
+.grow-grid { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+.gtile { display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); min-width: 0; }
 .gtile p { margin: 0; }
 .gt-top { display: flex; align-items: baseline; gap: 8px; }
 .gt-top b { font-size: 18px; } .gt-top > small { font-size: var(--fs-cap); color: var(--muted); }
