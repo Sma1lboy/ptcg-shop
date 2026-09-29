@@ -740,7 +740,7 @@ button:disabled { cursor: not-allowed; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
 .gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 22px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; }
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
-:is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
+:is(.page-grow, .page-ach) :is(h2, h3) small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
    locked logos are greyed the way the shelf greys them */
 .mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
@@ -779,6 +779,23 @@ button:disabled { cursor: not-allowed; }
    rich shop is not a wall of yellow */
 .gtile.can .u-lv :is(i.on + i:not(.on), i:first-child:not(.on)) { background: var(--sticker); border-color: var(--sticker-edge); }
 .gtile.can .gt-buy button { border-color: var(--ink); font-weight: 600; }
+/* 开分店 (upgrades.ts renderBranch): the prestige panel spans both binder pages — this shop's revenue toward the gate on the
+   left, what goes and what stays plus the (secondary, two-click) button on the right, then the 名气 perks, three pockets a row */
+.gh-lv .gh-shop { display: block; margin-bottom: 8px; font-size: var(--fs-body); color: var(--muted); }
+.gh-lv .gh-shop b { font: 600 var(--fs-body)/1.3 var(--font-body); color: var(--ink); }
+.page-grow > .branch { grid-column: 1 / -1; }
+.br-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 16px 56px; align-items: end; }
+.br-prog p, .br-go p { margin: 0; }
+.br-prog > p:first-child { display: flex; align-items: baseline; gap: 10px; }
+.br-prog > p:first-child span, .br-prog small { color: var(--muted); }
+.br-prog > p:first-child b { font: 900 32px/1 var(--font-display); }
+.br-say { margin-top: 10px !important; color: var(--muted); } .br-say b { color: var(--ink); }
+.br-go { display: grid; gap: 6px; }
+.br-keep { font-size: var(--fs-cap); color: var(--muted); } .br-keep b { margin-right: 8px; font-weight: 600; color: var(--ink); }
+.br-go button { justify-self: start; margin-top: 6px; font-weight: 600; }
+.br-h { margin: 24px 0 0; font-size: var(--fs-h); font-weight: 600; color: var(--ink); }
+.br-first { margin: 18px 0 0; color: var(--muted); } .br-first b { font-weight: 600; color: var(--ink); }
+@media (min-width: 1100px) { .branch .grow-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1099px) {
   .page-grow { grid-template-columns: minmax(0, 1fr); }
   .grow-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
@@ -788,6 +805,7 @@ button:disabled { cursor: not-allowed; }
    eleven fit in about three screens instead of seven; the milestone track keeps all seven sets in one row with short thresholds */
 @media (max-width: 779px) {
   .grow-head { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .br-now { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .gh-lv b { font-size: 44px; }
   .gh-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
   .gh-now dd { font-size: var(--fs-h); }

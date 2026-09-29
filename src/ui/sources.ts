@@ -5,7 +5,7 @@ import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
 import { ACH } from '../achievements.ts';
 
-const maxM = () => S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
+const maxM = () => S.roundM(1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max)); // the ceiling: 手气 maxed plus 名气「手气底子」maxed
 
 export function renderSources() {
   const upd = SETS.map(s => DATA[s.id].pricesUpdated).sort().pop()?.slice(0, 10);
@@ -21,7 +21,9 @@ export function renderSources() {
       客流上限：图鉴口碑、技能人气、新系列带来的客人三者相乘，合计 ×${G.CROWD_KNEE} 以内全算；超过的部分递减（多出 x 只算 x ÷ (1 + x ÷ 余量)，余量起始 ${G.CROWD_ROOM}），进店人数最多是基础的 ×${G.CROWD_KNEE + G.CROWD_ROOM}。「店面扩建」每级余量 +${G.ROOM_STEP}（上限跟着 +${G.ROOM_STEP}），共 ${G.UPGRADES.expand.costs.length} 级，首级 $${G.UPGRADES.expand.costs[0].toLocaleString('en-US')}、每级约 ×1.6，越往后多来的人越少，只有加成超过 ×${G.CROWD_KNEE} 才能扩建；收齐（大师套）后这个系列的拆包玩家再肯多付 ${G.MASTER.tol * 100} 个百分点、专程来买的人 ×${G.MASTER.w}。
       图鉴补卡：${G.BUY_R.join('/')} 可以按当前单卡市价从同行买进图鉴册，只进图鉴，不能再卖、上柜或当镇店之宝；普通、非普通、稀有只能开包收。店员每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，给勾选系列的货架进货（1 级补到半满，2 级补满），不领工资。
       技能用现金升级，第 L+1 级的价格 = 首级价 × 倍数^L：${Object.values(G.SKILLS).map(k => `${k.name}（${k.group}，${k.max} 级，首级 $${k.base}${k.max > 1 ? `、每级 ×${k.grow}` : ''}；1 级 ${k.fx(1)}${k.max > 1 ? `，满级 ${k.fx(k.max)}` : ''}）`).join('；')}。
-      手气只改你开包时用的概率：每种闪卡（${S.HITS.join('/')}）的实测概率乘同一个系数，例如${SETS[0].name} SIR ${SETS[0].rates.SIR}% 满级变成 ${(SETS[0].rates.SIR * maxM()).toFixed(2)}%；实测概率本身不变，欧气检测按每一包开的时候的概率和模拟玩家比。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>
+      手气只改你开包时用的概率：每种闪卡（${S.HITS.join('/')}）的实测概率乘同一个系数，例如${SETS[0].name} SIR ${SETS[0].rates.SIR}% 满级（含名气「手气底子」）变成 ${(SETS[0].rates.SIR * maxM()).toFixed(2)}%；实测概率本身不变，欧气检测按每一包开的时候的概率和模拟玩家比。货架空了、钱花光了、也没有卡可卖时，亲戚周济 $${G.BAILOUT}。</p>
+      <p>开分店（游戏设定）：本店累计营业额到 ${money(G.BRANCH_AT)} 后可以关掉这家店去开一家新的，带走名气 = √(本店营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 取整（${[1e5, 25e4, 1e6].map(v => `${money(v)} → ${G.fameFor(v)}`).join('，')}）。新店从零开始：现金 $${G.START_CASH}、没有货、没有升级和技能、营业额归零（后面的系列要重新解锁）；卡册和展示柜里的卡、图鉴、成就和欧气检测的全部记录都带走，成就奖金不会再发一次。
+      名气买永久加成，第 L+1 级要 首级价 + L 名气，每项都有上限：${Object.values(G.PERKS).map(p => `${p.name}（${p.max} 级，首级 ${p.base} 名气；满级 ${p.fx(p.max)}）`).join('；')}。老主顾加在基础客流上，不受客流上限递减；手气底子只加「手气」的级数，满级开包仍是负期望（见「价格口径」）。</p>
       <p>成就（游戏设定）：${ACH.length} 个，每个解锁时发一次现金奖金，从 ${money(Math.min(...ACH.filter(a => a.cash).map(a => a.cash)))} 到 ${money(Math.max(...ACH.map(a => a.cash)))}，全部加起来 ${money(ACH.reduce((s, a) => s + a.cash, 0))}；「全图鉴」「满级卡铺」只有标签没有奖金。奖金不算营业额（不提前解锁系列），不改开包概率、价钱和顾客；欧气类成就（欧洲人、欧皇本皇、非酋补贴）开满 30 包后按欧气检测的百分位算，手气加成开的包照旧只和同样加成的模拟玩家比。隐藏成就解锁前只露一句提示。清空存档会连成就一起清掉。</p>`, $('sources'));
 }
 
@@ -33,7 +35,7 @@ export function renderBasis() {
       <p>单卡是 TCGplayer 市价（成交均价），整包是 PriceCharting 的散包价，两个来源不同。下表「期望市值」= 每个槽位的概率 × 该稀有度卡池的平均单卡市价，不含任何游戏设定。</p>
       <table class="tally"><thead><tr><th>系列</th><th>整包标价</th><th>期望市值</th><th>占比</th><th>满手气 ×${maxM()}</th></tr></thead><tbody>${rows}</tbody></table>
       <p>期望只有标价的四成多。这个差距是两个口径直接算出来的，不是游戏调的：整包标价里含密封品本身的溢价（收藏、囤货、抽奖的人愿意多付），拆开后只剩单卡的价值。另外单卡市价是成交价，不扣平台费和运费，你在游戏里卖给同行只拿 ${Math.round(G.BUYLIST * 100)}%。
-      最后一列是技能「手气」满级时的期望（游戏加成，不是市场数据），仍低于最低进货价（市价的 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），开包还是花钱买乐趣和图鉴。</p>
+      最后一列是技能「手气」满级（含名气「手气底子」）时的期望（游戏加成，不是市场数据），仍低于最低进货价（市价的 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），开包还是花钱买乐趣和图鉴。</p>
       <p>欧气检测把你开出的每张卡按<b>当前</b>单卡市价重算再和模拟玩家比，所以刷新价格数据不会让旧存档的百分位错位。只有本功能上线前开的包，无法重算，仍按开包当时的价格。</p>
       <p>没建模：棱镜进化的 Demigod（3 张 SIR）/ God Pack 和 151 的 God Pack。TCGplayer 的文章明说样本里没开出 God Pack，给不出可靠概率，所以不编数字；文章里的 SIR 概率已经包含了这类包的贡献，因此单包期望大体不受影响，只是没有这种「一包全是大货」的极端开局。
       超级进化系列用超级金卡 MHR 取代了金卡 HR，TCGplayer 没写它出在哪个槽位，我们放在 HR 原来的位置（第二张反闪）：这只决定它能不能和 IR/SIR 同包，单包出 MHR 的概率就是实测值。

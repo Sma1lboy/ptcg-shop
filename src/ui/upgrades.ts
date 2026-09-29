@@ -5,6 +5,8 @@ import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, pips, logoUrl } from './common.ts';
 
+const moneyOf = money;
+
 // What each upgrade level does, in the same words as the skills' fx (display only; the numbers are game.ts's).
 const UFX: Record<string, (lv: number) => string> = {
   signage: lv => `肯多付 +${Math.round(G.SIGN_STEP * 100 * lv)}%`,
@@ -16,9 +18,9 @@ const UFX: Record<string, (lv: number) => string> = {
   clerk: lv => ['没有店员', '巡货架，补到半满', '补满，卖散卡'][lv],
 };
 
-// One upgrade or skill pocket. fx = what the current / next level does.
-export function tile(o: { name: string; tag?: string; desc: string; lv: number; max: number; cost: number | null | undefined; fx?: [string, string]; act: string; k: string; blocked?: string }) {
-  const cash = G.state.cash, done = o.cost == null, can = !done && !o.blocked && cash >= o.cost!;
+// One upgrade, skill or 名气 perk pocket. fx = what the current / next level does. have / price = what pays for it (cash by default).
+export function tile(o: { name: string; tag?: string; desc: string; lv: number; max: number; cost: number | null | undefined; fx?: [string, string]; act: string; k: string; blocked?: string; have?: number; price?: (v: number) => string }) {
+  const cash = o.have ?? G.state.cash, money = o.price ?? moneyOf, done = o.cost == null, can = !done && !o.blocked && cash >= o.cost!;
   return html`<li class="gtile ${done ? 'max' : can ? 'can' : ''}">
       <p class="gt-top"><b>${o.name}</b>${o.tag ? html`<small>${o.tag}</small>` : ''}<span class="gt-lv">Lv ${o.lv}<small>/${o.max}</small></span></p>
       ${pips(o.lv, o.max)}
@@ -61,10 +63,10 @@ function milestones() {
 export function renderUpgrades() {
   const ups = Object.entries(G.UPGRADES), sks = Object.entries(G.SKILLS), cash = G.state.cash;
   const lv = ups.reduce((a, [k]) => a + G.lvl(k), 0) + sks.reduce((a, [k]) => a + G.skill(k), 0);
-  const max = ups.reduce((a, [, u]) => a + u.costs.length, 0) + sks.reduce((a, [, s]) => a + s.max, 0);
+  const max = ups.reduce((a, [, u]) => a + u.costs.length, 0) + sks.reduce((a, [k]) => a + G.skillMax(k), 0);
   const goal = buyables().sort((a, b) => a.cost - b.cost)[0];
   render(html`<header class="grow-head">
-      <div class="gh-lv"><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
+      <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b> 没花` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
         <span class="gh-bar" role="img" aria-label="${lv}/${max}"><i style="--p:${lv / max}"></i></span></div>
       ${goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? '现在就能升' : '下一个目标'}</p>
@@ -80,11 +82,43 @@ export function renderUpgrades() {
         <div><dt>货架</dt><dd>${G.racks()} × ${G.depth()} 包</dd></div>
         <div><dt>展示柜</dt><dd>${G.slots()} 格</dd></div>
         <div><dt>手气</dt><dd>×${G.luckMult().toFixed(2)}</dd></div>
+        ${G.perk('regulars') ? html`<div><dt>老主顾</dt><dd>基础客流 +${Math.round(G.REG_STEP * 100 * G.perk('regulars'))}%</dd></div>` : ''}
         <div><dt>打烊结算</dt><dd>${G.offlineCap() / 3600} 小时</dd></div>
       </dl>
     </header>
     ${milestones()}`, $('grow-top'));
+  renderBranch();
   render(html`<h2>店铺升级 <small>改柜台、货架和进货</small></h2>
     <ul class="grow-grid">${ups.map(([k, u]) => { const l = G.lvl(k); return tile({ name: u.name, desc: u.desc, lv: l, max: u.costs.length, cost: G.upgradeCost(k), fx: [UFX[k](l), UFX[k](l + 1)], act: 'up', k,
       blocked: G.canUpgrade(k) ? '' : `客流加成叠到 ×${G.CROWD_KNEE} 以上才用得上（现在 ×${G.crowdRaw().toFixed(2)}）` }); })}${pad(ups.length)}</ul>`, $('upgrades'));
+}
+
+// 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
+let armed = 0;
+export function branchClick() {
+  if (Date.now() - armed < 3000) { armed = 0; G.branch(); return; }
+  armed = Date.now(); renderBranch(); setTimeout(renderBranch, 3100);
+}
+
+// 开分店 (prestige): how far this shop is from the gate, what branching now would pay, what carries over, and the 名气 perks.
+function renderBranch() {
+  const b = G.state.branch, rev = G.revenue(), at = G.BRANCH_AT, can = G.canBranch(), fame = G.fameFor();
+  const nextAt = (fame + 1) ** 2 * G.FAME_UNIT, perks = Object.entries(G.PERKS), pts = (v: number) => `${v} 名气`;
+  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店 · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把这家店做到营业额 $100k，就能去新街口从头开一家'}</small></h2>
+    <div class="br-now">
+      <div class="br-prog">
+        <p><span>本店营业额</span> <b>${money(rev)}</b> <small>/ ${money(at)}</small></p>
+        <span class="gh-bar" role="img" aria-label="${Math.round(Math.min(1, rev / at) * 100)}%"><i style="--p:${Math.min(1, rev / at)}"></i></span>
+        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame)}</b>；多做 ${money(nextAt - rev)} 营业额就是 ${pts(fame + 1)}（名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')})，越往后越慢）。`
+          : html`还差 <b>${money(at - rev)}</b>。到了能拿 ${pts(G.fameFor(at))}，做得越多拿得越多。`}</p>
+      </div>
+      <div class="br-go">
+        <p class="br-keep"><b>带走</b>卡册和展示柜里的卡、图鉴、成就、欧气检测的全部记录、名气</p>
+        <p class="br-keep"><b>留下</b>现金、仓库和货架上的包、店铺升级、技能、营业额（后面的系列要重新解锁）</p>
+        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? `开分店（营业额到 ${money(at)}）` : Date.now() - armed < 3000 ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame)}`}</button>
+      </div>
+    </div>
+    ${b.got ? html`<h3 class="br-h">名气 <small>永久加成，每家新店都有 · 手上 ${pts(b.fame)}</small></h3>
+    <ul class="grow-grid">${perks.map(([k, p]) => { const lv = G.perk(k); return tile({ name: p.name, tag: p.group, desc: p.desc, lv, max: p.max, cost: G.perkCost(k), fx: [p.fx(lv), p.fx(lv + 1)], act: 'perk', k, have: b.fame, price: pts }); })}${pad(perks.length)}</ul>`
+    : html`<p class="br-first">开了第一家分店以后，名气能买这些永久加成：${perks.map(([, p], i) => html`${i ? '、' : ''}<b>${p.name}</b>（${p.fx(p.max)}）`)}。每项都有上限。</p>`}`, $('branch'));
 }

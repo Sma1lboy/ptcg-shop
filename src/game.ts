@@ -26,7 +26,11 @@ export interface State {
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   offline: { secs: number; sales: number; revenue: number; lost: number } | null;
   ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
+  branch: Branch;
 }
+// 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
+// shops before this one; perks = 名气 perk levels. Survives every branch; only 清空存档 clears it.
+export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number> }
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
 export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
 export type Game = ReturnType<typeof createGame>;
@@ -114,9 +118,27 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
   };
 
+  // 开分店 (prestige), game setting: once this shop's revenue reaches BRANCH_AT you can start over in a new shop for
+  // 名气 = floor(sqrt(revenue / FAME_UNIT)) (100k → 3, 250k → 5, 1M → 10), spent on the permanent perks below. The new shop
+  // starts from zero (cash, stock, shelves, upgrades, skills, revenue, so the later sets lock again); the binder, 图鉴,
+  // achievements and the whole 欧气 record come along. Every perk has a max level, so the carry-over is bounded.
+  // Perk level L+1 costs base + L 名气.
+  const BRANCH_AT = 100000, FAME_UNIT = 2500;
+  const SEED_STEP = 1000, REG_STEP = 0.25, ACCESS_STEP = 0.15;
+  const PERKS: Record<string, { name: string; group: string; desc: string; max: number; base: number; fx: (lv: number) => string }> = {
+    seed: { name: '老本', group: '经营', desc: '每开一家新店，起步资金多一些（不算营业额）', max: 3, base: 1, fx: lv => `起步 $${(START_CASH + SEED_STEP * lv).toLocaleString('en-US')}` },
+    fit: { name: '旧货架', group: '经营', desc: '老店的货架和层板搬过来：新店开张就有这么多级「货架」和「加层」', max: 3, base: 2, fx: lv => lv ? `开张就是货架、加层 Lv${lv}` : '空店开张' },
+    regulars: { name: '老主顾', group: '经营', desc: '老店的熟客跟着来：基础进店人数上调，在客流上限之外单算', max: 4, base: 1, fx: lv => `基础客流 +${Math.round(REG_STEP * 100 * lv)}%` },
+    access: { name: '门路', group: '经营', desc: '批发商认得你：后面的系列用更少的营业额解锁', max: 4, base: 1, fx: lv => `解锁门槛 ×${(1 - ACCESS_STEP * lv).toFixed(2)}` },
+    hire: { name: '老店员', group: '经营', desc: '新店开张就有 1 级店员，所有系列勾好自动补货', max: 1, base: 3, fx: lv => lv ? '开张就有店员' : '要自己雇' },
+    luck: { name: '手气底子', group: '幸运', desc: '技能「手气」的上限多一级，官方概率不变', max: 2, base: 4, fx: lv => `手气最高 ×${S.roundM(1 + SKILLS.luck.step * (SKILLS.luck.max + lv)).toFixed(2)}` },
+  };
+
   const setById = (id: string) => SETS.find(s => s.id === id)!;
   const lvl = (k: string) => state.up[k] || 0;
   const skill = (k: string) => state.skills[k] || 0;
+  const perk = (k: string) => state.branch.perks[k] || 0;
+  const skillMax = (k: string) => SKILLS[k].max + (k === 'luck' ? perk('luck') : 0);
   const luckMult = () => S.roundM(1 + SKILLS.luck.step * skill('luck'));
   const offlineCap = () => OFFLINE_CAP + SKILLS.watch.step * 3600 * skill('watch');
   const wholesaleRate = () => WHOLESALE - WHOLESALE_STEP * lvl('supplier');
@@ -127,7 +149,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const shelves = () => { while (state.shelves.length < racks()) state.shelves.push({ id: null, qty: 0 }); return state.shelves; }; // padded here, so a level set any way shows up
   const slots = () => CASE_BASE + CASE_STEP * lvl('case');
   const revenue = () => state.earned.sealed + state.earned.singles;
-  const unlockAt = (id: string) => UNLOCK[id] || 0;
+  const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * (1 - ACCESS_STEP * perk('access')));
   const unlocked = (id: string) => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
   const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
@@ -148,9 +170,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const room = () => CROWD_ROOM + ROOM_STEP * lvl('expand');
   const crowdCap = () => CROWD_KNEE + room();
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
-  const rate = () => ARRIVAL * crowdMult(); // walk-ins per second
+  const rate = () => ARRIVAL * (1 + REG_STEP * perk('regulars')) * crowdMult(); // walk-ins per second; 老主顾 sits outside the cap (it has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {} });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} } });
 
   let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: ((ev?: GameEvent) => void)[] = [];
@@ -337,7 +359,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit();
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
-  const skillCost = (k: string) => skill(k) < SKILLS[k].max ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
+  const skillCost = (k: string) => skill(k) < skillMax(k) ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
   const canLearn = (k: string) => k !== 'apprentice' || lvl('clerk') > 0;
   function learn(k: string) {
     const cost = skillCost(k);
@@ -509,12 +531,40 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // A one-off cash grant from outside the shop (成就奖金). Not revenue: it never counts toward unlocking a set.
   function bonus(cash: number, text: string) { state.cash += cash; log(text, 'hit', cash || undefined); emit(); }
 
+  // ---------- 开分店 ----------
+  const fameFor = (rev = revenue()) => Math.floor(Math.sqrt(rev / FAME_UNIT));
+  const canBranch = () => revenue() >= BRANCH_AT;
+  const perkCost = (k: string) => perk(k) < PERKS[k].max ? PERKS[k].base + perk(k) : undefined;
+  function branch() {
+    if (!canBranch()) return false;
+    const old = state, fame = fameFor(), b = old.branch, singles = { ...old.singles };
+    for (const c of old.trophy ? [...old.shown, old.trophy] : old.shown) { const { key, pct, ...o } = c as Shown; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder
+    state = { ...fresh(), singles, cash: START_CASH + SEED_STEP * perk('seed'),
+      opened: old.opened, tally: old.tally, pulled: old.pulled, costOpened: old.costOpened, hits: old.hits, dex: old.dex, dexPacks: old.dexPacks, dexSeen: old.dexSeen, packsBy: old.packsBy, // the 欧气 record and 图鉴 are one unit: all of it or none
+      ach: old.ach, feat: old.feat, branch: { ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue() } };
+    if (perk('fit')) state.up.racks = state.up.depth = perk('fit');
+    if (perk('hire')) { state.up.clerk = 1; for (const s of SETS) state.auto[s.id] = true; }
+    luckCache = null; lastTick = vnow = clock();
+    log(`开了第 ${state.branch.n + 1} 家店，带来名气 ${fame}`, 'hit');
+    emit(); return true;
+  }
+  function learnPerk(k: string) {
+    const cost = perkCost(k);
+    if (cost == null || state.branch.fame < cost) return false;
+    state.branch.fame -= cost; state.branch.perks[k] = perk(k) + 1;
+    if (k === 'fit') for (const u of ['racks', 'depth']) state.up[u] = Math.max(lvl(u), perk(k));
+    if (k === 'hire' && !lvl('clerk')) { state.up.clerk = 1; for (const s of SETS) state.auto[s.id] ??= true; }
+    log(`名气：${PERKS[k].name} Lv${perk(k)}（${PERKS[k].fx(perk(k))}）`);
+    emit(); return true;
+  }
+
   function reset() { state = fresh(); luckCache = null; dexN = null; emit(); }
 
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
+    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, BRANCH_AT, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
     UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
   };

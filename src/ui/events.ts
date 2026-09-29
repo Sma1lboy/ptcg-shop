@@ -5,6 +5,7 @@ import { G } from './common.ts';
 import { startPack, openBatch, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
+import { branchClick } from './upgrades.ts';
 
 export function bindEvents() {
   let resetArmed = 0;
@@ -38,6 +39,8 @@ export function bindEvents() {
       case 'learn': G.learn(b.dataset.k!); break;
       case 'collect': G.collect(id, b.dataset.n === 'all'); break;
       case 'ack': G.ackOffline(); break;
+      case 'perk': G.learnPerk(b.dataset.k!); break;
+      case 'branch': branchClick(); break;
       case 'reset':
         if (Date.now() - resetArmed < 3000) { resetGuide(); resetMat(); b.textContent = '清空存档'; resetArmed = 0; }
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }

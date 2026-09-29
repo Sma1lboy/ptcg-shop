@@ -21,7 +21,7 @@ export function renderSkills() {
   render(html`<h2>技能 <small>用现金练，改你自己</small></h2>
     <ul class="grow-grid">${Object.entries(G.SKILLS).map(([k, sk]) => {
       const lv = G.skill(k);
-      return tile({ name: sk.name, tag: sk.group, desc: sk.desc, lv, max: sk.max, cost: G.skillCost(k), fx: [sk.fx(lv), sk.fx(lv + 1)], act: 'learn', k,
+      return tile({ name: sk.name, tag: sk.group, desc: sk.desc, lv, max: G.skillMax(k), cost: G.skillCost(k), fx: [sk.fx(lv), sk.fx(lv + 1)], act: 'learn', k,
         blocked: G.canLearn(k) ? '' : '要先雇店员（店铺升级）' });
     })}${pad(Object.keys(G.SKILLS).length)}</ul>${odds()}`, $('skills'));
 }
