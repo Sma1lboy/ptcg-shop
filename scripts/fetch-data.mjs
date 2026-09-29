@@ -3,7 +3,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 
-const ALL = ['sv08', 'sv10', 'sv08.5', 'sv03.5', 'sv09', 'me01', 'me02']; // keep in sync with src/sets.ts (not imported: it needs the files this script writes)
+const ALL = ['sv08', 'sv10', 'sv08.5', 'sv03.5', 'sv09', 'me01', 'me02', 'me03', 'me04', 'me05']; // keep in sync with src/sets.ts (not imported: it needs the files this script writes)
 const SETS = process.argv.length > 2 ? process.argv.slice(2) : ALL;
 const API = 'https://api.tcgdex.net/v2/en';
 
