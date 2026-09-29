@@ -504,14 +504,19 @@ button:disabled { cursor: not-allowed; }
   background: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1) 55%, var(--foil-2) 75%, var(--foil-3)); color: var(--back-2); box-shadow: 0 18px 40px rgba(0, 0, 0, .45); transition: transform .2s; }
 .pack:hover { transform: rotate(-1.5deg) scale(1.02); }
 .pack img { width: 88%; }
-.pack-name { font: 900 24px var(--font-display); }
+.pack-name { font: 400 var(--fs-lg) var(--font-display); text-shadow: 2px 2px 0 rgba(0, 0, 0, .25); }
 .pack-hint { font-size: 12px; opacity: .7; }
 .pack-crimp { position: absolute; left: 0; right: 0; top: 0; height: 18px; background: repeating-linear-gradient(90deg, var(--foil-3) 0 4px, var(--foil-2) 4px 8px); border-radius: 6px 6px 0 0; transition: transform .38s ease-in, opacity .38s; }
 .pack-crimp.bottom { top: auto; bottom: 0; border-radius: 0 0 6px 6px; }
 .pack.torn .pack-crimp:not(.bottom) { transform: translate(60px, -40px) rotate(18deg); opacity: 0; }
 .pack.torn { transform: scale(.97); }
 
-.summary { border-top: 1px solid var(--mat-line); padding-top: 12px; }
+/* what the pack came to is the BW battle message box under the field: the white text box (the same in both themes, like the
+   story's), the double frame, ink text. Its money colours are the receipt's (--paper-*), since it sits on paper, not on the mat */
+.mat .summary { --mat-ink: var(--paper-ink); --mat-muted: var(--paper-muted); --mat-gain: var(--paper-gain); --mat-loss: var(--paper-loss); --mat-line: rgba(20, 32, 58, .14);
+  --ink: var(--paper-ink); --muted: var(--paper-muted); --panel: var(--paper); --frame: #3A4150; --frame-in: #C3CAD6; --btn-face: #F4F6F9; --btn-ink: #262B33;
+  color: var(--ink); padding: 12px 16px 14px; border: 3px solid var(--frame); border-radius: var(--r-frame); background: var(--paper);
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--frame-in), 0 4px 0 rgba(0, 0, 0, .3); }
 .summary p { margin: 0 0 10px; }
 .summary .gain, .mat-head .gain { color: var(--mat-gain); font-weight: 600; } .summary .loss, .mat-head .loss { color: var(--mat-loss); font-weight: 600; }
 .mat .btns { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -1011,7 +1016,7 @@ button:disabled { cursor: not-allowed; }
 .bk-page { position: relative; }
 #dex { scroll-margin-top: calc(var(--top-h) + 8px); }
 .bk-page.full::after { content: "满页"; position: absolute; top: -9px; right: 12px; padding: 0 7px; border-radius: 2px; background: var(--foil-2);
-  color: var(--sticker-ink); font: 900 12px/18px var(--font-display); box-shadow: 0 1px 0 var(--foil-3); }
+  color: var(--sticker-ink); font: 400 12px/18px var(--font-display); box-shadow: 0 1px 0 var(--foil-3); }
 @media (prefers-reduced-motion: no-preference) { .bk-page.full.nu::after { animation: page-full .5s .35s cubic-bezier(.3, 1.6, .5, 1) backwards; } }
 @keyframes page-full { from { opacity: 0; transform: translateY(-10px) scale(1.6); } }
 .to-bk a { margin-left: 6px; color: var(--mat-ink); font-weight: 600; text-underline-offset: 3px; }
@@ -1043,7 +1048,7 @@ button:disabled { cursor: not-allowed; }
 .bk-zoom:popover-open { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .bk-zoom::backdrop { background: rgba(4, 8, 14, .55); }
 .bk-zoom p { margin: 0 0 6px; }
-.bk-zoom-n { font: 900 var(--fs-lg)/1.25 var(--font-display); }
+.bk-zoom-n { font: 400 var(--fs-lg)/1.25 var(--font-display); }
 .bk-zoom .cf-cap { margin-bottom: 8px; }
 .pk-ghost { display: grid; align-content: center; justify-items: center; gap: 8px; background: none; box-shadow: none; border: 1px dashed var(--line-strong); color: var(--muted); }
 .pk-ghost b { font: 600 56px/1 var(--font-tag); } .pk-ghost .mk { font-size: 22px; }
@@ -1077,7 +1082,7 @@ button:disabled { cursor: not-allowed; }
 .bk-seal :is(.bk-seal-logo, b, small) { background-image: linear-gradient(115deg, var(--fa) 18%, var(--fb) 40%, var(--fc) 50%, var(--fb) 60%, var(--fa) 82%); background-size: 260% 100%; }
 /* a luminance mask: the logo's light lettering takes the most foil and its dark outlines the least, so the words still read */
 .bk-seal-logo { width: 100%; aspect-ratio: 2 / 1; mask: var(--logo) center / contain no-repeat luminance; }
-.bk-seal b { font: 900 max(15px, 9cqi)/1.2 var(--font-display); letter-spacing: .08em; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.bk-seal b { font: 400 max(15px, 9cqi)/1.2 var(--font-display); letter-spacing: .08em; -webkit-background-clip: text; background-clip: text; color: transparent; }
 .bk-seal small { padding-top: 3cqi; border-top: 1px solid var(--fa); font: 600 max(12px, 5.5cqi)/1 var(--font-tag); letter-spacing: .1em; -webkit-background-clip: text; background-clip: text; color: transparent; }
 .bk-cover:not(.silver, .gold) .bk-seal b { background-image: none; color: color-mix(in oklab, var(--back-ring) 24%, transparent); } /* blind (no foil) before the press */
 .bk-tab:is(.silver, .gold) small { color: var(--paper-ink); }
@@ -1137,19 +1142,19 @@ button:disabled { cursor: not-allowed; }
    the hint moves to the top edge, over the back of the counter */
 .mat.m3d:has(> .summary) .s3-hint { top: 8px; bottom: auto; }
 .s3-cap .s3-name { display: block; font-size: 15px; font-weight: 600; color: var(--mat-ink); }
-.s3-cap b:not(.s3-name) { margin-left: 8px; font: 600 20px var(--font-tag); color: var(--mat-ink); } /* market price, never gold or yellow (DESIGN.md「价签」) */
+.s3-cap b:not(.s3-name) { margin-left: 8px; font: 400 var(--fs-lg) var(--font-tag); color: var(--mat-ink); text-shadow: 2px 2px 0 #0B0D10; } /* market price, never gold or yellow (DESIGN.md「价签」) */
 .s3-tags { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; } /* a tag whose card is off the canvas stays off it */
 /* under each card in the spread: card.ts's tray caption (mark + market price), the same as the 2D mat's */
-.s3-tag { position: absolute; left: 0; top: 0; background: rgba(8, 12, 18, .62); padding: 1px 6px; border-radius: 3px; white-space: nowrap; transition: opacity .2s; }
+.s3-tag { position: absolute; left: 0; top: 0; padding: 1px 6px; white-space: nowrap; transition: opacity .2s; }
 .s3-tag .cf-cap { flex-wrap: nowrap; }
-/* 新: first pulled by hand (亲手开出). Lit by the shop lamp, not yellow (that's for what you press) or gold (rarity) */
-.hand-new { display: inline-block; margin-right: 6px; padding: 0 5px; border-radius: 2px; background: var(--lamp); color: var(--sticker-ink); font: 900 11px/16px var(--font-display); font-style: normal; vertical-align: 1px; }
+/* 新: first pulled by hand (亲手开出). A small BW label — white face, dark rim, pixel type — not yellow (that's for what you
+   press), not gold (rarity), not the cursor blue (that's where you are) */
+.hand-new { display: inline-block; margin-right: 6px; padding: 0 4px; border-radius: 3px; background: var(--paper); box-shadow: 0 0 0 1px #101318; color: var(--paper-ink); font: 400 12px/16px var(--font-pixel); font-style: normal; vertical-align: 1px; }
 .s3-tag .hand-new { float: left; margin: 2px 4px 0 -2px; }
 .slot figcaption:has(> .hand-new) { display: flex; align-items: baseline; }
 /* the finished batch's front row (table3d.js haulOf): under each of the best few, a plate as wide as the card with its name,
    rarity and market price (the same as the caption of the card in hand); the dearest one's price a size up. Never gold or yellow. */
-:is(.s3-tag, .haul figcaption, .mat-peek figcaption).s3-top { box-sizing: border-box; padding: 4px 6px 5px; white-space: normal; text-align: center; background: linear-gradient(rgba(26, 42, 78, .92), rgba(10, 18, 38, .92));
-  box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(174, 184, 200, .35), 0 6px 14px rgba(0, 0, 0, .35); }
+:is(.s3-tag, .haul figcaption, .mat-peek figcaption).s3-top { box-sizing: border-box; padding: 4px 6px 5px; white-space: normal; text-align: center; }
 .s3-top .s3-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 18px; color: var(--mat-ink); }
 .s3-top .hand-new { float: none; margin: 0 4px 0 0; }
 .s3-top .cf-cap { flex-wrap: wrap; justify-content: center; }
@@ -1159,7 +1164,7 @@ button:disabled { cursor: not-allowed; }
 .s3-tag.s3-sum { font-size: var(--fs-cap); line-height: 18px; color: var(--mat-muted); }
 @media (max-width: 779px), (orientation: landscape) and (max-height: 520px) { .s3-top .cf-rar { display: none; } .s3-top .cf-price { font-size: 17px; } .s3-top.best .cf-price { font-size: 20px; } .s3-top .s3-name { font-size: 12px; line-height: 15px; white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; } /* two lines rather than 「Black …」 */
   .s3-top .hand-new { position: absolute; left: 3px; top: -19px; } /* on the card's corner: the name gets the plate's whole width */ }
-.mat.m3d .summary { padding: 14px 18px 16px; }
+.mat.m3d .summary { margin: 10px 12px 12px; padding: 12px 16px 14px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
   /* one row in every state: a head that wrapped as the running total grew (or 全部翻开 came and went) resized the scene
      mid-reveal and the table reframed under the player's thumb. 全部翻开 floats over the scene's top-right corner instead. */
@@ -1175,11 +1180,12 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button { position: absolute; left: 0; top: 0; display: grid; justify-items: center; gap: 1px; padding: 4px 8px; border: 0; border-radius: var(--r);
   color: var(--mat-ink); white-space: nowrap; pointer-events: auto; opacity: 0; transition: opacity .3s; }
 .s3-shelf button.in { opacity: 1; }
-/* everything the scene lays over the canvas is a small HUD plate: dark glass in the same aluminium trim as the panels */
-:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag) { border-radius: 3px; background: linear-gradient(rgba(26, 42, 78, .9), rgba(10, 18, 38, .9));
-  box-shadow: 0 0 0 1px #0A1226, 0 0 0 2px rgba(34, 53, 95, .9), inset 0 1px 0 rgba(174, 184, 200, .35), 0 6px 14px rgba(0, 0, 0, .35); }
-:is(.s3-shelf button:not(:disabled):is(:hover, :focus-visible), .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-tag) { box-shadow: 0 0 0 1px #0A1226, 0 0 0 3px var(--sel), 0 0 14px var(--sel-glow); }
-:is(.s3-shelf, .ip-tag) b { font: 900 var(--fs-h)/1.2 var(--font-display); }
+/* everything the scene lays over the canvas is a BW status plate — the dark box a battle prints a name and HP in: --hud face,
+   a near-black rim, a thin light inner rule, a hard drop. The pointed one gets the menu cursor's blue ring */
+:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum) { border-radius: 6px; background: var(--hud);
+  box-shadow: 0 0 0 2px #101318, inset 0 0 0 1px rgba(255, 255, 255, .14), 0 4px 0 2px rgba(0, 0, 0, .3); }
+:is(.s3-shelf button:not(:disabled):is(:hover, :focus-visible), .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-tag) { box-shadow: 0 0 0 2px #101318, 0 0 0 4px var(--sel), 0 0 14px 2px var(--sel-glow); }
+:is(.s3-shelf, .ip-tag) b { font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
 :is(.s3-shelf, .ip-tag) small { font-size: var(--fs-cap); color: var(--mat-muted); }
 :is(.s3-shelf, .ip-tag) small span::before { content: ' · '; }
 .s3-shelf button:disabled { cursor: default; } :is(.s3-shelf button, .idle-pack):disabled b { color: var(--mat-muted); }
@@ -1199,7 +1205,7 @@ button:disabled { cursor: not-allowed; }
 .idle-packs li:nth-child(even) .ip-face { transform: rotate(1.5deg); }
 .ip-face.art { background: none; }
 .ip-face img { width: 88%; } .ip-face.art img { width: 100%; height: 100%; border-radius: inherit; display: block; }
-.ip-name { font: 900 18px/1.1 var(--font-display); }
+.ip-name { font: 400 var(--fs-h)/1.1 var(--font-display); }
 .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-face { transform: translateY(-8px) rotate(0); }
 .idle-pack.none .ip-face { opacity: .72; } /* none in the warehouse: the sample on the counter, bought when opened */
 .idle-pack:disabled { cursor: not-allowed; } .idle-pack:disabled .ip-face { filter: grayscale(1) brightness(.6); }
@@ -1215,7 +1221,7 @@ button:disabled { cursor: not-allowed; }
 .rail-more { margin: 12px 0 0; font-size: var(--fs-cap); } .rail-more a { color: inherit; text-underline-offset: 3px; }
 .rail-luck { display: grid; gap: 2px; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--ink); text-decoration: none; }
 .rail-luck span { font-size: var(--fs-cap); color: var(--muted); }
-.rail-luck b { font: 900 32px/1.1 var(--font-display); }
+.rail-luck b { font: 400 var(--fs-cash)/1.1 var(--font-display); }
 .rail-luck:hover span:last-child { color: var(--ink); }
 
 /* 成长 (upgrades.ts / skills.ts): the incremental loop at a glance up top (shop level, the next thing to buy, what growth has bought,
@@ -1230,7 +1236,7 @@ button:disabled { cursor: not-allowed; }
 .gh-lv p::before { content: ""; align-self: center; width: 48px; height: 48px; flex: none; background: url(gen/i-rank.webp) center / contain no-repeat; image-rendering: pixelated; }
 .page-ach .gh-lv p::before { background-image: url(gen/i-trophy.webp); }
 .gh-lv span { font-size: var(--fs-body); color: var(--muted); }
-.gh-lv b { font: 900 56px/1 var(--font-display); }
+.gh-lv b { font: 400 var(--fs-display)/1 var(--font-display); }
 .gh-lv small { font-size: var(--fs-h); color: var(--muted); }
 /* the BW status bar (ui/common.ts bar()): the battle box's dark plate, a pale track, the fill. EXP fills --exp; HP fills by what
    is left — over half --hp-hi, over a fifth --hp-mid, below --hp-lo. With a name (HP / EXP) the plate carries it in pixel type
@@ -1303,7 +1309,7 @@ button:disabled { cursor: not-allowed; }
 .br-prog p, .br-go p { margin: 0; }
 .br-prog > p:first-child { display: flex; align-items: baseline; gap: 10px; }
 .br-prog > p:first-child span, .br-prog small { color: var(--muted); }
-.br-prog > p:first-child b { font: 900 32px/1 var(--font-display); }
+.br-prog > p:first-child b { font: 400 var(--fs-cash)/1 var(--font-display); }
 .br-say { margin-top: 10px !important; color: var(--muted); } .br-say b { color: var(--ink); }
 .br-go { display: grid; gap: 6px; }
 .br-keep { font-size: var(--fs-cap); color: var(--muted); } .br-keep b { margin-right: 8px; font-weight: 600; color: var(--ink); }
@@ -1317,7 +1323,7 @@ button:disabled { cursor: not-allowed; }
    down to the next node is the 营业额 track's rail: ink as far down the line as you have levels */
 .tree { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px 36px; margin-top: 16px; }
 .t-line { min-width: 0; display: flex; flex-direction: column; }
-.t-line h3 { margin: 0; font: 900 var(--fs-lg)/1.2 var(--font-display); color: var(--ink); }
+.t-line h3 { margin: 0; font: 400 var(--fs-lg)/1.2 var(--font-display); color: var(--ink); }
 .tl-say { margin: 4px 0 0; font-size: var(--fs-cap); color: var(--muted); }
 .t-line ol { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 22px; }
 .tn { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 6px 14px; align-content: start; }
@@ -1469,7 +1475,7 @@ button:disabled { cursor: not-allowed; }
   .mat.m3d .mat-head h2 { font-size: 18px; }
   .mat.m3d .mat-head > span { font-size: var(--fs-cap); white-space: normal; overflow: visible; }
   .mat.m3d .mat-head :is(.ghost, [data-act="flipall"]) { position: static; margin: 0; min-height: 36px; }
-  .mat.m3d > .summary { grid-column: 2; grid-row: 2; min-height: 0; overflow: auto; padding: 8px 12px 12px; border-left: 1px solid var(--mat-line); font-size: var(--fs-cap); }
+  .mat.m3d > .summary { grid-column: 2; grid-row: 2; min-height: 0; overflow: auto; margin: 0 8px 8px; padding: 8px 10px 10px; font-size: var(--fs-cap); }
   .mat.m3d > .summary p { margin-bottom: 6px; }
   .mat.m3d > .summary .btns { flex-direction: column; align-items: stretch; gap: 6px; }
   .mat.m3d:not(:has(> .summary)) .mat-head { grid-row: 1 / -1; }
@@ -1686,7 +1692,7 @@ div.rs-list { padding-top: 12px; }
 /* 破产结算: a case door like the share dialog, the shop dark behind it. Plain list of what went; no paper, no red (it is not money coming in) */
 .wreck { padding: 20px 22px 22px; color: var(--ink); width: min(460px, calc(100vw - 32px)); }
 .wreck::backdrop { background: rgba(4, 8, 14, .8); }
-.wreck h2 { margin: 0 0 8px; font: 900 var(--fs-display)/1.1 var(--font-display); letter-spacing: .08em; }
+.wreck h2 { margin: 0 0 8px; font: 400 var(--fs-display)/1.1 var(--font-display); letter-spacing: .08em; }
 .wreck p { margin: 0 0 10px; }
 .wr-say { color: var(--muted); }
 .wr-list { display: grid; gap: 4px; margin: 0 0 14px; }

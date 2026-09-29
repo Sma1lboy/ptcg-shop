@@ -63,14 +63,18 @@ const tok = (n: string, fb: string) => getComputedStyle(document.documentElement
 const url = (s: string) => 'data:image/svg+xml,' + encodeURIComponent(s);
 const rr = (x: number, y: number, w: number, h: number, r: number) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}"/>`;
 let backURL = '';
-export function back() { // the shop's own back: navy, a lighter swirl, the round emblem (not the official back)
+// The shop's emblem on the back and the binder (table3d.js drawBinder): a four-point sparkle — 欧气, the luck in the pack — in a
+// diamond frame. On a 100-unit box around 0,0. Deliberately no circle split by a band: that reads as a Poké Ball.
+export const EMBLEM = { outer: 104, inner: 80, star: 'M0-34L7-7L34 0L7 7L0 34L-7 7L-34 0L-7-7Z' };
+export function back() { // the shop's own back: navy, a lighter swirl, the emblem (not the official back)
   if (!backURL) {
     const b1 = tok('--back-1', '#1D3F86'), b2 = tok('--back-2', '#0E214D'), ring = tok('--back-ring', '#E9ECF2'), cx = W / 2, cy = H / 2;
     const swirl = Array.from({ length: 9 }, (_, k) => `<ellipse cx="60" cy="0" rx="250" ry="70" transform="rotate(${((k + 1) * .7 * 180 / Math.PI).toFixed(2)})"/>`).join('');
+    const sq = (s: number, r: number, fill: string) => `<rect x="${-s / 2}" y="${-s / 2}" width="${s}" height="${s}" rx="${r}" transform="rotate(45)" fill="${fill}"/>`;
     backURL = url(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}"><defs><radialGradient id="g" gradientUnits="userSpaceOnUse" cx="${cx}" cy="${cy}" r="${H * .7}" fx="${W * .3}" fy="${H * .22}" fr="20"><stop offset="0" stop-color="${b1}"/><stop offset="1" stop-color="${b2}"/></radialGradient></defs>
       <rect width="${W}" height="${H}" fill="${b2}"/><g fill="url(#g)">${rr(24, 24, W - 48, H - 48, 16)}</g>
       <g transform="translate(${cx} ${cy})" fill="rgb(120,160,255)" fill-opacity=".05">${swirl}</g>
-      <circle cx="${cx}" cy="${cy}" r="74" fill="${ring}"/><rect x="${cx - 76}" y="${cy - 8}" width="152" height="16" fill="${b2}"/><circle cx="${cx}" cy="${cy}" r="26" fill="${b2}"/><circle cx="${cx}" cy="${cy}" r="15" fill="${ring}"/></svg>`);
+      <g transform="translate(${cx} ${cy}) scale(1.3)">${sq(EMBLEM.outer, 12, ring)}${sq(EMBLEM.inner, 6, b2)}<path d="${EMBLEM.star}" fill="${ring}"/></g></svg>`);
   }
   return backURL;
 }

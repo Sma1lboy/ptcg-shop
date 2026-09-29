@@ -13,7 +13,7 @@
 import * as fx from './fx.ts';
 import * as ASSETS from './assets.ts';
 import { SETS, LOOK } from './sets.ts'; // LOOK: each set's pack colours and chase card, shared with the shelf wall (shelf.ts)
-import { FOIL, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
+import { FOIL, EMBLEM, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
 import { money } from './ui/common.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
 const FX = () => fx;
@@ -79,7 +79,7 @@ const loadImg = url => new Promise(res => { const i = new Image(); i.crossOrigin
 // painted with it before painting, or the canvas silently keeps the system fallback. Offline: give up after 2.5 s.
 let fontsP = null;
 const fonts = () => (fontsP ||= Promise.race([
-  document.fonts?.load(`900 100px ${DISP()}`, '欧气卡铺' + SETS.map(s => s.name).join('')) || null,
+  document.fonts?.load(`400 100px ${DISP()}`, '欧气卡铺鉴定' + SETS.map(s => s.name).join('')) || null,
   new Promise(r => setTimeout(r, 2500))]).catch(() => {}));
 const DISP = () => css('--font-display'), BODY = () => css('--font-body');
 
@@ -150,7 +150,7 @@ function drawFront(x, look, set, logo, art) {
   if (logo) { const lh = Math.min(W * .8 * logo.height / logo.width, 250), lw = lh * logo.width / logo.height; x.save(); x.shadowColor = 'rgba(0,0,0,.4)'; x.shadowBlur = 20; x.shadowOffsetY = 6; x.drawImage(logo, (W - lw) / 2, cr + 64, lw, lh); x.restore(); } // tall logos (151) are capped so the art still shows
   gr = x.createLinearGradient(0, H - cr - 360, 0, H - cr); gr.addColorStop(0, rgba(c2, 0)); gr.addColorStop(.55, rgba(c2, .85)); gr.addColorStop(1, c2);
   x.fillStyle = gr; x.fillRect(0, H - cr - 360, W, 360);
-  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `900 100px ${DISP()}`;
+  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = `400 96px ${DISP()}`;
   x.save(); x.shadowColor = 'rgba(0,0,0,.45)'; x.shadowBlur = 14; x.fillText(set.name, W / 2, H - cr - 118); x.restore();
   x.font = `500 30px ${BODY()}`; x.fillStyle = 'rgba(255,255,255,.82)'; x.fillText('补充包 · 每包 11 张', W / 2, H - cr - 58);
   crimps(x, W, H, c2, 'rgba(255,255,255,.16)');
@@ -165,7 +165,7 @@ function drawBack(x, look, set, logo) {
   x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(W / 2 - 24, 0, 48, H); // the glued seam down the back
   x.fillStyle = 'rgba(255,255,255,.14)'; x.fillRect(W / 2 - 24, 0, 3, H); x.fillRect(W / 2 + 21, 0, 3, H);
   if (logo) { const lh = Math.min(W * .5 * logo.height / logo.width, 200), lw = lh * logo.width / logo.height; x.drawImage(logo, (W - lw) / 2, cr + 70, lw, lh); }
-  x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `900 66px ${DISP()}`; x.fillText('欧气卡铺', 70, 560);
+  x.textAlign = 'left'; x.fillStyle = 'rgba(255,255,255,.9)'; x.font = `400 72px ${DISP()}`; x.fillText('欧气卡铺', 70, 560);
   x.font = `400 28px ${BODY()}`; x.fillStyle = 'rgba(255,255,255,.78)';
   [`${set.name} · 补充包`, '每包 11 张卡：', '1 张能量 · 4 张普通 · 3 张非普通', '2 张反闪位 · 1 张稀有位', '', '开包概率：TCGplayer 实开统计', '单卡价格：TCGplayer 市价'].forEach((l, i) => x.fillText(l, 70, 630 + i * 44));
   const bx = W - 70 - 250, by = H - cr - 230; // barcode
@@ -1074,7 +1074,7 @@ function shelfGrid(n) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
       pos.push(at);
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * (PW / 2 + .6), 0, dz * PH / 2)));
-      pts.push(at.clone().add(new V3(0, 0, PH / 2 + (short() ? 4.6 : 3.2)))); // the label under it
+      pts.push(at.clone().add(new V3(0, 0, PH / 2 + (short() ? 4.6 : camera.aspect < .8 ? 6 : 3.2)))); // the label under it (portrait: and the 下一个解锁 line under the front row's)
     }
     // One or two rows: the showcase's top stays in shot behind them (only its height counts; on a phone its sides are cropped)
     const back = rows <= 2; if (back) pts.push(new V3(SX, 2.2 + 12.4, SZ - 1.2)); // the slabs' tops
@@ -1362,7 +1362,7 @@ function drawMat(c) {
   x.strokeStyle = line(.1); x.lineWidth = .08 * s; x.beginPath(); x.arc(cx, cy, r1, 0, Math.PI * 2); x.stroke();
   x.lineWidth = .035 * s; x.beginPath(); x.arc(cx, cy, r1 - .5 * s, 0, Math.PI * 2); x.stroke();
   for (let i = 0; i < 60; i++) { const a = i / 60 * Math.PI * 2; if (Math.abs(a - Math.PI / 2) < .5) continue; x.beginPath(); x.moveTo(cx + Math.cos(a) * (r1 - .5 * s), cy + Math.sin(a) * (r1 - .5 * s)); x.lineTo(cx + Math.cos(a) * (r1 - (i % 5 ? .8 : 1.2) * s), cy + Math.sin(a) * (r1 - (i % 5 ? .8 : 1.2) * s)); x.stroke(); }
-  x.fillStyle = line(.14); x.font = `900 ${1.4 * s}px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', cx, cy + r1 - .15 * s);
+  x.fillStyle = line(.14); x.font = `400 ${1.4 * s}px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', cx, cy + r1 - .15 * s);
 }
 // Laminate: the page colour with a fine paper-fleck print and faint long streaks, as a real laminate top has.
 function drawLaminate(c) {
@@ -1371,13 +1371,15 @@ function drawLaminate(c) {
   for (let i = 0; i < 2600; i++) { x.fillStyle = rgba(Math.random() < .5 ? ink : '#FFFFFF', .02 + Math.random() * .05); x.fillRect(Math.random() * W, Math.random() * W, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5); }
   for (let i = 0; i < 40; i++) { x.fillStyle = rgba(ink, .012 + Math.random() * .015); x.fillRect(0, Math.random() * W, W, 1 + Math.random() * 4); }
 }
-// The binder's cover: card-back navy with the card back's ring pressed into it and the shop's name.
+// The binder's cover: card-back navy with the card back's emblem (card.ts EMBLEM) pressed into it and the shop's name.
 function drawBinder(c) {
   const x = c.getContext('2d'), W = c.width, H = c.height, b1 = css('--back-1'), b2 = css('--back-2');
   x.fillStyle = b2; x.fillRect(0, 0, W, H);
-  x.strokeStyle = rgba(b1, .9); x.lineWidth = 10; x.beginPath(); x.arc(W / 2, H * .45, W * .26, 0, Math.PI * 2); x.stroke();
-  x.fillStyle = rgba(b1, .9); x.fillRect(W * .24, H * .45 - 5, W * .52, 10); x.beginPath(); x.arc(W / 2, H * .45, 22, 0, Math.PI * 2); x.fill();
-  x.fillStyle = rgba(css('--back-ring'), .55); x.font = `900 44px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', W / 2, H * .82);
+  x.save(); x.translate(W / 2, H * .45); x.scale(W * .0035, W * .0035); // the diamond's diagonal ≈ half the cover's width
+  const sq = (s, r) => { x.save(); x.rotate(Math.PI / 4); x.beginPath(); x.roundRect(-s / 2, -s / 2, s, s, r); x.restore(); };
+  x.fillStyle = rgba(b1, .9); sq(EMBLEM.outer, 12); x.fill(); x.fillStyle = b2; sq(EMBLEM.inner, 6); x.fill();
+  x.fillStyle = rgba(b1, .9); x.fill(new Path2D(EMBLEM.star)); x.restore();
+  x.fillStyle = rgba(css('--back-ring'), .55); x.font = `400 48px ${DISP()}`; x.textAlign = 'center'; x.fillText('欧气卡铺', W / 2, H * .82);
   x.strokeStyle = rgba('#FFFFFF', .08); x.lineWidth = 3; x.strokeRect(14, 14, W - 28, H - 28); // stitched border
 }
 // The penny sleeves' pack, seen from above: clear sleeves over a white backing card, a card-back navy header with the shop's name.
@@ -1386,7 +1388,7 @@ function drawSleeves(c) {
   x.fillStyle = css('--stock'); x.fillRect(0, 0, W, H);
   x.fillStyle = css('--back-2'); x.fillRect(0, 0, W, H * .3);
   x.fillStyle = css('--back-ring'); x.textAlign = 'center';
-  x.font = `900 40px ${DISP()}`; x.fillText('欧气卡铺', W / 2, H * .15);
+  x.font = `400 36px ${DISP()}`; x.fillText('欧气卡铺', W / 2, H * .15);
   x.font = `600 22px ${BODY()}`; x.fillText('卡套 · 100 枚', W / 2, H * .25);
   x.fillStyle = css('--stock-ink'); x.font = `600 18px ${BODY()}`; x.fillText('66 × 91 mm', W / 2, H * .93);
   x.fillStyle = 'rgba(255,255,255,.35)'; x.fillRect(W * .08, H * .34, W * .08, H * .55); // the light on the sleeves' plastic
@@ -1409,7 +1411,7 @@ function slabCanvas(img, grade) {
   const W = 256, H = 404, c = canvasOf(W, H), x = c.getContext('2d');
   x.fillStyle = '#EEF1F6'; x.fillRect(0, 0, W, H);
   x.fillStyle = '#FFFFFF'; x.fillRect(8, 8, W - 16, 58); x.strokeStyle = css('--back-2'); x.lineWidth = 2; x.strokeRect(8, 8, W - 16, 58);
-  x.fillStyle = css('--back-2'); x.font = `900 22px ${DISP()}`; x.textAlign = 'left'; x.fillText('欧气卡铺 鉴定', 18, 44);
+  x.fillStyle = css('--back-2'); x.font = `400 24px ${DISP()}`; x.textAlign = 'left'; x.fillText('欧气卡铺 鉴定', 18, 44);
   x.font = `700 40px ${BODY()}`; x.textAlign = 'right'; x.fillText(grade, W - 18, 52);
   if (img) x.drawImage(img, 22, 80, W - 44, (W - 44) * 88 / 63); else { x.fillStyle = css('--back-1'); x.fillRect(22, 80, W - 44, (W - 44) * 88 / 63); }
   return c;
