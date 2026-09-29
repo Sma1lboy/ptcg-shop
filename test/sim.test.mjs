@@ -119,9 +119,10 @@ console.log('ok luck percentile');
   const G = createGame(env), st = () => G.state;
 
   // 1. No money pump: opening a pack and selling it at market value returns less than the pack costs even at the best supplier level,
-  //    with 手气 maxed too.
-  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length, maxM = S.roundM(1 + G.SKILLS.luck.step * G.SKILLS.luck.max);
+  //    with 手气 maxed too, including the extra levels 名气 can buy.
+  const bestWholesale = G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length, maxM = S.roundM(1 + G.SKILLS.luck.step * (G.SKILLS.luck.max + G.PERKS.luck.max)); // 手气 maxed + 名气「手气底子」maxed
   for (const set of PTCG_SETS) assert.ok(S.packEV(S.rateKey(set.id, maxM)) < set.packPrice * bestWholesale, `${set.id}: opening packs must stay negative EV even at 手气 ×${maxM}`);
+  assert.ok(maxM <= 1.35, `the 手气 ceiling stays bounded (×${maxM})`);
   assert.ok(bestWholesale > G.BUYLIST * 0.8, 'supplier discount must not undercut what the sealed sale is worth');
   for (const [k, u] of Object.entries(G.UPGRADES)) assert.ok(u.costs.every((c, i, a) => !i || c > a[i - 1]), `${k} costs must increase`);
   assert.ok(G.DEX_TIERS.every(([a, b], i, t) => !i || (a > t[i - 1][0] && b >= t[i - 1][1])) && G.DEX_TIERS.at(-1)[0] === 1, 'dex tiers ascend and end at 100%');
@@ -157,7 +158,7 @@ console.log('ok luck percentile');
   G.setPrice('sv08', 1.02); assert.ok(Math.abs(G.pctOf('sv08') - 1) < 1e-9 && Math.abs(G.ask('sv08') - G.sealedPrice('sv08')) < 1e-9, 'price snaps to steps');
   const cash0 = st().cash; assert.ok(G.upgrade('racks')); assert.equal(st().cash, cash0 - G.UPGRADES.racks.costs[0]);
   assert.equal(G.shelves().length, G.RACK_BASE + 1); assert.ok(G.upgrade('depth')); assert.equal(G.depth(), G.DEPTH_BASE + G.DEPTH_STEP);
-  st().earned.sealed = 400; assert.ok(G.unlocked('sv08.5'));
+  st().earned.sealed = G.unlockAt('sv08.5'); assert.ok(G.unlocked('sv08.5'));
 
   // 3. Customers respond to price. Same shop, same hour, three asking prices: cheap sells the most units, dear the fewest.
   const soldAt = pct => {
@@ -219,7 +220,7 @@ console.log('ok luck percentile');
   // its old cap on purpose, the extra goes to the back room even past the back room's cap.
   {
     const old = { cash: 10, earned: { sealed: 1e4, singles: 0 }, up: { shelf: 2, signage: 1 }, stock: { sv08: 3, sv10: G.WAREHOUSE },
-      shelf: { sv08: { qty: 60, pct: 0.9 }, sv10: { qty: 70, pct: 1.1 }, 'sv08.5': { qty: 0, pct: 1.3 }, 'sv03.5': { qty: 5, pct: 1 } } };
+      shelf: { sv08: { qty: 60, pct: 0.9 }, sv10: { qty: 170, pct: 1.1 }, 'sv08.5': { qty: 0, pct: 1.3 }, 'sv03.5': { qty: 5, pct: 1 } } };
     store['ptcg-shop-v1'] = JSON.stringify(old);
     const G3 = createGame(env), s3 = G3.state;
     for (const [id, o] of Object.entries(old.shelf)) {
@@ -227,7 +228,7 @@ console.log('ok luck percentile');
       assert.equal(G3.pctOf(id), o.pct, `${id}: price kept`); assert.equal(G3.facings(id), o.qty ? 1 : 0, `${id}: one shelf if it was on sale`);
     }
     assert.equal(s3.up.shelf, undefined); assert.equal(G3.lvl('signage'), 1); assert.equal(G3.lvl('depth'), 2); assert.equal(G3.racks(), 3);
-    assert.equal(G3.shelves().length, G3.racks()); assert.equal(G3.shelfQty('sv08'), 60); assert.equal(G3.depth(), 60, 'old 货架 Lv2 held 60 per set; 加层 Lv2 holds 60 per shelf');
+    assert.equal(G3.shelves().length, G3.racks()); assert.equal(G3.shelfQty('sv08'), 60); assert.equal(G3.depth(), G3.DEPTH_BASE + 2 * G3.DEPTH_STEP, 'old 货架 Lv2 becomes 加层 Lv2 (at least the 60 per set it held)'); assert.ok(G3.depth() >= 60);
     assert.ok(s3.stock.sv10 > G.WAREHOUSE); assert.equal(G3.buy('sv10', 1), false, 'over-full back room just refuses more');
     G3.setPrice('sv10', 1.1); const G4 = createGame(env); // saved in the new format: loads unchanged
     assert.deepEqual([G4.state.shelves, G4.state.stock, G4.state.price, G4.state.up], [s3.shelves, s3.stock, s3.price, s3.up]);
@@ -236,7 +237,7 @@ console.log('ok luck percentile');
 
   // 7. Soft-lock guard, 图鉴 and the clerk.
   G.reset(); st().cash = 0; T += 1e3; G.tick();
-  assert.equal(st().cash, G.BAILOUT, 'broke shop with nothing to sell gets a one-off top-up'); T += 1e3; G.tick(); assert.equal(st().cash, G.BAILOUT);
+  assert.equal(st().cash, G.BAILOUT, 'broke shop with nothing to sell is lent stock money'); assert.equal(st().loan, G.BAILOUT, '…as a loan from 九姐'); T += 1e3; G.tick(); assert.equal(st().cash, G.BAILOUT);
   G.reset(); st().cash = 1e6; G.buy('sv08', 1); const [pack] = G.open('sv08', 1);
   assert.equal(G.dexCount('sv08'), new Set(pack.filter(c => c.r !== 'E').map(c => c.n)).size, 'opening records new card numbers');
   const r0 = G.rate(); for (let i = 0; i < 400; i++) { G.buy('sv08', 10); G.open('sv08', 10); }
@@ -375,7 +376,7 @@ console.log('ok luck percentile');
   assert.deepEqual(A.check(G), [], 'checked again: nothing new'); assert.ok(Math.abs(st().cash - cash0 - paid) < 1e-9, 'never paid twice');
   // A listener that re-checks from inside the bonus's own emit (what ui/ach.ts does) finds nothing and pays nothing.
   { const R = createGame({ ...env, storage: { getItem: () => null, setItem() {} } }); let inner = []; R.on(() => { inner = inner.concat(A.check(R)); });
-    R.state.earned.sealed = 1000; const c0 = R.state.cash;
+    R.state.earned.sealed = 1e4; const c0 = R.state.cash;
     const outer = A.check(R); assert.deepEqual(ids(outer), ['rev-1k']); assert.deepEqual(inner, [], 're-entrant check is empty');
     assert.ok(Math.abs(R.state.cash - c0 - 30) < 1e-9, 'paid once through a re-entrant emit'); }
 
@@ -393,7 +394,7 @@ console.log('ok luck percentile');
   T = new Date(2026, 8, 30, 3, 0).getTime(); A.note(G, [pack()]); assert.ok(ids(A.check(G)).includes('night'), '夜猫子: a pack opened at 3am');
 
   // State-derived: revenue, dex, a named card, and customers per calendar day (the count starts over at midnight).
-  st().earned.sealed = 1e4; assert.ok(ids(A.check(G)).includes('rev-10k'));
+  st().earned.sealed = 1e5; assert.ok(ids(A.check(G)).includes('rev-10k'));
   const zard = PTCG_DATA['sv03.5'].cards.find(c => c.name.startsWith('Charizard')); assert.ok(!st().ach.charizard);
   st().dex[`sv03.5|${zard.n}|${zard.r}`] = { c: 1, p: 1 }; assert.ok(ids(A.check(G)).includes('charizard'), 'a pulled Charizard');
   st().customers += 99; A.check(G); assert.ok(!st().ach['day-100'], '99 today');
@@ -407,7 +408,7 @@ console.log('ok luck percentile');
   assert.equal(G.luckMult(), 1, 'achievements never touch the odds');
 
   // Old saves: no ach/feat keys. They load, earn what they already did (paid once), and a reload pays nothing again.
-  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 150 }, tally: { RR: 20, SIR: 1 }, customers: 40, earned: { sealed: 3000, singles: 0 } });
+  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 150 }, tally: { RR: 20, SIR: 1 }, customers: 40, earned: { sealed: 30000, singles: 0 } });
   const O = createGame(env); assert.deepEqual([O.state.ach, O.state.feat], [{}, {}], 'old save gets empty achievements');
   const old = ids(A.check(O)); assert.ok(['open-1', 'hit-1', 'sir-1', 'packs-100', 'sale-1', 'rev-1k'].every(k => old.includes(k)), `retro achievements (${old})`);
   const oc = O.state.cash; assert.equal(oc, 10 + A.ACH.filter(a => old.includes(a.id)).reduce((x, a) => x + a.cash, 0));
@@ -416,25 +417,66 @@ console.log('ok luck percentile');
   G.reset(); assert.deepEqual(st().ach, {}, 'reset clears achievements');
   console.log(`ok achievements (${A.ACH.length})`);
 }
+// 开分店 (prestige): gated on this shop's debt being paid; the new shop starts over but the binder, 图鉴, achievements and the whole
+// 欧气 record come along untouched; 名气 is paid once per shop; every perk is capped; old saves load with no branch history.
+{
+  let T = 1_700_000_000_000; const store = {};
+  const env = { now: () => T, random: S.rng(11), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+  const G = createGame(env), st = () => G.state;
+  assert.deepEqual(st().branch, { n: 0, fame: 0, got: 0, life: 0, perks: {} });
+  const REV = 5e5; st().earned.sealed = REV; assert.ok(!G.canBranch() && !G.branch(), 'no branch while 九姐 is still owed');
+  st().cash = 1e6; G.repay(1e9); assert.equal(st().debt, 0); assert.ok(G.canBranch(), 'paid off: the branch opens'); st().up = { signage: 3, racks: 2 }; st().skills = { luck: 3, talk: 2 };
+  G.buy('sv08', 60); G.open('sv08', 60); A.check(G);
+  const hits = Object.keys(st().singles).filter(k => S.HITS.includes(st().singles[k].kind));
+  G.list(hits[0]); G.setTrophy(hits[1] ?? hits[0]);
+  const cards = () => Object.values(st().singles).reduce((a, c) => a + c.count, 0) + st().shown.length + (st().trophy ? 1 : 0);
+  const n0 = cards(), L0 = G.luck(), ach0 = { ...st().ach }, fame = G.fameFor();
+  assert.ok(G.branch());
+  const L1 = G.luck();
+  assert.deepEqual([L1.packs, L1.value, L1.live, L1.expected, L1.pct], [L0.packs, L0.value, L0.live, L0.expected, L0.pct], '欧气 record unchanged by a branch');
+  assert.equal(cards(), n0, 'every card comes along'); assert.equal(st().shown.length + (st().trophy ? 1 : 0), 0, 'the case is emptied into the binder');
+  assert.deepEqual(st().ach, ach0); assert.deepEqual(A.check(G), [], 'achievements are not paid twice');
+  assert.deepEqual([st().cash, G.revenue(), st().up, st().skills, G.unlocked('sv08.5')], [G.START_CASH, 0, {}, {}, false], 'the new shop starts from zero, later sets lock again');
+  assert.deepEqual([st().branch.n, st().branch.fame, st().branch.life], [1, fame, REV]); assert.equal(fame, Math.floor(Math.sqrt(REV / G.FAME_UNIT)));
+  assert.deepEqual([st().debt, st().week, G.debt0()], [G.DEBT0 * (1 + G.DEBT_STEP), 1, G.DEBT0 * (1 + G.DEBT_STEP)], 'the new shop owes 九姐 more');
+  T += 3600e3; G.tick(); assert.ok((st().offline?.secs ?? 0) <= 3600, 'the first tick credits only the time since the branch');
+  assert.ok(!G.branch(), 'the new shop owes its own debt: branching again right away is refused');
+  // Perks: capped, finite in total, never bought past max or without fame.
+  let total = 0; for (const [k, p] of Object.entries(G.PERKS)) { assert.ok(p.max >= 1 && p.max <= 5, k); for (let l = 0; l < p.max; l++) total += p.base + l; }
+  assert.ok(total < 60, `maxing every perk takes ${total} 名气`);
+  st().branch.fame = 1e3; for (const k of Object.keys(G.PERKS)) { while (G.learnPerk(k)); assert.equal(G.perk(k), G.PERKS[k].max, `${k} stops at max`); }
+  assert.equal(st().branch.fame, 1e3 - total);
+  assert.equal(G.skillMax('luck'), G.SKILLS.luck.max + G.PERKS.luck.max);
+  assert.ok(G.rate() <= G.ARRIVAL * (1 + G.REG_STEP * G.PERKS.regulars.max) * G.crowdCap(), 'traffic stays under the capped ceiling');
+  assert.equal(st().branch.fame, 1e3 - total);
+  assert.ok(G.unlockAt('me05') > 0 && G.unlockAt('me05') < 1e6, '门路 lowers the thresholds, never to zero');
+  st().cash = 1e7; G.repay(1e9); G.branch();
+  assert.deepEqual([st().cash, G.lvl('racks'), G.lvl('depth'), G.lvl('clerk')], [G.START_CASH + G.SEED_STEP * G.PERKS.seed.max, G.PERKS.fit.max, G.PERKS.fit.max, 1], 'perks shape the new shop');
+  // Old saves (no branch key) load with an empty history and keep everything else.
+  store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 5 }, earned: { sealed: 500, singles: 0 } });
+  const O = createGame(env); assert.deepEqual(O.state.branch, { n: 0, fame: 0, got: 0, life: 0, perks: {} }); assert.equal(O.revenue(), 500);
+  console.log(`ok 开分店: paid off at $${REV.toLocaleString('en-US')} → ${fame} 名气, perks cap at ${total} 名气, 欧气 record and ${n0} cards carried`);
+}
 // ---------- growth curve (scripts/autoplay.mjs plays the real game.ts on a fake clock) ----------
 {
-  const { play } = await import('../scripts/autoplay.mjs');
-  const shop = play({ hours: 3, openShare: 0, pct: 0.92, log: 3600 }), opener = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, log: 3600 });
-  assert.ok(shop[1].net > 500, `an hour of trading should more than triple the $150 start (net ${shop[1].net})`);
+  const { play } = await import('../scripts/autoplay.mjs'), G_START = 1000;
+  const pay = { reserve: 1, repay: true }; // every curve below is a player who keeps the week's bill back and repays loans (GAMEPLAY.md)
+  const shop = play({ hours: 3, openShare: 0, pct: 0.92, log: 3600, ...pay }), opener = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, log: 3600, ...pay });
+  assert.ok(shop[1].net > 5 * G_START, `an hour of trading should grow the $1,000 start five-fold (net ${shop[1].net})`);
   assert.ok(shop[3].net > shop[1].net * 2, 'income keeps growing, upgrades pay off');
   assert.ok(shop[3].up >= 5, `several upgrades bought within 3h (${shop[3].up})`);
   assert.ok(opener[3].net < shop[3].net, 'opening packs is a fun expense, not a money machine, even when hits are sold at +20%');
-  const lucky = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, luck: 'max', log: 3600 });
+  const lucky = play({ hours: 3, openShare: 0.05, pct: 0.92, cardPct: 1.2, luck: 'max', log: 3600, ...pay });
   assert.ok(lucky[3].net < shop[3].net, `still a fun expense with 手气 maxed from the start ($${lucky[3].net} vs $${shop[3].net})`);
   console.log(`ok growth: net after 1h/3h = $${shop[1].net}/$${shop[3].net}; the same shop that opens 5% of its packs: $${opener[3].net}`);
-  // Long game: a player who puts 10% of revenue into master sets has a next goal for hours, and it pays for itself.
-  const ach = [], plain = play({ hours: 20, openShare: 0, pct: 1, log: 3600 }), chase = play({ hours: 20, openShare: 0, pct: 1, masterShare: 0.1, log: 3600 });
+  // Long game: a player who puts 2% of revenue into master sets has a next goal for hours, and it pays for itself.
+  const ach = [], plain = play({ hours: 20, openShare: 0, pct: 1, log: 3600, ...pay }), chase = play({ hours: 20, openShare: 0, pct: 1, masterShare: 0.02, log: 3600, ...pay }); // 2% of the scaled revenue ≈ the dollars 10% was before the ×6 volume: card prices are market data and were not scaled
   const masters = h => chase[h].dex.split('/').filter(x => x === '★').length;
   assert.ok(masters(3) >= 1, `first master set within 3h (${chase[3].dex})`);
   assert.ok(masters(6) < 4 && masters(10) > masters(3), `still chasing after 6h, and progress keeps coming (${chase[6].dex} → ${chase[10].dex})`);
   assert.ok(chase[10].net > plain[10].net, `the binder pays for itself by hour 10 (net $${chase[10].net} vs $${plain[10].net} for a shop that never collects)`);
   // Achievements: some in the first 10 minutes, more by the hour, still more to earn at 10 hours. Its own run, so the rewards stay out of the curves above.
-  play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.1, log: 36000, hook: G => { // ui/ach.ts's wiring
+  play({ hours: 10, openShare: 0, pct: 1, masterShare: 0.02, log: 36000, ...pay, hook: G => { // ui/ach.ts's wiring
     G.on(ev => { if (ev?.open) A.note(G, ev.open); });
     return t => { if (t % 600 === 0) for (const a of A.check(G)) ach.push([t, a.cash]); }; } }); // every 10 game minutes: 欧气检测 is slow to recompute per pack
   const by = h => ach.filter(([t]) => t <= h * 3600), paid = h => by(h).reduce((a, [, c]) => a + c, 0);
@@ -444,9 +486,15 @@ console.log('ok luck percentile');
   // 客流上限: every master set, 人气 maxed and all sets out would be ×7 walk-ins; late traffic stays under the capped ceiling
   // (with however many 店面扩建 levels were bought) yet keeps rising, and income keeps growing without running away.
   const G0 = createGame({ storage: { getItem: () => null, setItem() {} } }), cap = lv => G0.ARRIVAL * 60 * (G0.CROWD_KNEE + G0.CROWD_ROOM + G0.ROOM_STEP * lv);
-  assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 50, `late walk-ins are capped (${chase[20].rate}/min)`);
+  assert.ok(chase[20].rate <= cap(G0.UPGRADES.expand.costs.length) && chase[20].rate < 250 * G0.ARRIVAL, `late walk-ins are capped (${chase[20].rate}/min)`);
   assert.ok(chase[20].rate > chase[10].rate && chase[20].rate > plain[20].rate * 1.5, `still growing late (${chase[10].rate} → ${chase[20].rate}/min)`);
   assert.ok(chase[20].perMin > chase[10].perMin && chase[20].perMin < chase[10].perMin * 2.5, `income grows, not a money machine ($${chase[10].perMin} → $${chase[20].perMin}/min)`);
+  // 开分店: a player who branches as soon as the debt is paid pays off the second shop's bigger debt in about the same time (名气 perks
+  // make up for the extra 50%): the prestige loop keeps its pace instead of speeding up into a grind without pressure.
+  const br = play({ hours: 18, openShare: 0, pct: 0.95, log: 1800, branch: 'paid', ...pay }), at = n => br.findIndex(r => r.shop === n) * 0.5;
+  assert.ok(at(2) > 6 && at(2) < 11 && at(3) > 0, `first shop paid off in ${at(2)}h`);
+  assert.ok(Math.abs((at(3) - at(2)) - at(2)) < at(2) * 0.25 && br.at(-1).broke === 0, `second shop (${G0.DEBT0 * (1 + G0.DEBT_STEP)} owed) paid off in about the same time (${at(2)}h, then ${at(3) - at(2)}h)`);
+  console.log(`ok 开分店 curve: first shop paid off in ${at(2)}h, the second (owing 50% more) in ${at(3) - at(2)}h`);
   console.log(`ok long game: master sets at 3h/6h/10h = ${masters(3)}/${masters(6)}/${masters(10)}; walk-ins ${plain[10].rate} → ${chase[10].rate}/min (${chase[20].rate} at 20h); net at 10h $${chase[10].net} vs $${plain[10].net}`);
 }
 
@@ -485,6 +533,61 @@ console.log('ok luck percentile');
   console.log(`ok 顾客 window: ${rec.length} walk-ins, 没买到 ${G.missed('sv08')}/${G.missed('sv10')} over the same ${G.MISS_WINDOW / 60} minutes`);
 }
 
+// 债务 (GAMEPLAY.md): the bill curve, auto-pay, loan interest, grace → forced loan → bankruptcy, the closed-shop rule, old saves,
+// and a short survival check per kind of player (the full table is `node scripts/autoplay.mjs survive`).
+{
+  let T = 1_700_000_000_000; const store = {};
+  const env = { now: () => T, random: S.rng(21), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+  const G = createGame(env), st = () => G.state, evs = []; G.on(ev => { if (ev?.type) evs.push(ev); });
+  const run = secs => { for (let i = 0; i < secs; i += 20) { T += 20e3; G.tick(); } }, week = () => run(G.WEEK); // page open: a tick every 20 s (over 30 s is a closed stretch)
+  // Bills: week 1's bill exists from the start (the opening scene prints it), each week's is ×BILL_G the last, and they add up to the debt.
+  assert.deepEqual([st().debt, st().owe, st().loan, st().week], [G.DEBT0, G.DEBT0, 0, 1]);
+  assert.deepEqual([G.nextBill().week, G.nextBill().amount], [1, G.BILL0], 'week 1 bill at start');
+  let sum = 0, w = 1; for (; sum < G.DEBT0; w++) { const b = Math.min(G.DEBT0 - sum, Math.round(G.BILL0 * G.BILL_G ** (w - 1))); if (w > 1 && sum + b < G.DEBT0) assert.ok(b > Math.round(G.BILL0 * G.BILL_G ** (w - 2)), 'bills grow'); sum += b; }
+  assert.ok(w - 1 >= 20 && w - 1 <= 30, `the first debt takes ${w - 1} weekly installments`);
+  // Auto-pay: cash covers it, so the bill is paid the moment it falls due, and the story hears due then paid, once, for that week.
+  st().cash = 1e5; st().earned.sealed = 1; week();
+  assert.deepEqual(evs.map(e => [e.type, e.week, e.amount]), [['bill_due', 1, G.BILL0], ['bill_paid', 1, G.BILL0]]);
+  assert.deepEqual([st().week, st().owe, st().billsPaid, st().cash], [2, G.DEBT0 - G.BILL0, 1, 1e5 - G.BILL0]);
+  // Loan interest: $1,000 left alone for two weeks is $1,210 (10% a week, compounded); repaying takes the loan first.
+  assert.ok(G.takeLoan(1000)); assert.equal(evs.at(-1).type, 'loan_taken'); week(); week();
+  assert.equal(st().loan, 1210, 'weekly compound interest'); assert.equal(st().debt, st().owe + st().loan);
+  const owe0 = st().owe; G.repay(1300); assert.deepEqual([st().loan, st().owe], [0, owe0 - 90], 'repay: loan first, then the installments');
+  // Short of cash: bill_missed, 5 minutes of grace (paying works once cash is there), then 九姐 lends the difference.
+  evs.length = 0; st().cash = 10; st().stock.sv08 = 50; week(); // (packs in the back room: no soft-lock loan in the way)
+  assert.deepEqual(evs.map(e => e.type), ['bill_due', 'bill_missed']); assert.ok(st().overdue && !G.payBill(), 'overdue, and 10 cash does not pay it');
+  const o = st().overdue, c0 = G.credit(); run(G.GRACE - 60); assert.ok(st().overdue, 'still in grace');
+  run(80); assert.equal(st().overdue, null, 'grace over: borrowed and paid');
+  assert.ok(evs.some(e => e.type === 'loan_taken' && e.forced) && evs.at(-1).type === 'bill_paid' && evs.at(-1).week === o.week);
+  assert.ok(Math.abs(c0 - G.credit() - (o.amount - 10)) < 1, 'the forced loan is exactly the shortfall');
+  // Bankruptcy: short again with no credit left. 九姐 takes the shop; the same shop number starts over at week 1 owing its debt again;
+  // cards and the case go, 图鉴 / achievements / the 欧气 record / 名气 stay, and every later loan costs 5 points more.
+  st().cash = 1e4; G.buy('sv08', 20); G.open('sv08', 20); st().ach.x = 1; st().branch.fame = 3;
+  const L0 = G.luck(), dex0 = Object.keys(st().dexSeen).length; st().cash = 0; st().loan = G.creditLimit(); evs.length = 0;
+  week(); run(G.GRACE + 20);
+  assert.deepEqual(evs.map(e => e.type).filter(t => t !== 'loan_taken'), ['bill_due', 'bill_missed', 'bankrupt']);
+  assert.ok(st().wreck && st().wreck.week > 1, 'the statement waits to be read');
+  assert.deepEqual([st().week, st().debt, st().loan, st().cash, Object.keys(st().singles).length, st().shown.length, G.revenue()], [1, G.debt0(), 0, G.START_CASH, 0, 0, 0]);
+  const L1 = G.luck(); assert.deepEqual([L1.packs, L1.value, L1.pct, Object.keys(st().dexSeen).length, st().ach.x, st().branch.fame, st().branch.n], [L0.packs, L0.value, L0.pct, dex0, 1, 3, 0], 'what you learned stays');
+  assert.deepEqual([st().branch.broke, G.loanRate()], [1, G.LOAN_RATE + G.LOAN_MARK]); assert.ok(!G.canBranch(), 'a bankrupt shop cannot branch');
+  G.ackWreck(); assert.equal(st().wreck, null);
+  // Closed shop: however long, one stretch moves the bill clock one week at most (and without a clerk only an hour is credited).
+  st().cash = 1e6; T += 8 * 3600e3; G.tick(); assert.equal(st().week, 2, 'eight hours closed = one visit from 九姐');
+  // Soft-lock guard with no credit left is a bankruptcy, not a free top-up.
+  G.reset(); st().cash = 0; st().loan = G.creditLimit(); T += 1e3; G.tick(); assert.equal(st().branch.broke, 1, 'nothing to sell, nothing to borrow: bankrupt');
+  // Old save (no debt fields): the opening debt, week 1, and the first bill a full week away even after hours closed.
+  store['ptcg-shop-v1'] = JSON.stringify({ cash: 5000, earned: { sealed: 2e4, singles: 0 }, up: { clerk: 1 }, savedAt: T - 5 * 3600e3 });
+  const O = createGame(env); O.tick();
+  assert.deepEqual([O.state.debt, O.state.week, O.state.overdue], [G.DEBT0, 1, null]); assert.ok(O.dueIn() >= G.WEEK - 1, `first bill ${O.dueIn()}s away`);
+  delete store['ptcg-shop-v1'];
+  // Each kind of player over a short horizon (GAMEPLAY.md §8 targets): the manager and the idler never go bankrupt; even a
+  // newbie who never learns gets through the first 6 weeks.
+  const { KINDS } = await import('../scripts/autoplay.mjs');
+  const mgr = KINDS['纯经营']({ hours: 4, seed: 1 }).debt, idle = KINDS['挂机离线']({ hours: 48, seed: 1 }).debt, noob = KINDS['新手乱点']({ hours: 2, seed: 1 }).debt;
+  assert.deepEqual([mgr.broke, idle.broke, noob.broke], [[], [], []], 'no bankruptcy for the manager (4h), the idler (48h) or the newbie in the first 2h');
+  assert.ok(mgr.paid >= 11 && mgr.forced === 0, `the manager pays every bill from takings (${mgr.paid} paid, ${mgr.forced} forced loans)`);
+  console.log(`ok 债务: ${w - 1} installments, $1,000 → $1,210 in 2 weeks, grace → loan → bankruptcy, 8h closed = 1 week; manager ${mgr.paid} bills in 4h, idler ${idle.paid} in 48h, newbie ${noob.paid} in 2h`);
+}
 // 剧情: every scene has lines, every line renders to text (debt lines with and without a bill; milestones always get their card/set); debt beats degrade to nothing
 // on a game without the economy, map each event to its scene once per week, and a paid week after the first plays the short line.
 {

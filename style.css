@@ -197,30 +197,30 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
    lacquer, primary label-yellow (one per group), danger oxide (清空存档 only). States are CSS on the same base: hover lifts it
    under the lamp, pressed sinks 1px and darkens, disabled is the bare dark socket. Without the images the same colours draw it
    (border + fill), so pen / file:// still read as buttons */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :is(button, .dl), .mat-pack .snd { /* :is so it outranks the bare `button { color: inherit }` */
   --face: url(gen/btn-secondary.webp);
   min-height: 34px; padding: 6px 16px 7px; border: 2px solid var(--trim); border-radius: 5px;
   border-image: var(--face) 34 44 38 44 fill / 9px 12px 10px 12px / 0 stretch; background: var(--btn-face) padding-box; color: var(--btn-ink);
   font-size: var(--fs-body); font-weight: 600; line-height: 1.4; letter-spacing: .02em; text-decoration: none; text-shadow: 0 1px 0 rgba(4, 8, 14, .45);
   transition: filter .15s, transform .08s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   filter: brightness(1.14) drop-shadow(0 0 6px var(--lamp-glow)); }
 /* pressed: its own base (gen/btn-*-dn.webp) — the key pushed flush into the rim, lower lip gone, the rim's shadow on the face.
    The 1px sink stays underneath, and without the images the darker face alone says "down" */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   --face: url(gen/btn-secondary-dn.webp); border-image-slice: 34 44 34 44 fill; border-image-width: 9px 12px;
   background-color: color-mix(in oklab, var(--btn-face) 82%, black); transform: translateY(1px); filter: none; }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) .primary:not(:disabled):active {
   --face: url(gen/btn-primary-dn.webp); background-color: color-mix(in oklab, var(--sticker) 90%, black); }
 #reset:active { --face: url(gen/btn-danger-dn.webp); background-color: color-mix(in oklab, var(--danger-face) 85%, black); }
 /* primary = the yellow POP label as an enamel key: navy print, navy trim — the card's yellow border on its navy back */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) .primary {
   --face: url(gen/btn-primary.webp); background-color: var(--sticker); color: var(--sticker-ink); font-weight: 800; text-shadow: 0 1px 0 rgba(255, 255, 255, .45); }
 /* danger: the one irreversible button, oxide enamel so it can't pass for a normal key */
 #reset { --face: url(gen/btn-danger.webp); background-color: var(--danger-face); color: var(--danger-ink); }
 /* disabled: the empty socket — no enamel, just the trim, dim print. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) button:disabled {
   filter: grayscale(1) brightness(.78) contrast(.9); opacity: .85; color: var(--btn-ink); font-weight: 500; text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
 
@@ -756,7 +756,7 @@ button:disabled { cursor: not-allowed; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
 .gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 48px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; } /* the rule is 38px tall at 520 wide; the labels start under it */
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
-:is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
+:is(.page-grow, .page-ach) :is(h2, h3) small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
    locked logos are greyed the way the shelf greys them */
 .mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
@@ -795,6 +795,23 @@ button:disabled { cursor: not-allowed; }
    rich shop is not a wall of yellow */
 .gtile.can .u-lv :is(i.on + i:not(.on), i:first-child:not(.on)) { background: var(--sticker); border-color: var(--sticker-edge); }
 .gtile.can .gt-buy button { border-color: var(--ink); font-weight: 600; }
+/* 开分店 (upgrades.ts renderBranch): the prestige panel spans both binder pages — this shop's revenue toward the gate on the
+   left, what goes and what stays plus the (secondary, two-click) button on the right, then the 名气 perks, three pockets a row */
+.gh-lv .gh-shop { display: block; margin-bottom: 8px; font-size: var(--fs-body); color: var(--muted); }
+.gh-lv .gh-shop b { font: 600 var(--fs-body)/1.3 var(--font-body); color: var(--ink); }
+.page-grow > .branch { grid-column: 1 / -1; }
+.br-now { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 420px); gap: 16px 56px; align-items: end; }
+.br-prog p, .br-go p { margin: 0; }
+.br-prog > p:first-child { display: flex; align-items: baseline; gap: 10px; }
+.br-prog > p:first-child span, .br-prog small { color: var(--muted); }
+.br-prog > p:first-child b { font: 900 32px/1 var(--font-display); }
+.br-say { margin-top: 10px !important; color: var(--muted); } .br-say b { color: var(--ink); }
+.br-go { display: grid; gap: 6px; }
+.br-keep { font-size: var(--fs-cap); color: var(--muted); } .br-keep b { margin-right: 8px; font-weight: 600; color: var(--ink); }
+.br-go button { justify-self: start; margin-top: 6px; font-weight: 600; }
+.br-h { margin: 24px 0 0; font-size: var(--fs-h); font-weight: 600; color: var(--ink); }
+.br-first { margin: 18px 0 0; color: var(--muted); } .br-first b { font-weight: 600; color: var(--ink); }
+@media (min-width: 1100px) { .branch .grow-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 1099px) {
   .page-grow { grid-template-columns: minmax(0, 1fr); }
   .grow-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
@@ -804,6 +821,7 @@ button:disabled { cursor: not-allowed; }
    eleven fit in about three screens instead of seven; the milestone track is one sideways-scrolling row with short thresholds */
 @media (max-width: 779px) {
   .grow-head { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .br-now { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .gh-lv b { font-size: 44px; }
   .gh-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
   .gh-now dd { font-size: var(--fs-h); }
@@ -866,7 +884,7 @@ button:disabled { cursor: not-allowed; }
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
   .notice { left: 16px; right: 16px; width: auto; max-width: 340px; margin-inline: auto; }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 148px; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
@@ -965,3 +983,57 @@ button:disabled { cursor: not-allowed; }
   .st-box { bottom: calc(16px + env(safe-area-inset-bottom)); min-height: 136px; padding: 20px 18px 22px; }
   .st-text { font-size: var(--fs-h); }
 }
+
+/* 债务 (src/ui/ledger.ts, GAMEPLAY.md「界面」). The due chip is one more till readout in the HUD, recessed like .sub: which week,
+   the countdown in price-label numerals, the bill. Last 5 minutes or cash short of the bill: the numerals go bold white on a
+   lit rim. Overdue: the chip becomes an oxide-enamel key (it is the way to the ledger's pay / borrow buttons, the one thing to do) */
+.due { order: 0; display: flex; align-items: center; gap: 6px; flex: none; padding: 4px 10px; border-radius: 3px; color: var(--ink); text-decoration: none;
+  background: rgba(0, 0, 0, .28); box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5), 0 1px 0 rgba(238, 241, 247, .07); }
+.due[hidden] { display: none; }
+.due .k, .due small { font-size: var(--fs-cap); color: var(--muted); white-space: nowrap; }
+.due b { font: 700 var(--fs-h)/1.2 var(--font-tag); min-width: 2.6em; text-align: right; }
+.due.hot { box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5), 0 0 0 1px var(--line-strong), 0 0 10px var(--lamp-glow); }
+.due.hot b { color: #fff; }
+.due.late { background: var(--danger-face); color: var(--danger-ink); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 0 0 1px #0A1226; }
+.due.late :is(.k, small) { color: var(--danger-ink); }
+.due:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+@media (max-width: 779px) { .due { padding: 3px 8px; gap: 4px; } .due small, .due:not(.late) .k { display: none; } .due b { min-width: 0; font-size: var(--fs-body); } }
+
+.page-grow > .ledger { grid-column: 1 / -1; }
+.lg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 40px; }
+.lg > div { display: grid; align-content: start; gap: 8px; min-width: 0; }
+.lg > div + div { border-left: 1px solid var(--line); padding-left: 40px; margin-left: -20px; }
+.lg p { margin: 0; }
+.lg p b { font-weight: 700; }
+.lg-k { font-size: var(--fs-cap); color: var(--muted); letter-spacing: .04em; }
+.lg-late { color: var(--ink); font-weight: 700; }
+.lg-big { font: 700 var(--fs-display)/1 var(--font-tag); letter-spacing: .01em; }
+.lg-big small { font: 600 var(--fs-h)/1 var(--font-tag); color: var(--muted); }
+.lg dl { display: grid; gap: 4px; margin: 4px 0 0; }
+.lg dl div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.lg dt { color: var(--muted); } .lg dd { margin: 0; font: 600 var(--fs-h)/1.2 var(--font-tag); white-space: nowrap; }
+.lg dd small { color: var(--muted); font-weight: 400; }
+.lg-loan { color: var(--ink); font-weight: 700; }
+.lg-next { list-style: none; margin: 4px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, auto); justify-content: start; gap: 2px 18px; }
+.lg-next li { display: grid; } .lg-next span { font-size: var(--fs-cap); color: var(--muted); } .lg-next b { font: 600 var(--fs-h)/1.2 var(--font-tag); }
+.lg-note { font-size: var(--fs-cap); color: var(--muted); }
+.lg-act { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.lg-free p + p { margin-top: 6px; color: var(--muted); }
+@media (max-width: 999px) {
+  .lg { grid-template-columns: minmax(0, 1fr); }
+  .lg > div + div { border-left: 0; padding-left: 0; margin-left: 0; border-top: 1px solid var(--line); padding-top: 16px; }
+  .lg-big { font-size: 34px; }
+}
+
+/* 破产结算: a case door like the share dialog, the shop dark behind it. Plain list of what went; no paper, no red (it is not money coming in) */
+.wreck { padding: 18px 20px 20px; border: 12px solid var(--trim); border-image: url(gen/frame.webp) 48 / 18px / 0 stretch; background: var(--panel) padding-box; color: var(--ink);
+  width: min(460px, calc(100vw - 32px)); box-shadow: 0 24px 60px rgba(0, 0, 0, .35); }
+.wreck::backdrop { background: rgba(4, 8, 14, .8); }
+.wreck h2 { margin: 0 0 8px; font: 900 var(--fs-display)/1.1 var(--font-display); letter-spacing: .08em; }
+.wreck p { margin: 0 0 10px; }
+.wr-say { color: var(--muted); }
+.wr-list { display: grid; gap: 4px; margin: 0 0 14px; }
+.wr-list div { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.wr-list dt { color: var(--muted); } .wr-list dd { margin: 0; font-weight: 600; text-align: right; }
+.wr-keep b { margin-right: 8px; }
+.wreck button { width: 100%; margin-top: 6px; }

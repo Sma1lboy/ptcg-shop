@@ -6,7 +6,7 @@ import * as S from '../sim.ts';
 import * as FX from '../fx.ts';
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
-import { G, $, money, imgUrl, logoUrl, rar, rarLabel } from './common.ts';
+import { G, $, money, imgUrl, logoUrl, rar, rarLabel, batchBtn } from './common.ts';
 import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
 import { mountTable, ready as threeReady } from '../table3d.js';
@@ -95,7 +95,7 @@ export function renderMat() {
       <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
       ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
-      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
+      <div class="summary"><p class="rank">最好的一包 ${money(shareSpec().bestPack)}，${shareSpec().rank}。</p><div class="btns">${shareBtn()}${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}</div></div>`;
 }
 
 // Idle mat: the sealed packs in the warehouse lie on it, one tap opens one (or buys one and opens it when the warehouse is empty).
@@ -273,7 +273,7 @@ function batchSummary() {
   return `<div class="summary">
       <p>${mat.packs.length} 包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。</p>
       <p class="rank">最好的一包 ${money(sp.bestPack)}，${sp.rank}。</p>
-      <div class="btns">${stock ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, stock)} 包</button>` : ''}${shareBtn()}</div></div>`;
+      <div class="btns">${stock ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}${shareBtn()}</div></div>`;
 }
 
 // Ten packs at once: the hits flip one after another, cheapest first, best last.

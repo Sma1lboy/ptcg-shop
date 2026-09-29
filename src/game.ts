@@ -24,13 +24,26 @@ export interface State {
   shown: Shown[]; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
-  offline: { secs: number; sales: number; revenue: number; lost: number } | null;
+  offline: { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number } | null; // bills / borrowed: paid to 九姐 / borrowed while away
   ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
+  branch: Branch;
+  // 债务 (GAMEPLAY.md): owe = what is left of the opening debt (paid in weekly installments, no interest), loan = what was
+  // borrowed (compounds weekly), debt = owe + loan (the one number the story reads). week = the week whose bill comes next;
+  // shopT = the bill clock, seconds since this shop opened (a closed stretch adds one week at most); overdue = a bill that fell due short of cash, with
+  // the shop time its grace runs out; wreck = the 破产 statement, shown until acknowledged.
+  debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
+  overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
 }
+export interface Loan { at: number; week: number; amount: number; forced: boolean }
+export interface Wreck { at: number; week: number; shop: number; debt: number; cash: number; goods: number; cards: number; revenue: number }
+// 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
+// shops before this one; perks = 名气 perk levels. Survives every branch; only 清空存档 clears it.
+export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number>; broke?: number } // broke = bankruptcies, ever (征信)
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
 export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> }
 export type Game = ReturnType<typeof createGame>;
-export interface GameEvent { open?: Pull[][] } // what happened, for listeners that need more than the new state (achievements.ts)
+// type = a debt event for the story (bill_due / bill_paid / bill_missed / loan_taken / bankrupt / story), with the bill's week and amount.
+export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean } // what happened, for listeners that need more than the new state (achievements.ts)
 
 export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
@@ -40,10 +53,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const WHOLESALE = 0.72;        // distributor price as a share of the current market pack price (supplier upgrades lower it)
   const WHOLESALE_STEP = 0.03;   // per supplier level
   const BUYLIST = 0.7;           // what a fellow shop pays for your singles, share of market
-  const START_CASH = 150;
-  const ARRIVAL = 0.20;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
+  const START_CASH = 1000;
+  const ARRIVAL = 0.5;          // walk-ins per second before 口碑; each one is an individual with an errand (see TYPES)
   const WAREHOUSE = 200;         // packs per set the back room holds; only shelf packs are for sale
   const MIN_PCT = 0.6, MAX_PCT = 1.6, PCT_STEP = 0.05; // asking price as a share of market, for shelf packs and case singles
+  const DEFAULT_PCT = 0.95; // a set's tag before you touch it: under market, because the cheapest-shopping set (sv08, mean ceiling 100%) loses half its buyers at 100% on a cold day
   // Customer types. tol = the most a customer will pay, as a share of market (mean; sd is the spread between individuals).
   const TYPES: Record<string, { name: string; w: number; tol: number; sd: number }> = {
     opener:    { name: '拆包玩家', w: 50, tol: 1.06, sd: 0.08 }, // buys 1–5 packs of a set to open; budget-limited
@@ -75,9 +89,19 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 统一货架: the shop has RACK_BASE shelves (+1 per 货架 level, up to one per set), each holds one set, DEPTH_BASE packs deep
   // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
   // settle half the time); deeper shelves = longer before a shelf sells out, while you are away or between the clerk's rounds.
-  const RACK_BASE = 3, DEPTH_BASE = 20, DEPTH_STEP = 20;
+  const RACK_BASE = 3, DEPTH_BASE = 40, DEPTH_STEP = 40;
   const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
-  const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop sales credited on return
+  const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop time credited on return, with a clerk minding the shop (看店 adds more)
+  const NOCLERK_CAP = 3600;               // without a clerk nobody minds the shop: at most an hour is credited (sales and the bill clock alike)
+  // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time while the page is open; a closed stretch
+  // (sales credited up to offlineCap) moves the bill clock one week at most: 九姐 calls once while you are away. Shop n (0 = the first) owes
+  // DEBT0 × (1 + DEBT_STEP·n); week w's bill is BILL0 × (1 + DEBT_STEP·n) × BILL_G^(w−1), capped at what is left, plus whatever
+  // the loan has grown past the credit line. A bill short of cash gets GRACE seconds; then it is borrowed, or the shop goes bankrupt.
+  // Loans compound LOAN_RATE a week (+LOAN_MARK per past bankruptcy, up to 3); the credit line is LOAN_K × the shop's best
+  // week of revenue, at least LOAN_FLOOR × (1 + DEBT_STEP·n).
+  const WEEK = 20 * 60, GRACE = 5 * 60;
+  const DEBT0 = 40000, BILL0 = 300, BILL_G = 1.12, DEBT_STEP = 0.5;
+  const LOAN_RATE = 0.1, LOAN_MARK = 0.05, LOAN_K = 1, LOAN_FLOOR = 3000;
   const HEAT_EVERY = 120;                 // seconds between 行情 rerolls
   // 图鉴: each set's Pokédex fills as you pull new card numbers (selling a card never un-collects it).
   // Reaching a share of a set's cards permanently raises walk-in traffic. Game setting; steps sum to +38% per set.
@@ -85,7 +109,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Hits (RR and up) can also be bought from other shops at market price, into the binder only; C/U/R only come from packs.
   const BUY_R = ['RR', 'ACE', 'UR', 'IR', 'SIR', 'HR', 'MHR'];
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
-  const BAILOUT = 30;                     // a shop with no cash, stock or cards to sell gets this much once (soft-lock guard)
+  const BAILOUT = 300;                    // a shop with no cash, stock or cards to sell is lent this much (soft-lock guard; bankrupt if there is no credit left)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
   const MISS_WINDOW = 600;                // 货柜 page: walk-ins (state.recent) and pack buyers who found their set missing (state.miss) are both kept for exactly this long, by time, so the two counts cover the same customers
   const CLERK_ROUND = 300;                // the clerk goes round the shelves every 5 minutes: a shelf has to last until the next round (why 加层 pays late)
@@ -93,32 +117,53 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // returns toward CROWD_KNEE + room(), room = CROWD_ROOM + ROOM_STEP per 店面扩建 level. Game setting, so the late shop keeps
   // growing without traffic running away; 店面扩建 is the open-ended place late cash goes (cost ×1.6 a level, the gain shrinks).
   const CROWD_KNEE = 2, CROWD_ROOM = 1, ROOM_STEP = 0.5;
-  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // lifetime revenue needed before a set can be stocked
+  // Scale (game setting): the shop trades in volume (ARRIVAL, baskets, shelf depth), so every price the shop pays for growth —
+  // upgrades, skills, unlock thresholds — is COST_X times its old list; market prices of packs and cards are never scaled.
+  const COST_X = 4;
+  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // ×COST_X below // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
-    signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750] },
-    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i)) }, // up to one per set: a second shelf of a set is only more depth
-    depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640] },
-    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600] },
-    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700] },
-    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}：加成叠到 ×${CROWD_KNEE} 以上时才用得上`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100) },
-    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600] }, // ponytail: no wage; add one if cash piles up unspent
+    signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750].map(c => c * COST_X) },
+    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 2 ** i) * COST_X) }, // up to one per set: a second shelf of a set is only more depth
+    depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640].map(c => c * COST_X) },
+    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
+    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map(c => c * COST_X) },
+    expand:   { name: '店面扩建', desc: `客流上限（进店人数的倍数）+${ROOM_STEP}`, costs: Array.from({ length: 12 }, (_, i) => Math.round(6000 * 1.6 ** i / 100) * 100 * COST_X) },
+    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
   };
   // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
   // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
   const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
-    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
-    talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
-    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300, grow: 1.75, step: 0.05, fx: lv => `进店 +${Math.round(5 * lv)}%` },
-    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久', max: 3, base: 600, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
-    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
+    talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.7, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数，和图鉴口碑相乘（合计超过上限后递减，见店面扩建）', max: 10, base: 300 * COST_X, grow: 1.75, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
+    watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久（要先雇店员，没店员一律 1 小时）', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
+    apprentice: { name: '带徒弟', group: '经营', desc: '店员把最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 1.1, fx: lv => lv ? '自动上柜，标价 110%' : '不上柜' },
+  };
+
+  // 开分店 (prestige), game setting: once this shop's debt is paid (九姐 has no claim left) you can start over in a new shop for
+  // 名气 = floor(sqrt(revenue / FAME_UNIT)) (500k → 6, 1M → 8, 2M → 12), spent on the permanent perks below. The new shop
+  // starts from zero (cash, stock, shelves, upgrades, skills, revenue, so the later sets lock again) and owes that shop's
+  // opening debt (DEBT_STEP above); the binder, 图鉴, achievements and the whole 欧气 record come along. Every perk has a max
+  // level, so the carry-over is bounded. Perk level L+1 costs base + L 名气.
+  const FAME_UNIT = 12500;
+  const SEED_STEP = 1000, REG_STEP = 0.25, ACCESS_STEP = 0.15;
+  const PERKS: Record<string, { name: string; group: string; desc: string; max: number; base: number; fx: (lv: number) => string }> = {
+    seed: { name: '老本', group: '经营', desc: '每开一家新店，起步资金多一些（不算营业额）', max: 3, base: 1, fx: lv => `起步 $${(START_CASH + SEED_STEP * lv).toLocaleString('en-US')}` },
+    fit: { name: '旧货架', group: '经营', desc: '老店的货架和层板搬过来：新店开张就有这么多级「货架」和「加层」', max: 3, base: 2, fx: lv => lv ? `开张就是货架、加层 Lv${lv}` : '空店开张' },
+    regulars: { name: '老主顾', group: '经营', desc: '老店的熟客跟着来：基础进店人数上调，在客流上限之外单算', max: 4, base: 1, fx: lv => `基础客流 +${Math.round(REG_STEP * 100 * lv)}%` },
+    access: { name: '门路', group: '经营', desc: '批发商认得你：后面的系列用更少的营业额解锁', max: 4, base: 1, fx: lv => `解锁门槛 ×${(1 - ACCESS_STEP * lv).toFixed(2)}` },
+    hire: { name: '老店员', group: '经营', desc: '新店开张就有 1 级店员，所有系列勾好自动补货', max: 1, base: 3, fx: lv => lv ? '开张就有店员' : '要自己雇' },
+    luck: { name: '手气底子', group: '幸运', desc: '技能「手气」的上限多一级，官方概率不变', max: 2, base: 4, fx: lv => `手气最高 ×${S.roundM(1 + SKILLS.luck.step * (SKILLS.luck.max + lv)).toFixed(2)}` },
   };
 
   const setById = (id: string) => SETS.find(s => s.id === id)!;
   const lvl = (k: string) => state.up[k] || 0;
   const skill = (k: string) => state.skills[k] || 0;
+  const perk = (k: string) => state.branch.perks[k] || 0;
+  const skillMax = (k: string) => SKILLS[k].max + (k === 'luck' ? perk('luck') : 0);
   const luckMult = () => S.roundM(1 + SKILLS.luck.step * skill('luck'));
-  const offlineCap = () => OFFLINE_CAP + SKILLS.watch.step * 3600 * skill('watch');
+  const offlineCap = () => lvl('clerk') ? OFFLINE_CAP + SKILLS.watch.step * 3600 * skill('watch') : NOCLERK_CAP;
   const wholesaleRate = () => WHOLESALE - WHOLESALE_STEP * lvl('supplier');
   const wholesale = (id: string) => Math.round(setById(id).packPrice * wholesaleRate() * 100) / 100;
   const sealedPrice = (id: string) => Math.round(setById(id).packPrice * (state.heat[id] || 1) * 100) / 100;
@@ -127,12 +172,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const shelves = () => { while (state.shelves.length < racks()) state.shelves.push({ id: null, qty: 0 }); return state.shelves; }; // padded here, so a level set any way shows up
   const slots = () => CASE_BASE + CASE_STEP * lvl('case');
   const revenue = () => state.earned.sealed + state.earned.singles;
-  const unlockAt = (id: string) => UNLOCK[id] || 0;
+  const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * COST_X * (1 - ACCESS_STEP * perk('access')));
   const unlocked = (id: string) => revenue() >= unlockAt(id);
   const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
   const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
   const facings = (id: string) => shelves().filter(s => s.id === id && s.qty > 0).length;
-  const pctOf = (id: string) => state.price[id] ?? 1;
+  const pctOf = (id: string) => state.price[id] ?? DEFAULT_PCT;
   const ask = (id: string) => Math.round(sealedPrice(id) * pctOf(id) * 100) / 100;
   const cardPct = (c: { pct?: number }) => c.pct ?? 1;
   const cardAsk = (c: Shown) => Math.round(c.price * cardPct(c) * 100) / 100;
@@ -148,13 +193,19 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const room = () => CROWD_ROOM + ROOM_STEP * lvl('expand');
   const crowdCap = () => CROWD_KNEE + room();
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
-  const rate = () => ARRIVAL * crowdMult(); // walk-ins per second
+  const rate = () => ARRIVAL * (1 + REG_STEP * perk('regulars')) * crowdMult(); // walk-ins per second; 老主顾 sits outside the cap (it has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {} });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
+    debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null });
 
-  let state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
+  let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   const listeners: ((ev?: GameEvent) => void)[] = [];
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
+  // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
+  let pending: GameEvent[] = [];
+  const flush = () => { const evs = pending; pending = []; evs.forEach(emit); return evs.length > 0; };
+  // A pre-债务 save's first tick credits the closed time as usual, but its bill clock starts now: the first bill is a full week away.
+  if (migrated) state.shopT = -Math.max(0, Math.min((clock() - state.savedAt) / 1000, offlineCap()));
 
   function load(): State {
     try { const s = JSON.parse(store.getItem(SAVE_KEY)!); if (s && typeof s.cash === 'number') {
@@ -164,6 +215,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
           if (!old) { old = Object.fromEntries(Object.entries(st.stock as State['stock']).map(([id, n]) => [id, { qty: n, pct: 1 }])); st.stock = {}; } // pre-storefront saves: everything was on sale
           unify(st, old);
         }
+        if (s.week == null) { migrated = true; st.owe = st.debt = Math.round(DEBT0 * (1 + DEBT_STEP * st.branch.n)); } // pre-债务 saves: 九姐 turns up now
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
         return st;
@@ -337,7 +389,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit();
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
-  const skillCost = (k: string) => skill(k) < SKILLS[k].max ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
+  const skillCost = (k: string) => skill(k) < skillMax(k) ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
   const canLearn = (k: string) => k !== 'apprentice' || lvl('clerk') > 0;
   function learn(k: string) {
     const cost = skillCost(k);
@@ -382,13 +434,13 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const type = pickW(Object.keys(TYPES), typeWeight), tol = tolOf(type), hits = state.shown;
     const onShelf = SETS.filter(s => shelfQty(s.id) > 0).map(s => s.id), v: Visit = { at: vnow, t: type, r: 'none', max: tol };
     if (type === 'opener') {
-      const want = (r => r < 0.6 ? 1 : r < 0.85 ? 2 : 3 + Math.floor(random() * 3))(random());
+      const want = (r => r < 0.4 ? 2 : r < 0.75 ? 4 : 5 + Math.floor(random() * 6))(random());
       let id = pickW(SETS.filter(s => unlocked(s.id)), s => heatW(s.id) * demand(s.id).w).id;
       if (!shelfQty(id)) { const m = (state.miss[id] ||= []); m.push(vnow); while (m[0] < vnow - MISS_WINDOW * 1000) m.shift(); } // the set they came for, before any settling
       if (!shelfQty(id) && onShelf.length && random() < 0.5) { v.miss = id; id = pickW(onShelf, facings); } // settles for another set, more likely one on several shelves
       v.set = id; v.max = tol + demand(id).tol;
       if (shelfQty(id)) {
-        const n = Math.min(want, shelfQty(id), Math.floor(lognorm(25 * demand(id).budget, 0.6) / ask(id)));
+        const n = Math.min(want, shelfQty(id), Math.floor(lognorm(60 * demand(id).budget, 0.6) / ask(id)));
         if (n >= 1 && pctOf(id) <= v.max) sellPacks(id, n, v); else { v.r = 'pricey'; v.price = sealedPrice(id); v.pct = pctOf(id); if (v.pct <= v.max) v.why = 'budget'; }
       }
     } else if (type === 'flipper') {
@@ -442,11 +494,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
   }
-  // Dead end guard: no cash for the cheapest pack, nothing on the shelf, nothing to sell. Game setting.
+  // Dead end guard: no cash for the cheapest pack and nothing on the shelves or in the back room. Game setting.
   function bailout() {
     const cheapest = Math.min(...SETS.filter(s => unlocked(s.id)).map(s => wholesale(s.id)));
-    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0) || Object.keys(state.singles).length || state.shown.length) return false;
-    state.cash += BAILOUT; log('货架空了、钱也花光了，亲戚周济', 'gain', BAILOUT); return true;
+    if (state.cash >= cheapest || Object.values(state.stock).some(n => n > 0) || shelves().some(o => o.qty > 0)) return false; // cards in the binder don't count: a new player may not think of selling them
+    if (credit() < BAILOUT) { bankrupt(); return true; }
+    borrow(BAILOUT, true); log('货架空了、钱也花光了：九姐借你进货钱，记在账上', 'loss', BAILOUT); return true;
   }
 
   // Advances the shop by the wall-clock time since the last call, so background tabs and closed tabs both catch up.
@@ -454,24 +507,106 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const now = clock(), dt = Math.min((now - lastTick) / 1000, offlineCap()); lastTick = now;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0 }, lost0 = state.lost, slice = lvl('clerk') ? CLERK_SLICE : dt;
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0 }, lost0 = state.lost, slice = CLERK_SLICE, away = dt > 30;
     let n = 0, revenue = 0, sales = 0;
     for (let left = dt; left > 0; left -= slice) {
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = now - left * 1000;
       n += m;
       for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
       clerkWork(acc, now - (left - len) * 1000);
+      debtWork(away ? len * Math.min(1, WEEK / dt) : len, away); // a closed stretch moves the bill clock one week at most
     }
+    if (away && state.overdue) state.overdue.until = Math.max(state.overdue.until, state.shopT + GRACE); // what could not be covered while away gets its grace from the return
     if (acc.packs) log(`店员进货 ${acc.packs} 包`, '', -acc.spent);
     if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
     if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
     if (dt > 30 && n) { // long absence: one summary instead of a log line per customer
       const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
       o.secs += dt; o.sales += sales; o.revenue += revenue; o.lost += state.lost - lost0;
-      log(`打烊期间卖出 ${sales} 件`, 'gain', revenue);
+      for (const e of pending) { if (e.type === 'bill_paid') o.bills = (o.bills || 0) + e.amount!; if (e.type === 'loan_taken') o.borrowed = (o.borrowed || 0) + e.amount!; }
+      log(`打烊期间成交 ${sales} 位顾客`, 'gain', revenue);
     }
     const rescued = bailout();
+    if (flush()) return;
     if (n || dt > 30 || acc.packs || acc.bulk || acc.listed || rescued) emit(); else save();
+  }
+  // ---------- 债务: weekly bills, loans, bankruptcy (numbers at WEEK above) ----------
+  const debtScale = () => 1 + DEBT_STEP * state.branch.n;
+  const debt0 = () => Math.round(DEBT0 * debtScale());
+  const loanRate = () => LOAN_RATE + LOAN_MARK * Math.min(3, state.branch.broke || 0);
+  const creditLimit = () => Math.round(Math.max(LOAN_FLOOR * debtScale(), LOAN_K * state.best));
+  const credit = () => Math.max(0, creditLimit() - state.loan);
+  const cents = (v: number) => Math.round(v * 100) / 100;
+  const setDebt = () => { state.owe = Math.max(0, cents(state.owe)); state.loan = Math.max(0, cents(state.loan)); state.debt = cents(state.owe + state.loan); };
+  const installment = (w: number) => Math.min(state.owe, Math.round(BILL0 * debtScale() * BILL_G ** (w - 1)));
+  const dueIn = () => state.week * WEEK - state.shopT; // seconds of shop time until the next bill
+  // The next bill as it stands now (the loan part is what the loan has grown past the credit line; it grows again at the week's end).
+  function nextBill() {
+    if (!state.debt) return null;
+    const inst = installment(state.week);
+    return { week: state.week, amount: inst + Math.max(0, Math.round(state.loan * (1 + loanRate()) - creditLimit())), inst, dueAt: clock() + dueIn() * 1000 };
+  }
+  function borrow(amount: number, forced: boolean) {
+    amount = cents(amount);
+    state.cash += amount; state.loan += amount; setDebt();
+    state.loans.unshift({ at: clock(), week: state.week, amount, forced }); state.loans.length = Math.min(state.loans.length, 20);
+    pending.push({ type: 'loan_taken', week: state.week, amount, forced });
+  }
+  // Pays a bill in full from cash: the installment part off what is owed, the rest off the loan.
+  function settle(b: { week: number; amount: number; inst: number }) {
+    state.cash -= b.amount; state.owe -= b.inst; state.loan -= b.amount - b.inst; state.billsPaid++; state.overdue = null; setDebt();
+    log(`第 ${b.week} 周的账付给九姐`, 'loss', -b.amount);
+    pending.push({ type: 'bill_paid', week: b.week, amount: b.amount });
+    cleared();
+  }
+  const cleared = () => { if (!state.debt) { state.overdue = null; log('债还清了：这家店从今天起是你的', 'hit'); pending.push({ type: 'story', id: 'debt_cleared', week: state.week }); } };
+  // One week of shop time is over: the loan compounds, the week's revenue sets the credit line, the bill falls due.
+  function weekEnd() {
+    const w = state.week++, made = revenue() - state.weekRev0;
+    state.weekRev0 = revenue(); state.best = Math.max(state.best, made);
+    if (!state.debt) return;
+    state.loan *= 1 + loanRate(); setDebt();
+    const inst = installment(w), amount = cents(inst + Math.max(0, state.loan - creditLimit()));
+    if (amount <= 0) return;
+    pending.push({ type: 'bill_due', week: w, amount });
+    if (state.overdue) { state.overdue = { ...state.overdue, week: w, amount: cents(state.overdue.amount + amount), inst: state.overdue.inst + inst }; return; } // piled up while away
+    if (state.cash >= amount) settle({ week: w, amount, inst });
+    else {
+      state.overdue = { week: w, amount, inst, until: state.shopT + GRACE };
+      log(`第 ${w} 周的账 ${'$' + amount.toFixed(0)} 付不上：${GRACE / 60} 分钟内凑齐，不然就借`, 'loss');
+      pending.push({ type: 'bill_missed', week: w, amount });
+    }
+  }
+  // Grace is over (or the shop is away and cannot be asked): borrow what cash does not cover, or go bankrupt.
+  function lapse() {
+    const o = state.overdue!, short = cents(o.amount - state.cash);
+    if (short > credit()) { bankrupt(); return; }
+    borrow(short, true); log(`宽限到了：九姐替你把第 ${o.week} 周的账垫上，借 $${short.toFixed(0)}`, 'loss', short);
+    settle(o);
+  }
+  function debtWork(len: number, away: boolean) {
+    state.shopT += len;
+    while (state.shopT >= state.week * WEEK) weekEnd();
+    const o = state.overdue; if (!o) return;
+    if (state.cash >= o.amount) settle(o);
+    else if (state.shopT >= o.until || (away && o.amount - state.cash <= credit())) lapse();
+  }
+  // Pays an overdue bill now (if cash covers it).
+  function payBill() { const o = state.overdue; if (!o || state.cash < o.amount) return false; settle(o); flush(); return true; }
+  // Borrows up to the credit line (what is left of it). Not revenue: it never counts toward unlocking a set or the credit line.
+  function takeLoan(amount: number) {
+    amount = Math.min(amount, credit()); if (!(amount > 0) || !state.debt && !state.overdue) return false;
+    borrow(amount, false); log(`向九姐借了 $${amount.toFixed(0)}，每周利息 ${Math.round(loanRate() * 100)}%`, 'loss', amount);
+    if (state.overdue && state.cash >= state.overdue.amount) settle(state.overdue);
+    flush(); return true;
+  }
+  // Pays debt down early: the loan first (it is the part that grows), then what is owed (later bills end sooner).
+  function repay(amount: number) {
+    amount = cents(Math.min(amount, state.cash, state.debt)); if (!(amount > 0)) return false;
+    const toLoan = Math.min(amount, state.loan);
+    state.cash -= amount; state.loan -= toLoan; state.owe -= amount - toLoan; setDebt();
+    log(`提前还给九姐`, 'loss', -amount);
+    cleared(); if (!flush()) emit(); return true;
   }
   const missed = (id: string) => (state.miss[id] || []).filter(t => t > clock() - MISS_WINDOW * 1000).length;
   function setAuto(id: string, on: boolean) { state.auto[id] = !!on; emit(); }
@@ -509,13 +644,65 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // A one-off cash grant from outside the shop (成就奖金). Not revenue: it never counts toward unlocking a set.
   function bonus(cash: number, text: string) { state.cash += cash; log(text, 'hit', cash || undefined); emit(); }
 
+  // ---------- 开分店 ----------
+  const fameFor = (rev = revenue()) => Math.floor(Math.sqrt(rev / FAME_UNIT));
+  const canBranch = () => !state.debt; // the debt is paid: 九姐 has no claim on you, and backs the next shop
+
+  const perkCost = (k: string) => perk(k) < PERKS[k].max ? PERKS[k].base + perk(k) : undefined;
+  // A new shop from zero, with what carries over: the 欧气 record and 图鉴 (one unit: all of it or none), achievements, 名气
+  // and its perks. It owes this shop number's opening debt.
+  function restart(branch: Branch, singles: State['singles']) {
+    const old = state;
+    state = { ...fresh(), singles, opened: old.opened, tally: old.tally, pulled: old.pulled, costOpened: old.costOpened, hits: old.hits, dex: old.dex, dexPacks: old.dexPacks, dexSeen: old.dexSeen, packsBy: old.packsBy,
+      ach: old.ach, feat: old.feat, branch };
+    state.cash = START_CASH + SEED_STEP * perk('seed'); state.owe = debt0(); setDebt();
+    if (perk('fit')) state.up.racks = state.up.depth = perk('fit');
+    if (perk('hire')) { state.up.clerk = 1; for (const s of SETS) state.auto[s.id] = true; }
+    luckCache = null; lastTick = vnow = clock();
+    return old;
+  }
+  function branch() {
+    if (!canBranch()) return false;
+    const fame = fameFor(), b = state.branch, singles = { ...state.singles };
+    for (const c of state.trophy ? [...state.shown, state.trophy] : state.shown) { const { key, pct, ...o } = c as Shown; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder
+    restart({ ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue() }, singles);
+    log(`开了第 ${state.branch.n + 1} 家店，带来名气 ${fame}。九姐出的本钱：$${state.debt.toLocaleString('en-US')}`, 'hit');
+    pending.push({ type: 'story', id: 'branch', week: 1, amount: state.debt }); flush(); return true;
+  }
+  // 破产: 九姐 takes the shop and everything in it (cash, stock, the binder and the case), this shop's revenue earns no 名气, and
+  // you start the same shop number over, owing its opening debt again, with a mark that raises every later loan's interest.
+  // What you learned stays: 图鉴, achievements, the 欧气 record, 名气 already earned and its perks.
+  function bankrupt() {
+    const o = state, goods = SETS.reduce((a, x) => a + ((o.stock[x.id] || 0) + shelfQty(x.id)) * wholesale(x.id), 0);
+    const cards = Object.values(o.singles).reduce((a, c) => a + c.price * c.count, 0) + [...o.shown, ...(o.trophy ? [o.trophy] : [])].reduce((a, c) => a + c.price, 0);
+    const wreck: Wreck = { at: clock(), week: o.week, shop: o.branch.n, debt: o.debt, cash: o.cash, goods: cents(goods), cards: cents(cards), revenue: cents(revenue()) };
+    restart({ ...o.branch, broke: (o.branch.broke || 0) + 1 }, {});
+    state.wreck = wreck; pending = [];
+    log(`破产：九姐收走了店、货和卡。从第 1 周重新开始，欠 $${state.debt.toLocaleString('en-US')}`, 'loss');
+    pending.push({ type: 'bankrupt', week: wreck.week, amount: wreck.debt });
+    flush(); return true;
+  }
+  function ackWreck() { state.wreck = null; emit(); }
+  function learnPerk(k: string) {
+    const cost = perkCost(k);
+    if (cost == null || state.branch.fame < cost) return false;
+    state.branch.fame -= cost; state.branch.perks[k] = perk(k) + 1;
+    if (k === 'fit') for (const u of ['racks', 'depth']) state.up[u] = Math.max(lvl(u), perk(k));
+    if (k === 'hire' && !lvl('clerk')) { state.up.clerk = 1; for (const s of SETS) state.auto[s.id] ??= true; }
+    log(`名气：${PERKS[k].name} Lv${perk(k)}（${PERKS[k].fx(perk(k))}）`);
+    emit(); return true;
+  }
+
   function reset() { state = fresh(); luckCache = null; dexN = null; emit(); }
 
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, canLearn, luckMult, offlineCap,
+    list, unlist, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, ackOffline, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
+    WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP,
+    branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT,
   };
 }
