@@ -50,7 +50,7 @@
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
 | `index.html` | 外壳，Vite 入口：顶栏、三栏（货架 / 开包台 / 页签）、页脚 |
-| `src/ui/layout.ts` | 右栏页签，手机上开包的全屏层 |
+| `src/ui/layout.ts` | 右栏页签（欧气 / 顾客 / 单卡 / 成长）和成长页签上的可买数，手机上开包的全屏层 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
 | `scripts/` | 数据抓取（fetch-data）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast） |
