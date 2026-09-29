@@ -749,14 +749,14 @@ button:disabled { cursor: not-allowed; }
 .gg-what > b { font-size: var(--fs-h); }
 .gh-goal button { justify-self: start; border-color: var(--ink); font-weight: 600; }
 .gh-goal small { font-size: var(--fs-cap); color: var(--muted); }
-.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 22px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; }
+.gh-now { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 36px; margin: 0; padding-top: 48px; background: url(gen/divider.webp) 50% 0 / min(520px, 90%) auto no-repeat; } /* the rule is 38px tall at 520 wide; the labels start under it */
 .gh-now div { display: grid; gap: 2px; } .gh-now dt { font-size: var(--fs-cap); color: var(--muted); } .gh-now dd { margin: 0; font: 600 var(--fs-lg)/1.2 var(--font-tag); }
 :is(.page-grow, .page-ach) h2 small { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
 /* the milestone track: each set's logo over a node on one ink line that fills between revenue thresholds, like the level bar;
    locked logos are greyed the way the shelf greys them */
 .mile-track { list-style: none; margin: 16px 0 10px; padding: 0; display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); }
 .mile-track li { position: relative; display: grid; justify-items: center; align-content: start; gap: 2px; text-align: center; font-size: var(--fs-cap); color: var(--muted); min-width: 0; }
-.mile-track img { width: 76px; height: 40px; object-fit: contain; margin-bottom: 30px; }
+.mile-track img { width: 76px; max-width: 92%; height: 40px; object-fit: contain; margin-bottom: 30px; } /* narrow columns (780–1000 wide) shrink the logo instead of overlapping */
 .mile-track li:not(.got) img { filter: grayscale(1); opacity: .5; }
 .mile-track b { font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .mile-track li.got b, .mile-track li.next b { color: var(--ink); font-weight: 600; }
@@ -796,12 +796,16 @@ button:disabled { cursor: not-allowed; }
   .gtile.empty { display: none; }
 }
 /* phones: a pocket is one row — name, level, effect and what it does on the left, the price button on the right — so all
-   eleven fit in about three screens instead of seven; the milestone track keeps all seven sets in one row with short thresholds */
+   eleven fit in about three screens instead of seven; the milestone track is one sideways-scrolling row with short thresholds */
 @media (max-width: 779px) {
   .grow-head { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .gh-lv b { font-size: 44px; }
   .gh-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 16px; }
   .gh-now dd { font-size: var(--fs-h); }
+  /* ten sets no longer fit one 358px row (logos overlapped, 开店就有 broke in two): 56px a set, the row scrolls sideways */
+  .mile-track { grid-template-columns: repeat(var(--n), 56px); overflow-x: auto; scrollbar-width: none; }
+  .mile { min-width: 0; } /* the grid item would otherwise grow to the whole track and widen the page */
+  .mile-track small { white-space: nowrap; }
   .mile-track img { width: 44px; height: 28px; margin-bottom: 26px; }
   .mile-track li::before, .mile-track li::after { top: 41px; }
   .mile-track b { display: none; }
