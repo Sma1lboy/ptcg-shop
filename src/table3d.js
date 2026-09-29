@@ -321,11 +321,11 @@ const CARD_FS = `
         // toward or away from the light, so the sweep breaks into streaks along the drawing and slides between them as the card turns.
         vec2 e = vec2(2.0 / 512.0, 2.0 / 715.0);
         float hr = etchH(vUv + vec2(e.x, 0.0)), hl = etchH(vUv - vec2(e.x, 0.0)), hu = etchH(vUv + vec2(0.0, e.y)), hd = etchH(vUv - vec2(0.0, e.y));
-        float ph = (hr + hl + hu + hd) * 0.25 * 30.0, fade = 1.0 - smoothstep(0.25, 0.6, fwidth(ph)); // ridges finer than ~3 px would shimmer: flat foil there
+        float ph = (hr + hl + hu + hd) * 0.25 * 70.0, fade = 1.0 - smoothstep(0.25, 0.6, fwidth(ph)); // ridges finer than ~3 px would shimmer: flat foil there
         vec2 g = vec2(hr - hl, hu - hd); g /= length(g) + 0.004;
         float c = cos(ph * 6.2832), flank = c * fade, crest = 0.5 + 0.5 * sin(ph * 6.2832);
         float b = band + dot(g, vec2(0.7, 0.9)) * flank * 0.55;
-        crest *= crest; tx = mix(tx, 0.15 + 1.2 * crest * crest, fade); // grooves hold less light than crests: only how much white goes on moves, never the print
+        crest *= crest; tx = mix(tx, 0.3 + 0.9 * crest * crest, fade); // grooves hold less light than crests: only how much white goes on moves, never the print
         sheen = 0.015 + 0.42 * exp(-b * b * 12.0);
       }
       col += rb * shine * amt * tx * sheen * (0.4 + 0.6 * luma) + spark * amt * (k > 3.5 ? 1.1 : k < 1.5 ? 0.35 : 0.7) * shine;
