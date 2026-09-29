@@ -32,4 +32,7 @@ export function toShelf(id: string) {
   const st = G.state.stock[id] || 0;
   return Math.min(room, st > 1 ? st - 1 : st);
 }
+// The 顾客 / 没买到 window's name: the last MISS_WINDOW, or 开店以来 while every walk-in so far still falls inside it (a new shop
+// 1 minute in has not had 10 minutes of customers).
+export const lately = () => (G.state.cust.visits <= G.state.recent.length ? '开店以来' : `${G.MISS_WINDOW / 60} 分钟里`);
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };
