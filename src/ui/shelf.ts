@@ -53,21 +53,39 @@ function wall() {
     </div>`;
 }
 
+// Sets the player unfolded on a one-column shelf; kept across renders and page switches, not saved. The first set put on a shelf
+// before any price was set opens by itself, once: the guide's 定价 step points at its − / ＋.
+const unfold = new Set<string>();
+let primed = false;
+const unfolded = (id: string) => unfold.has(id);
+
 export function renderShelf() {
+  const first = G.shelves().find(r => r.id)?.id;
+  if (!primed && first && !Object.keys(G.state.price).length) { primed = true; unfold.add(first); }
+  draw();
+}
+
+function draw() {
   const s = G.state, shelves = G.shelves(), deep = G.depth(), free = shelves.some(r => !r.id);
   render(html`${wall()}<div class="shelf-head" aria-hidden="true"><span>系列 · 行情</span><span>仓库</span><span>货架</span><span>标价</span><span>开包</span></div>${SETS.map(set => {
     const w = G.wholesale(set.id), ev = S.packEV(S.rateKey(set.id, G.luckMult())), stock = s.stock[set.id] || 0, onShelf = G.shelfQty(set.id);
     const room = G.WAREHOUSE - stock, full = restock(set.id), can = (n: number) => room > 0 && s.cash >= w * Math.min(n, room), pct = G.pctOf(set.id);
     const own = shelves.filter(r => r.id === set.id).length, canShelve = !!stock && (own ? onShelf < own * deep : free), miss = G.missed(set.id);
     const heat = s.heat[set.id];
-    const head = (tag?: string) => html`<div class="s-id"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
-        <div class="set-name"><h3>${set.name}${heat && tag ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}</h3>
-          <span>${set.en} · ${set.released.slice(0, 4)}${tag ? html` · <span title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${tag}</span>` : ''}</span></div></div>`;
+    // sum + go: the folded row on a one-column shelf (style.css): where the set stands and the one next step, the rest behind the name
+    const head = (tag?: string, sum?: unknown, go?: unknown) => html`<div class="s-id"><img class="logo" src="${logoUrl(set.id)}" alt="${set.en}" loading="lazy">
+        <div class="set-name"><h3>${sum ? html`<button type="button" class="fold" aria-expanded="${unfolded(set.id)}" @click=${() => { if (!unfold.delete(set.id)) unfold.add(set.id); draw(); }}>${set.name}</button>` : set.name}${heat && tag ? html`<span class="heat ${heat > 1 ? 'hot' : 'cold'}" title="行情：市价 ${heat > 1 ? '+15%，来买的人也更多' : '−10%，来买的人更少'}（游戏设定）">${heat > 1 ? '热销 ↑' : '滞销 ↓'}</span>` : ''}</h3>
+          <span class="s-en">${set.en} · ${set.released.slice(0, 4)}${tag ? html` · <span title="来买这个系列的顾客是什么样的人（游戏设定，见页脚）">${tag}</span>` : ''}</span>${sum ? html`<span class="s-sum">${sum}</span>` : nothing}</div>${go ?? nothing}</div>`;
     if (!G.unlocked(set.id)) return html`<article class="set locked">${head()}
         <p class="set-mkt">累计营业额 ${money(G.unlockAt(set.id))} 解锁进货（现在 ${money(G.revenue())}）</p></article>`;
     const margin = G.ask(set.id) - w;
     const next = !stock ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
-    return html`<article class="set">${head(G.demand(set.id).tag)}
+    const sum = html`${own ? html`仓库 <b>${stock}</b> · 货架 ${onShelf ? html`<b>${onShelf}</b>/${own * deep}` : html`<b>卖空了</b>`} <span class="sticker">${money(G.ask(set.id))}</span>`
+      : html`没上架 · 仓库 <b>${stock}</b>`}${miss ? html` · <b>${miss}</b> 位没买到` : nothing}`;
+    const go = next === 'buy' ? html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${can(10) ? 10 : 1}" ?disabled=${!can(1)}>进 ${can(10) ? 10 : 1}</button>`
+      : next === 'shelve' ? html`<button type="button" class="primary" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}">${shelveLabel(set.id, own > 0 || !free)}</button>`
+      : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
+    return html`<article class="set ${unfolded(set.id) ? 'open' : ''}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
         <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 市价 × 你现在开包的概率（实测概率，有手气时乘上加成）算出的单包期望">开出期望 ${money(ev)}</span></p>
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
