@@ -25,7 +25,8 @@ for (const [name, t] of [['light', light], ['dark', dark]]) {
   for (const [a, b, need] of [['ink', 'bg', 4.5], ['muted', 'bg', 4.5], ['gain', 'bg', 4.5], ['loss', 'bg', 4.5], ['gold', 'bg', 4.5], ['silver', 'bg', 4.5],
     ['ink', 'panel', 4.5], ['muted', 'panel', 4.5], ['sticker-ink', 'sticker', 4.5], ['sticker-edge', 'bg', 3],
     ['mat-ink', 'mat', 4.5], ['mat-muted', 'mat', 4.5], ['mat-gain', 'mat', 4.5], ['mat-loss', 'mat', 4.5], ['mat-gold', 'mat', 4.5],
-    ['paper-ink', 'paper', 4.5], ['paper-muted', 'paper', 4.5], ['paper-gain', 'paper', 4.5]])
+    ['paper-ink', 'paper', 4.5], ['paper-muted', 'paper', 4.5], ['paper-gain', 'paper', 4.5],
+    ['ace', 'bg', 4.5], ['mat-ace', 'mat', 4.5], ['stock-ink', 'stock', 4.5]])
     check(ratio(t[a], t[b]) >= need, `${a} on ${b}: ${ratio(t[a], t[b]).toFixed(2)}:1 (≥ ${need})`);
   const dL = oklch(t.bg).L - oklch(t.mat).L;
   check(dL >= .1, `mat is the darkest surface: L(bg) − L(mat) = ${dL.toFixed(3)} (≥ 0.10)`);
