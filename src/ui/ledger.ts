@@ -131,7 +131,7 @@ export function renderRaise() {
   // the cheapest route that covers it all comes first (on a phone the sheet shows three rows before it scrolls)
   const rows: [string, unknown][] = [
     ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡本来就只能卖给同行', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
-    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比上柜（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
+    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比留在卡本里卖给找卡的（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
         html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],
     ['case', caseP.pick.length ? row(`撤下展示柜 ${caseP.pick.length} 张卖给同行`, cardsNote(caseP.pick), `柜台标价合计 ${money(caseP.pick.reduce((a, p) => a + p.c.ask, 0))}，少卖 ${money(lose.case)}`, caseP.got,
         html`<button type="button" class=${cls('case')} @click=${act(() => sellCase(caseP.pick.map(p => p.c.i)))}>撤下卖掉</button>`) : nothing],

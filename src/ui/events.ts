@@ -35,6 +35,7 @@ export function bindEvents() {
       case 'list': G.list(b.dataset.key!); break;
       case 'fillcase': G.fillCase(); break;
       case 'caseprice': G.setCasePct(G.casePct() + +b.dataset.d! * G.PCT_STEP); break;
+      case 'buyprice': G.setBuyPct(G.buyPct() + +b.dataset.d! * G.PCT_STEP); break;
       case 'unlist': G.unlist(+b.dataset.i!); break;
       case 'trophy': G.setTrophy(b.dataset.key!); break;
       case 'untrophy': G.clearTrophy(); break;

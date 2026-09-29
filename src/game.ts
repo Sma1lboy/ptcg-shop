@@ -445,13 +445,28 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return true;
   }
   function list(key: string) { if (!toCase(key)) return false; emit(); return true; }
-  // 补满柜位 (and 带徒弟, every tick): hits from singles into the free case slots, priciest first, at the case tag. Returns how many.
-  // Which card goes first hardly matters: case browsers outnumber the hits, so every listed card sells (measured, see CASE_PCT).
+  // 补满柜位 (and 带徒弟, every tick): the case shows the priciest hits the shop holds, at the case tag. Free slots take the priciest
+  // hits in the binder; then, while a binder card is worth more than the cheapest card in the case, the two swap (the cheaper one
+  // goes back to the binder, where seekers still find it). With the binder on the counter the case is what collectors look at, so
+  // it should hold the big cards (GAMEPLAY §14). Returns how many cards went in.
+  const binderHits = () => Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
   function stockCase() {
-    let n = 0; if (state.shown.length >= slots()) return 0;
-    const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
-    for (const [k] of hits) { while (toCase(k)) n++; if (state.shown.length >= slots()) break; }
+    let n = 0;
+    for (const [k] of binderHits()) { if (state.shown.length >= slots()) break; while (state.shown.length < slots() && toCase(k)) n++; }
+    for (let top = binderHits()[0]; top && state.shown.length; top = binderHits()[0]) {
+      const low = state.shown.reduce((a, c, i) => (c.price < state.shown[a].price ? i : a), 0);
+      if (top[1].price <= state.shown[low].price) break;
+      const { key, pct, ...card } = state.shown.splice(low, 1)[0]; (state.singles[key] ||= { ...card, count: 0 }).count++;
+      toCase(top[0]); n++;
+    }
     return n;
+  }
+  // How many cards 补满柜位 would put in (free slots, then swaps), without touching state.
+  function caseMoves() {
+    const bind = binderHits().flatMap(([, c]) => Array(c.count).fill(c.price) as number[]), free = Math.min(slots() - state.shown.length, bind.length);
+    const inCase = [...state.shown.map(c => c.price), ...bind.slice(0, free)].sort((a, b) => a - b), rest = bind.slice(free);
+    let swaps = 0; while (swaps < rest.length && swaps < inCase.length && rest[swaps] > inCase[swaps]) swaps++;
+    return free + swaps;
   }
   function fillCase() { const n = stockCase(); if (n) emit(); return n; }
   function unlist(i: number) {
@@ -878,7 +893,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,

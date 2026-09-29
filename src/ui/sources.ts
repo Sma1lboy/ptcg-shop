@@ -21,7 +21,9 @@ export function renderSources() {
       整包市价（${packsUpdated}）：${SETS.map((s, i) => html`${i ? '、' : ''}<a href="${s.priceSource}" target="_blank" rel="noopener">PriceCharting ${s.name}</a>`)}。</p>
       <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%（进货渠道每级 −${G.WHOLESALE_STEP * 100} 个百分点，最低 ${Math.round((G.WHOLESALE - G.WHOLESALE_STEP * G.UPGRADES.supplier.costs.length) * 100)}%），同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%。
       进货先进仓库（每系列 ${G.WAREHOUSE} 包），摆上货架才会卖。店里起始 ${G.RACK_BASE} 个货架（「货架」每级 +1，最多每个系列一个），每个货架摆一个系列、放 ${G.DEPTH_BASE} 包（「加层」每级 +${G.DEPTH_STEP}）；想买的系列不在架上，一半拆包玩家会改买架上别的（占货架多的系列更常被挑中），另一半直接走。
-      标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，展示柜 ${G.CASE_BASE} 格起；柜里的卡按各自市价的同一个比例标价（全柜标价，开店时 ${Math.round(G.CASE_PCT * 100)}%，单张可以再调），「补满柜位」和带徒弟都先挂最贵的闪卡。
+      标价 ${Math.round(G.MIN_PCT * 100)}%–${Math.round(G.MAX_PCT * 100)}% 市价，展示柜 ${G.CASE_BASE} 格起；柜里的卡按各自市价的同一个比例标价（单卡标价，开店时 ${Math.round(G.CASE_PCT * 100)}%，单张可以再调），「补满柜位」和带徒弟都先挂最贵的闪卡。
+      单卡生意：手上没上柜的闪卡就是柜台上的卡本（最多 ${G.BINDER} 张），找卡的会翻展示柜和卡本，按单卡标价买，一次最多带走 ${G.SEEK_N} 张同一档稀有度的卡、钱够为止；收藏党只看展示柜。
+      买完包的拆包玩家有 ${Math.round(G.COUNTER_OPEN * 100)}% 当场拆开（按实测概率开，和你开的包一样），拆出的闪卡一次全报给你：你的收卡价（开店时 ${Math.round(G.BUY_PCT * 100)}%，${Math.round(G.BUY_MIN * 100)}%–${Math.round(G.BUY_MAX * 100)}%）不低于他心里的最低价（平均 ${Math.round(G.SELLER.tol * 100)}% 市价，每人不同）就整叠卖给你；卡本满了、欠着九姐的账、或收银机的钱不够时不收。收来的卡不进图鉴。
       平均每 ${Math.round(1 / G.ARRIVAL)} 秒进来一位顾客，每位都有来意和预算：${Object.values(G.TYPES).map(t => `${t.name}最多肯付约 ${Math.round(t.tol * 100)}% 市价`).join('，')}（每人不同，招牌每级 +${G.SIGN_STEP * 100} 个百分点，倒爷不受影响；收藏党还看镇店之宝，只看柜里 $${G.BIG_CARD} 以上的卡）。热销的系列顾客多一倍、滞销的少一半。
       每个系列来买整包的人不一样：${SETS.map(x => { const d = G.DEMAND[x.id], pp = (v: number) => `${v >= 0 ? '+' : '−'}${Math.round(Math.abs(v) * 100)}`; return `${x.name}「${d.tag}」（肯付上限 ${pp(d.tol)} 个百分点${d.budget !== 1 ? `、预算 ×${d.budget}` : ''}${d.w !== 1 ? `、来的人 ×${d.w}` : ''}${d.crowd ? `、解锁后全店进店人数 +${Math.round(d.crowd * 100)}%` : ''}）`; }).join('，')}。倒爷扫过一个系列后 ${G.FLIP_COOLDOWN / 60} 分钟内不再收它（手上的要先出掉）。
       图鉴收录一个系列的 ${G.DEX_TIERS.map(([a, b]) => `${a * 100}%→回头客 +${b * 100}%`).join('、')}（每个系列各算，加到进店人数上）。

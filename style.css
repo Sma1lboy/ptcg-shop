@@ -534,6 +534,7 @@ button:disabled { cursor: not-allowed; }
 #casepanel p { margin: 0 0 6px; font-size: 12px; }
 .case-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; font-size: var(--fs-body); }
 .case-bar .pricer { margin-left: 0; }
+.case-bar .cb-k { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; } /* a price's label stays with its −/＋ when the bar wraps */
 .case-bar .primary { margin-left: auto; }
 .trophy { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; margin-top: 12px; }
 .trophy .cf { width: 48px; }
