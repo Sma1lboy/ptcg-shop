@@ -58,16 +58,19 @@
   }
 
   // ---------- opening mat ----------
-  function cardHTML(c, i, up) {
+  const capHTML = c => { const r = rar(c); return `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>`; };
+  // big = the enlarged card on the stage (hi-res, tap to advance); otherwise a tray/grid thumbnail (tap to inspect once face-up).
+  function cardHTML(c, i, up, big) {
     const r = rar(c);
     const face = c.r === 'E'
       ? `<span class="energy"><b>${c.name.slice(2, 3)}</b>${esc(c.name)}</span>`
-      : `<img src="${imgUrl(c)}" alt="${esc(c.name)}" loading="eager" decoding="async">`;
+      : `<img src="${imgUrl(c, big ? 'high' : 'low')}" alt="${esc(c.name)}" loading="eager" decoding="async">`;
+    const act = big ? 'advance' : up ? 'peek' : '';
     return `<figure class="slot">
-      <button type="button" class="card t${r.t} k-${c.kind}${up ? ' up' : ''}" data-act="flip" data-i="${i}" aria-label="${up ? esc(c.name) : `翻开第 ${i + 1} 张`}">
+      <button type="button" class="card t${r.t} k-${c.kind}${up ? ' up' : ''}" ${act ? `data-act="${act}"` : 'tabindex="-1"'} data-i="${i}" aria-label="${up ? esc(c.name) : big ? '翻开这张' : `第 ${i + 1} 张（未翻）`}">
         <span class="card-in"><span class="back"></span><span class="face">${face}</span></span>
       </button>
-      <figcaption>${up ? `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>` : '&nbsp;'}</figcaption>
+      <figcaption>${capHTML(c)}</figcaption>
     </figure>`;
   }
 
@@ -92,39 +95,83 @@
     const set = G.setById(mat.set);
     if (mat.mode === 'pack') {
       el.innerHTML = `<div class="mat-pack"><button type="button" class="pack" data-act="tear" aria-label="撕开这包${set.name}">
-        <span class="pack-crimp"></span><img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span><span class="pack-hint">点击撕开</span><span class="pack-crimp bottom"></span></button></div>`;
+        <span class="pack-crimp"></span><img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span><span class="pack-hint">点击撕开</span><span class="pack-crimp bottom"></span></button>${sndBtn()}</div>`;
       return;
     }
     if (mat.mode === 'cards') {
       const done = mat.up.size === mat.cards.length;
-      const v = mat.cards.reduce((s, c, i) => s + (mat.up.has(i) ? c.price : 0), 0);
-      el.innerHTML = `<div class="mat-head"><h2>${set.name}</h2><span>已翻 ${mat.up.size}/${mat.cards.length} · ${money(v)}</span>
+      el.innerHTML = `<div class="mat-head"><h2>${set.name}</h2><span id="mat-prog">${prog()}</span>${sndBtn()}
         ${done ? '' : '<button type="button" class="ghost" data-act="flipall">全部翻开</button>'}</div>
-        <div class="spread">${mat.cards.map((c, i) => cardHTML(c, i, mat.up.has(i))).join('')}</div>
+        <div class="deck"><div class="stage" id="stage">${cardHTML(mat.cards[mat.cur], mat.cur, mat.up.has(mat.cur), true)}</div>
+        <div class="spread tray">${mat.cards.map((c, i) => cardHTML(c, i, mat.up.has(i))).join('')}</div></div>
         ${done ? packSummary(mat.cards, set) : ''}`;
+      const st = $('stage').firstElementChild; if (!mat.up.size) st.classList.add('deal');
       return;
     }
     // batch
-    const cards = mat.packs.flat(), hits = cards.filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price);
+    const cards = mat.packs.flat(), hits = batchHits();
     const v = S.packValue(cards), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost;
     el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span>开出 ${money(v)} · 进货 ${money(cost)} ·
-      <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span></div>
-      ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, true)).join('')}</div>`
+      <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b></span>${sndBtn()}</div>
+      ${hits.length ? `<div class="spread">${hits.map((c, i) => cardHTML(c, i, false)).join('')}</div>`
         : `<div class="mat-empty"><p class="mat-big">全空</p><p>${mat.packs.length} 包一张好卡都没有。欧气检测那边会记住的。</p></div>`}
       <div class="summary"><div class="btns">${G.state.stock[set.id] ? `<button type="button" class="primary" data-act="open10" data-id="${set.id}">再开 ${Math.min(10, G.state.stock[set.id])} 包</button>` : ''}</div></div>`;
   }
 
-  function flip(i) {
-    if (mat.mode !== 'cards' || mat.up.has(i)) return;
-    mat.up.add(i);
-    const btn = document.querySelector(`[data-act="flip"][data-i="${i}"]`);
-    if (btn && mat.up.size < mat.cards.length) { // flip in place so the animation plays
-      btn.classList.add('up');
-      const c = mat.cards[i], r = rar(c);
-      btn.closest('.slot').querySelector('figcaption').innerHTML = `<span class="glyph">${r.g}</span>${rarLabel(c.kind === 'REV' ? 'REV' : c.kind)}<b>${money(c.price)}</b>`;
-      const head = document.querySelector('.mat-head span');
-      if (head) head.textContent = `已翻 ${mat.up.size}/${mat.cards.length} · ${money(mat.cards.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
-    } else renderMat();
+  // ---------- reveal ----------
+  // While a pack is being revealed the side panels (luck, binder, log, singles) stay frozen, otherwise they show the pull early.
+  let hold = false;
+  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const batchHits = () => mat.packs.flat().filter(c => S.HITS.includes(c.kind)).sort((a, b) => b.price - a.price);
+  const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${PTCG_FX.muted() ? '关' : '开'}</button>`;
+  const prog = () => `已翻 ${mat.up.size}/${mat.cards.length} · ${money(mat.cards.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
+  const ready = img => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
+  const armThumb = (btn, c, peek) => { btn.classList.add('up'); btn.setAttribute('aria-label', c.name); if (peek) { btn.dataset.act = 'peek'; btn.removeAttribute('tabindex'); } };
+
+  function release() { if (hold) { hold = false; renderAll(); } }
+
+  // One tap = next card slides out of the pack and flips. The last card (the rare slot) flips slowly for every pack, hit or not.
+  function advance() {
+    if (mat.mode !== 'cards' || mat.busy || mat.up.size >= mat.cards.length) return false;
+    const tok = mat, i = mat.up.size, stage = $('stage'), fresh = mat.cur !== i;
+    mat.busy = true;
+    if (fresh) { mat.cur = i; stage.innerHTML = cardHTML(mat.cards[i], i, false, true); stage.firstElementChild.classList.add('deal'); }
+    const btn = stage.querySelector('.card');
+    ready(btn.querySelector('img')).then(() => setTimeout(() => { if (mat === tok) reveal(tok, i, btn); }, fresh && !reduced() ? 240 : 0));
+    return true;
+  }
+
+  function reveal(tok, i, btn) {
+    const c = tok.cards[i], t = rar(c).t, last = i === tok.cards.length - 1, ms = reduced() ? 0 : last ? 1200 : 460;
+    btn.style.setProperty('--flip', ms + 'ms');
+    btn.style.setProperty('--ease', last ? 'cubic-bezier(.55, 0, .25, 1)' : 'cubic-bezier(.2, .7, .2, 1)');
+    tok.up.add(i); btn.classList.add('up'); btn.setAttribute('aria-label', c.name);
+    const th = document.querySelector(`.tray .card[data-i="${i}"]`); if (th) armThumb(th, c, true);
+    const pg = $('mat-prog'); if (pg) pg.textContent = prog();
+    if (last) PTCG_FX.swell(ms);
+    setTimeout(() => { PTCG_FX.flip(t); PTCG_FX.burst($('stage'), t); }, ms / 2); // the face turns toward the player halfway through
+    setTimeout(() => { tok.busy = false; if (mat === tok && tok.up.size === tok.cards.length) finish(); }, ms + 80);
+  }
+
+  function finish() {
+    if (mat.finished) return; mat.finished = true; release();
+    const el = $('mat'); el.querySelector('[data-act="flipall"]')?.remove();
+    if (!el.querySelector('.summary')) el.insertAdjacentHTML('beforeend', packSummary(mat.cards, G.setById(mat.set)));
+  }
+
+  // Ten packs at once: the hits flip one after another, cheapest first, best last.
+  function revealBatch(tok) {
+    const hits = batchHits(), n = hits.length;
+    if (!n) { PTCG_FX.miss(); release(); return; }
+    const btns = [...document.querySelectorAll('.mat .spread .card')], step = reduced() ? 0 : Math.min(240, 2400 / n);
+    for (let k = 0; k < n; k++) {
+      const i = n - 1 - k, delay = reduced() ? 0 : 350 + k * step + (k === n - 1 ? 400 : 0);
+      setTimeout(() => {
+        if (mat !== tok) return;
+        const t = rar(hits[i]).t; armThumb(btns[i], hits[i]); PTCG_FX.flip(t); PTCG_FX.burst(btns[i].closest('.slot'), t);
+      }, delay);
+    }
+    setTimeout(() => { if (mat === tok) release(); }, (reduced() ? 0 : 350 + n * step + 1200));
   }
 
   // ---------- luck detector ----------
@@ -179,39 +226,44 @@
       <p>游戏设定（不是市场数据）：进货价 = 市价 × ${Math.round(G.WHOLESALE * 100)}%，同行收卡价 = 市价 × ${Math.round(G.BUYLIST * 100)}%，平均每 ${Math.round(1 / G.CUSTOMERS_PER_SEC)} 秒来一位顾客。卡图 © Pokémon / Nintendo / Creatures / GAME FREAK，本页仅供娱乐。</p>`;
   }
 
-  function renderAll() { renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); }
+  function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); }
 
   // ---------- input ----------
   let resetArmed = 0;
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-act]'); if (!b || b.disabled) return;
+    PTCG_FX.unlock();
     const id = b.dataset.id;
     switch (b.dataset.act) {
       case 'buy': G.buy(id, +b.dataset.n); break;
       case 'buyopen': if (G.buy(id, 1)) startPack(id); break;
       case 'open1': startPack(id); break;
-      case 'open10': { const packs = G.open(id, 10); if (packs.length) { mat = { mode: 'batch', set: id, packs }; renderMat(); } break; }
-      case 'tear': b.classList.add('torn'); setTimeout(() => { mat.mode = 'cards'; renderMat(); }, matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 380); break;
-      case 'flip': flip(+b.dataset.i); break;
-      case 'flipall': mat.cards.forEach((_, i) => mat.up.add(i)); renderMat(); break;
+      case 'open10': { hold = true; const packs = G.open(id, 10); if (packs.length) { mat = { mode: 'batch', set: id, packs }; renderMat(); revealBatch(mat); } else release(); break; }
+      case 'tear': { const tok = mat; PTCG_FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); break; }
+      case 'advance': advance(); break;
+      case 'peek': if (!mat.busy) { mat.cur = +b.dataset.i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); } break;
+      case 'flipall': mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); break;
+      case 'mute': PTCG_FX.setMuted(!PTCG_FX.muted()); document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${PTCG_FX.muted() ? '关' : '开'}`; }); break;
       case 'sell': G.sell(b.dataset.key); break;
       case 'bulk': G.sellBulk(); break;
       case 'reset':
-        if (Date.now() - resetArmed < 3000) { G.reset(); mat = { mode: 'idle' }; renderMat(); b.textContent = '清空存档'; resetArmed = 0; }
+        if (Date.now() - resetArmed < 3000) { hold = false; G.reset(); mat = { mode: 'idle' }; renderMat(); b.textContent = '清空存档'; resetArmed = 0; }
         else { resetArmed = Date.now(); b.textContent = '再点一次确认'; setTimeout(() => { if (resetArmed) b.textContent = '清空存档'; }, 3000); }
         break;
     }
   });
   document.addEventListener('keydown', e => {
-    if (e.code !== 'Space' || e.target.closest('input, textarea') || mat.mode !== 'cards') return;
-    const next = mat.cards.findIndex((_, i) => !mat.up.has(i));
-    if (next >= 0) { e.preventDefault(); flip(next); }
+    if (e.code !== 'Space' || e.target.closest('input, textarea')) return;
+    PTCG_FX.unlock();
+    if (mat.mode === 'pack') { e.preventDefault(); document.querySelector('.pack')?.click(); }
+    else if (mat.mode === 'cards' && mat.up.size < mat.cards.length) { e.preventDefault(); advance(); }
   });
 
   function startPack(id) {
-    const [cards] = G.open(id, 1); if (!cards) return;
-    cards.forEach(c => { if (c.r !== 'E') new Image().src = imgUrl(c); }); // warm the cache before the flips
-    mat = { mode: 'pack', set: id, cards, up: new Set() };
+    hold = true;
+    const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
+    cards.forEach(c => { if (c.r !== 'E') { new Image().src = imgUrl(c); new Image().src = imgUrl(c, 'high'); } }); // warm the cache before the flips
+    mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0 };
     renderMat();
   }
 

@@ -22,6 +22,7 @@
 | `src/sim.js` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
 | `src/game.js` | 存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
 | `src/ui.js` | 渲染和交互，只读 state、只调 `PTCG_GAME` 的方法 |
+| `src/fx.js` | 开包台的音效（WebAudio 合成）、稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `style.css` | 全部样式与 token |
 | `index.html` | 外壳和脚本加载顺序 |
 | `scripts/` | 数据抓取、打包成单文件 pen 等工具 |
