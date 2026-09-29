@@ -69,7 +69,7 @@ export function renderLedger() {
         <dl><div><dt>开店欠款（分期，不计息）</dt><dd>${money(s.owe)} <small>/ ${money(d0)}</small></dd></div>
           <div><dt>借款（每周利滚利 ${pct(r)}）</dt><dd class=${s.loan > 0 ? 'lg-loan' : ''}>${money(s.loan)}</dd></div></dl>
         <span class="gh-bar" role="img" aria-label="开店欠款已还 ${pct(paid)}"><i style="--p:${paid}"></i></span>
-        ${s.loan > 0 ? html`<p class="lg-note">借款每周付完账顺手还：九姐收回三分之一（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}），只拿收银机里 ${money(G.loanFloat())} 以上的钱（${G.lvl('clerk') ? '店员补满货架的钱' : '进货钱'}加下周的分期），不够就少收，不算逾期。照这样约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
+        ${s.loan > 0 ? html`<p class="lg-note">借款每周付完账顺手还：九姐收回 1/${Math.round(1 / G.LOAN_PAY)}（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}），只拿收银机里 ${money(G.loanFloat())} 以上的钱（${G.lvl('clerk') ? '店员补满货架的钱' : '进货钱'}加下周的分期），不够就少收，不算逾期。照这样约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
       </div>
       <div class="lg-bill">
         ${o ? html`<p class="lg-k lg-late">第 ${o.week} 周的账逾期</p><p class="lg-big">${money(o.amount)}</p>
