@@ -666,6 +666,11 @@ button:disabled { cursor: not-allowed; }
 .dx-bar { position: relative; height: 6px; background: var(--line); border-radius: 1px; margin: 6px 0 4px; }
 .dx-bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); }
 .dx-bar u { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--bg); }
+.dx-hand { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.dx-hand .dx-h { font-size: var(--fs-cap); color: var(--muted); }
+.dx-hand .dx-bar { height: 3px; }
+.dx-hand .dx-bar i { background: var(--muted); }
+.dx-sum { margin: 16px 0 0; }
 .dx-total { float: right; font-size: var(--fs-body); font-weight: 500; color: var(--muted); }
 
 /* price-basis footer + luck notes */

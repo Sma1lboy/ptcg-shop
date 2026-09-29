@@ -121,6 +121,15 @@ export const SCENES: Record<string, Scene[]> = {
     L('jiu', '名气是你的，账也是你的。开张吧，老板。'),
     L('adou', '（小声）她对上一个老板说的是「开张吧」。后面没有「老板」。'),
   ] }],
+  // 亲手开齐 (game.ts emits it once per set): every card of a set pulled from packs, none bought
+  hand: [{ bg: 'shop', lines: [
+    L('adou', c => `${c.set ?? '这一套'}……全是你自己开出来的？一张没买？`),
+    L('you', '一张没买。'),
+    L('adou', '（翻着卡册，手有点抖）我认识的人里，这么开的都破产了。'),
+    L('jiu', '他们是借钱开的。'),
+    L('jiu', '同行会传的：这家店的卡册，是一包一包拆出来的。'),
+    L('jiu', c => `这名气现在当不了饭吃。等你开下一家店，${c.fame ? `这 ${c.fame} 点` : '它'}跟着你走。`),
+  ] }],
   // milestones (no debt needed)
   bigpull: [{ bg: 'shop', lines: [
     L('adou', '等等。'),
