@@ -397,19 +397,21 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   // The clerk (upgrade): once a round, tops up every shelf whose set has auto-restock on (buying straight onto it; half full at
-  // level 1, full at level 2), and at level 2 sells the bulk to peers.
+  // level 1, full at level 2); at level 2 also sells the bulk to peers (every tick, like 带徒弟's listing).
   function clerkWork(acc: { packs: number; spent: number; bulk: number; bulkV: number; listed: number }, t: number) {
-    const L = lvl('clerk'); if (!L || t < state.clerkT) return;
-    state.clerkT = t + CLERK_ROUND * 1000;
+    const L = lvl('clerk'); if (!L) return;
     if (skill('apprentice')) { // 带徒弟: priciest hits first into the free case slots
       const hits = Object.entries(state.singles).filter(([, c]) => S.HITS.includes(c.kind)).sort((a, b) => b[1].price - a[1].price);
       for (const [k] of hits) { while (toCase(k, SKILLS.apprentice.step)) acc.listed++; if (state.shown.length >= slots()) break; }
     }
-    for (const sh of shelves()) {
-      const id = sh.id, cap = depth(), goal = L >= 2 ? cap : Math.ceil(cap / 2);
-      if (!id || !state.auto[id] || sh.qty >= goal) continue;
-      const n = Math.min(goal - sh.qty, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n, sh) : 0;
-      if (cost) { acc.packs += n; acc.spent += cost; }
+    if (t >= state.clerkT) {
+      state.clerkT = t + CLERK_ROUND * 1000;
+      for (const sh of shelves()) {
+        const id = sh.id, cap = depth(), goal = L >= 2 ? cap : Math.ceil(cap / 2);
+        if (!id || !state.auto[id] || sh.qty >= goal) continue;
+        const n = Math.min(goal - sh.qty, Math.floor(state.cash / wholesale(id))), cost = n > 0 ? stockUp(id, n, sh) : 0;
+        if (cost) { acc.packs += n; acc.spent += cost; }
+      }
     }
     if (L >= 2) { const b = dumpBulk(); acc.bulk += b.n; acc.bulkV += b.v; }
   }

@@ -224,6 +224,8 @@ console.log('ok luck percentile');
   G.shelves()[0].qty = 0; T += 60e3; G.tick(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
   T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
   G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills it');
+  st().singles.z = { set: 'sv08', n: '1', kind: 'C', r: 'C', name: 'bulk', price: 0.1, count: 5 }; T += 1e3; G.tick();
+  assert.equal(st().singles.z, undefined, 'rounds are for restocking only: level 2 still sells the bulk at once');
 
   // 8. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
   {
