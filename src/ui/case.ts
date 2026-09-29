@@ -1,8 +1,8 @@
-// 展示柜 · 镇店之宝: the case as furniture, the second wall of the shop next to the shelf wall (shelf.ts). One glass cube per slot
-// (the modular glass cubes card shops stack behind the counter): trim frame, a lamp strip under the top, card-back navy felt, the
-// card standing on an acrylic stand, and the player's yellow ask clipped to the cube's lip between its − / ＋. An empty slot is the
-// empty stand; the next 展示柜 upgrade is a dashed cube at the end, like the wall's unbuilt bay. The trophy has its own cube on a
-// riser under a brighter lamp. Above: the two single-card prices (单卡标价 for the case and the binder, 收卡价 for counter sellers,
+// 展示柜 · 镇店之宝: the case as furniture, the second wall of the shop next to the shelf wall (shelf.ts), read as a BW PC box: one
+// cell per slot (frame rim, card-back navy under the faint diagonal stripe), the card standing on an acrylic stand, and the
+// player's yellow ask clipped to the cell's lip between its − / ＋. An empty slot is the empty stand; the next 展示柜 upgrade is a
+// dashed cell at the end, like the wall's unbuilt bay. The trophy has its own cell on a riser, the lighter navy. Above: the two
+// single-card prices (单卡标价 for the case and the binder, 收卡价 for counter sellers,
 // GAMEPLAY §14) and 补满柜位.
 import { html, render, nothing } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
@@ -23,7 +23,7 @@ const stand = html`<i class="v-stand" aria-hidden="true"></i>`;
 // 卖出落在柜里: each card keeps its cube. state.shown closes up when a card leaves, and 带徒弟 refills the gap in the same tick,
 // so the cubes are placed here by the card objects themselves (they live on in memory; after a reload the first render is the
 // baseline): a card that leaves frees its cube, a new card takes the first free cube. A card that left while a customer bought
-// that card (state.recent since the last render) was sold: for LIVE its picture lifts out of the cube under a lamp flare and a
+// that card (state.recent since the last render) was sold: for LIVE its picture lifts out of the cell under a flash and a
 // till chip says 「售出 +$1,503」, over whatever stands there now (empty, or the next card already). Unlisting (撤下, 换上大卡) is
 // silent. renderAll skips the case during a reveal, so only sales from the last LIVE get the stamp, not three minutes of 连开.
 const LIVE = 2400;
