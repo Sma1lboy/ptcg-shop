@@ -4,7 +4,7 @@ import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $ } from './common.ts';
 
-const PAGES = ['open', 'shelf', 'luck', 'grow'];
+const PAGES = ['open', 'shelf', 'luck', 'grow', 'ach'];
 const current = () => (PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'open');
 
 // Page ids are page-<name>, not <name>: #shelf and #luck are also panel ids, and a same-named target would make the browser scroll to it.

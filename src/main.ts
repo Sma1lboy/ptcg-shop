@@ -19,6 +19,7 @@ import { bindLayout, renderTabs } from './ui/layout.ts';
 import { renderRail } from './ui/rail.ts';
 import { bindGuide } from './ui/guide.ts';
 import { initGoals } from './ui/goals.ts';
+import { initAch } from './ui/ach.ts';
 
 // While a pack is being revealed only the shelf updates; the rest would show the pull early. The mat fires ptcg:release when done.
 function renderAll() { if (hold) { renderShelf(); return; } renderStats(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderSkills(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
@@ -33,3 +34,4 @@ renderBasis(); bindLayout();
 bindGuide();
 
 initGoals();
+initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above
