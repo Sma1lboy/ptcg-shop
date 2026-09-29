@@ -17,7 +17,7 @@ function said(v: Visit) {
     case 'opener:sold': return `买走 ${v.n} 包${set(v.set)}${v.miss ? `（想要的${set(v.miss)}没货）` : ''}`;
     case 'opener:pricey': return v.why === 'budget' ? `想拆${set(v.set)}，身上的钱不够一包 ${ask}` : dear(set(v.set));
     case 'opener:none': return `想拆${set(v.set)}，货架上没有`;
-    case 'flipper:sold': return v.card ? `收走 ${v.card}（标价是市价的 ${pc(v.pct!)}）` : `扫走 ${v.n} 包${set(v.set)}（标价是市价的 ${pc(v.pct!)}）`;
+    case 'flipper:sold': return v.card ? `收走 ${v.card}（标价是市价的 ${pc(v.pct!)}）` : `整架扫走 ${v.n} 包${set(v.set)}：标价是市价的 ${pc(v.pct!)}，他肯出到 ${pc(v.max!)}`;
     case 'flipper:pricey': return v.why === 'cool' ? `${set(v.set)}刚收过一批还没出手，这次不收` : `只收低于市价 ${pc(v.max!)} 的货，空手走了`;
     case 'flipper:none': return '店里没货可扫';
     case 'seeker:none': return `想找一张${v.set ? `${set(v.set)}的` : ''} ${G.SEEK[v.tier!].join('/')}，柜里没有`;
