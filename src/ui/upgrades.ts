@@ -25,12 +25,15 @@ export function fxOf(k: string, lv: number, words: (lv: number) => string): [str
   return k === 'crowd' || k === 'expand' ? [perMin(G.rate()), perMin(G.peek(k, G.rate))] : [words(lv), words(lv + 1)];
 }
 
-// When a cash buy would leave less than the bill 九姐 collects next: the bill is paid from the till, so say it before the click.
+// When a cash buy would leave less than the bill 九姐 collects next (paid from the till), or less than the clerk needs for a round
+// (he buys with what is in the till: a buy just before his round leaves the shelves bare until the next one), say it before the click.
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 export function billNote(cost: number) {
-  const b = G.nextBill(), cash = G.state.cash;
-  if (!b || cash < cost || cash - cost >= b.amount) return '';
-  return html`<p class="gt-bill">买完剩 ${moneyOf(cash - cost)}，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b.amount)}</p>`;
+  const b = G.nextBill(), cash = G.state.cash, left = cash - cost, clerk = G.clerkBudget();
+  const bill = b && left < b.amount, stock = left < clerk;
+  if (cash < cost || (!bill && !stock)) return '';
+  return html`<p class="gt-bill">买完剩 ${moneyOf(left)}${bill ? html`，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b!.amount)}` : ''}${stock
+    ? html`${bill ? '；' : '，'}店员一轮补满货架要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}</p>`;
 }
 
 // One upgrade, skill or 名气 perk pocket. fx = what the current / next level does. have / price = what pays for it (cash by default).
