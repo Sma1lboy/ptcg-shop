@@ -659,7 +659,7 @@ function placeTags(run) {
   const left = run.fan?.tight; // an overlapping fan shows only each card's left side: the price goes under that corner
   run.cards.forEach((c, k) => {
     const corner = left && run.look?.card !== c, el = run.tagEls[k], p = c.localToWorld(new V3(corner ? -CW / 2 + .2 : 0, -CH / 2 - .15, 0)).project(camera);
-    const dy = corner && k % 2 ? 20 : 0; // and every other one a row lower, so neighbours don't cover each other
+    const dy = corner ? k % 3 * 22 : 0; // and stepped over three rows (a tag is mark + price, wider than the strip of card it sits under), so neighbours don't cover each other
     el.style.transform = `translate(${((p.x + 1) / 2 * w).toFixed(1)}px, ${((1 - p.y) / 2 * h + dy).toFixed(1)}px)${corner ? '' : ' translate(-50%, 0)'}`;
     el.style.opacity = !run.look || run.look.card === c ? 1 : 0; // a lifted card keeps its price, the rest step back
   });
