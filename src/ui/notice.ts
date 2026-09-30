@@ -173,12 +173,15 @@ function showMemo() {
     return;
   }
   if (m.kind === 'intake') { // money going out that nobody pressed for: 收卡 is the shop's second trade, and where the case's cards come from
-    render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的 ${m.n} 张闪卡按你的收卡价卖给了你，<b class="loss">−${money(m.paid)}</b>。</p>
+    // counted as of now, not when the note was queued: the readout under the cash had already shown a bigger 收卡 −$ than it said
+    const b = G.state.intake ?? { n: m.n, cost: m.paid };
+    render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的闪卡按你的收卡价卖给了你：到现在收了 ${b.n} 张，<b class="loss">−${money(b.cost)}</b>。</p>
       <p class="mm-say">现金少了，卡进了单卡库存；挂进「货柜」的展示柜，来找卡的顾客会按展示柜的标价买走。收卡价在货柜「顾客」里调，调低就少收。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'done') {
-    render(keyed('done', html`<div class="mm-box"><h2>引导走完了</h2><p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
+    // the guide ends on 欧气 (its last step): say what that page is, it had no word of its own
+    render(keyed('done', html`<div class="mm-box"><h2>引导走完了</h2>${location.hash === '#luck' ? html`<p>这一页是欧气：你开出的包值多少，在几千个开同样包的模拟玩家里排第几，下面的卡册按系列收着你开到的卡。</p>` : ''}<p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
       <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说。每周九姐按顶栏的倒计时来收账：到点现金够就自动付，不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款。</p>${ok}</div>`), el);
     return;
   }

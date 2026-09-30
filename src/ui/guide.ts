@@ -24,9 +24,10 @@ const shown = (el: Element | null) => (el && el.getClientRects().length ? el : n
 // first visible match, in the order given (a comma selector would return document order)
 const pick = (...sels: string[]) => { for (const q of sels) for (const el of document.querySelectorAll(q)) if (shown(el)) return el; return null; };
 const firstShelved = () => G.shelves().find(r => r.id)?.id;
-// the sets a new shop can sell (two at the start): 进货 and 摆上货架 walk each of them to a full shelf — a customer whose set isn't on
-// the shelf leaves half the time, so one stocked set of two lost about a third of the walk-ins (GAMEPLAY.md §8 开张期)
-const sellable = () => SETS.filter(x => G.unlocked(x.id));
+// the sets a new shop opens with (two, no revenue needed): 进货 and 摆上货架 walk each of them to a full shelf — a customer whose set
+// isn't on the shelf leaves half the time, so one stocked set of two lost about a third of the walk-ins (GAMEPLAY.md §8 开张期). One
+// unlocked mid-guide is notice.ts's 「新到」 box after the guide, not the guide starting over at 1/6 (the numbers went 1/6 → 5/6)
+const sellable = () => SETS.filter(x => G.unlocked(x.id) && !G.unlockAt(x.id));
 const racked = (id: string) => G.shelves().some(r => r.id === id);
 const toStock = () => sellable().find(x => !(G.state.stock[x.id] || 0) && !racked(x.id) && G.state.cash >= G.wholesale(x.id) * 10);
 const toRack = () => sellable().find(x => (G.state.stock[x.id] || 0) > 1 && !racked(x.id) && G.shelves().some(r => !r.id));
