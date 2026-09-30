@@ -846,6 +846,8 @@ button:disabled { cursor: not-allowed; }
 .coach[data-strip="dock"] .co-btns { grid-column: 2; grid-row: 1 / span 3; margin: 0; }
 .coach[data-strip="dock"]::before { display: none; }
 :root:has(#coach[data-strip="dock"]:popover-open) body { padding-bottom: 160px; } /* the page's end scrolls clear of the box */
+/* a label printing bottom right (the slot hangs there when no receipt is up, .pops): the box moves left of it instead of under it */
+:root:has(#pops > :not([hidden])):not(:has(#notice:not([hidden]))) .coach[data-strip="dock"]:popover-open { left: 16px; translate: none; width: min(760px, calc(100vw - 372px)); }
 .coach .co-k { margin: 0; font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--muted); }
 .coach h3 { margin: 2px 0 4px; font: 400 var(--fs-lg)/1.3 var(--font-pixel); } /* 24px: whole device pixels at both 2× and 3× (18px is 4.5 per font pixel on a 3× phone and breaks the strokes) */
 .coach h3 small { font: 400 var(--fs-cap)/1.4 var(--font-pixel); color: var(--muted); }

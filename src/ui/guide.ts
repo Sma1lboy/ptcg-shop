@@ -151,6 +151,9 @@ export function renderGuide() {
         : step.h === '账单' && here ? html`<button type="button" class="ghost" data-coach="bill">知道了</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
   if (i !== last && here) seek = performance.now() + 1500;
+  // a key in the box pressed (先按这个价卖, 知道了) and the next step drawn over it: lit reuses the box's first button, so the focus
+  // was left on 「跳过引导」 and the next Enter skipped the guide. A new step starts with the focus on the page, not in the box
+  if (i !== last && pop.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
   if (here) last = i; // a step first shown as its page's tab still gets scrolled to on arriving there
   place();
   follow.disconnect(); if (anchor.closest('#mat')) follow.observe(anchor, { attributes: true, attributeFilter: ['style'] });
