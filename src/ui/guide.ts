@@ -61,7 +61,7 @@ const STEPS: Step[] = [
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off. Not a
   // numbered step (it comes and goes with the shelves); the key and the text are one: the sold-out set's own row — 上架 N 包 when
   // the back room holds more than the one pack kept to open, else its 进一架
-  { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
+  { page: 'shelf', h: '补货', done: () => !G.shelves().some(r => r.id && !r.qty), // every labelled shelf, not just one: the rest waited for a note after the guide
     at: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
       return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
     p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;

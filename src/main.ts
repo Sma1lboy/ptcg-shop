@@ -25,8 +25,9 @@ import { initSound } from './ui/sound.ts';
 import { initMenu } from './ui/menu.ts';
 import { initWalk } from './ui/walk.ts';
 
-// While a pack is being revealed only the shelf and the rail update (both with their open buttons off); the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
+// While a pack is being revealed only the top bar's till, the shelf and the rail update (the rail's and shelf's open buttons off; the
+// singles' worth in the top bar stays at its pre-pack value); the rest would show the pull early. The mat fires ptcg:release when done.
+function renderAll() { if (hold) { renderStats(true); renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);

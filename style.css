@@ -1510,6 +1510,11 @@ button:disabled { cursor: not-allowed; }
   .pops { left: 16px; right: 16px; width: auto; max-width: 400px; margin-inline: auto; }
   .notice:not(.unrolled) .paper { display: none; }
   .notice:not(.unrolled) .stub { display: flex; }
+  /* 店里的话 on a phone: the title and the key say it (「X卖空了」+「进一架 N 并上架」); the why line would push the box to a third of
+     the screen over the page's own heading */
+  .memo .mm-why { display: none; }
+  .memo .mm-box { padding-bottom: 10px; }
+  .memo h2 { margin-bottom: 8px; }
   /* while the receipt hangs the slot is part of the page: it scrolls away with it, and the page makes room for it (--notice-h,
      notice.ts: the stub, or the whole receipt once unrolled) so the 货架 / 展示柜 tabs stay pressable. Labels alone hang fixed, to be
      seen wherever the player has scrolled; they are brief and overlay */
