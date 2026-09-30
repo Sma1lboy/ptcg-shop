@@ -430,6 +430,7 @@ function frameMat() {
   if (r.height && r.top < bar) scrollBy({ top: r.top - bar - 8, behavior: reduced() ? 'auto' : 'smooth' });
 }
 export function startPack(id: string) {
+  if (hold) return; // one pack in hand at a time: a second open (a key not yet disabled, e.g. the binder's) failing on an empty back room would drop hold mid-reveal and let the story in
   run = null; hold = true;
   const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
   warm(cards);
@@ -453,6 +454,7 @@ function handNew(packs: Pull[][], have: Set<string>) {
 }
 // keep: the next round of a 连开 run; any other open ends the run.
 export function openBatch(id: string, keep = false) {
+  if (hold && !keep) return; // as startPack; a 连开 run's next round (keep) opens while the run still holds the table
   if (!keep) run = null;
   hold = true; const have = handHave(id), packs = G.open(id, 10); if (!packs.length) { run = null; release(); return; }
   const fresh = handNew(packs, have), picks = pickOrder(packs, fresh);

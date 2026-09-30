@@ -77,7 +77,7 @@ export function initSlip() {
 // every sold-out set at once when the cash covers them all), a set just unlocked while a shelf stands empty (the same key puts it
 // up), and the first time the spare cash covers a level on 成长. It waits out a pack reveal and the story; while the guide runs its
 // own steps (进货, 补货) speak for these. ----------
-type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' } | { kind: 'new'; id: string } | { kind: 'done' } | { kind: 'grow' };
+type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' } | { kind: 'new'; id: string } | { kind: 'done' } | { kind: 'grow' } | { kind: 'hand' };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
 // on a shelf, while one stands empty. Sold out comes first, then new, then 成长; grew: the 成长 note was said (or 成长 visited) — once
 let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = false;
@@ -98,9 +98,13 @@ function watchShop() {
   const free = G.shelves().some(r => !r.id);
   for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
   if (memo?.kind !== 'first' && memo?.kind !== 'done') {
+    // a pack left mid-reveal while the player is on another page: the story, the labels, the new cards and an overdue bill's grace all
+    // wait for it (mat.ts hold), so the box says so — after a sold-out shelf, whose key works from anywhere, guide or not
+    const away = hold && document.documentElement.dataset.page !== 'open';
     // 成长: nothing bought there yet and the badge has something yellow (levels the 闲钱 covers)
     const nu = [...fresh][0], grow = !grew && !s.bought?.length && growCount() > 0 && location.hash !== '#grow';
-    memo = guiding() ? null : out.size ? { kind: 'out' } : nu ? { kind: 'new', id: nu } : grow ? { kind: 'grow' } : null;
+    memo = away ? (out.size ? { kind: 'out' } : { kind: 'hand' })
+      : guiding() ? null : out.size ? { kind: 'out' } : nu ? { kind: 'new', id: nu } : grow ? { kind: 'grow' } : null;
   }
   showMemo();
 }
@@ -115,7 +119,7 @@ function fix(id: string) {
 }
 function showMemo() {
   const el = $('memo'), was = el.hidden;
-  el.hidden = !memo || hold || storyOpen();
+  el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open') || storyOpen(); // yields to the reveal only where it plays
   if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
   if (el.hidden) return;
   const m = memo!;
@@ -129,8 +133,14 @@ function showMemo() {
       <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说；每周九姐按顶栏的倒计时来收账。</p></div>`), el);
     return;
   }
+  if (m.kind === 'hand') {
+    render(keyed('hand', html`<div class="mm-box"><h2>手里这包还没翻完</h2><p class="mm-why">开包台上那包翻完之前，剧情、成就和新进卡册的卡都等着它。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${() => go('open')}>回开包台翻完</button></div></div>`), el);
+    return;
+  }
   if (m.kind === 'grow') {
-    const toGrow = () => { grew = true; go('grow'); requestAnimationFrame(() => $('grow-top').scrollIntoView({ block: 'start' })); watchShop(); };
+    // 成长's 下一步 just under the sticky top bar (scrollIntoView put it under the bar, the key cut off)
+    const toGrow = () => { grew = true; go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
     render(keyed('grow', html`<div class="mm-box"><h2>钱够升级了</h2><p>闲钱 <b>${money(G.spare())}</b>（现金留出下一张账单以后的钱）够买「成长」页上 ${growCount()} 项。「下一步」那一格就是眼下最该升的一项。</p>
       <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>去「成长」看看</button><button type="button" class="mm-x" @click=${() => { grew = true; watchShop(); }}>先不管</button></div></div>`), el);
     return;
@@ -152,7 +162,7 @@ function showMemo() {
 export function initMemo() {
   for (const id of racked()) { stocked[id] = G.shelfQty(id) > 0; if (!stocked[id]) out.add(id); } // a page opened on empty shelves: said like a sell-out just now
   G.on(watchShop); watchShop();
-  document.addEventListener('ptcg:release', () => setTimeout(showMemo, 600));
+  document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
   document.addEventListener('ptcg:guidedone', () => { brief({ kind: 'done' }); showMemo(); });
   addEventListener('hashchange', () => { if (location.hash === '#grow') grew = true; watchShop(); }); // 成长 found on its own: the note has nothing to add
