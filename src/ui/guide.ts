@@ -32,6 +32,9 @@ const toStock = () => sellable().find(x => !(G.state.stock[x.id] || 0) && !racke
 const toRack = () => sellable().find(x => (G.state.stock[x.id] || 0) > 1 && !racked(x.id) && G.shelves().some(r => !r.id));
 const inRow = (id: string, q: string) => pick(`#shelf .set[data-spot="set:${id}"] ${q}`);
 const mins = (s: number) => Math.max(1, Math.floor(s / 60)); // 17:11 on the chip is 「约 17 分钟」, not 18
+// 账单 is read, not pressed: after BILL_READ on screen it gives way to 补货 when a shelf is empty (the guide's clock, not a game setting)
+const BILL_READ = 8000;
+let billAt = 0;
 // an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid, or 30 packs opened once
 // the first bill has landed (a pack-happy newcomer opens 30 in three minutes and still needs 账单), or a second shop / a
 // bankruptcy (billsPaid counts this shop only) means the loop is known, whatever the flags say
@@ -54,12 +57,14 @@ const STEPS: Step[] = [
     p: el => { const b = `「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '摆上空货架'}」`; return sum(G.state.stock) ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。` : `仓库空了：先进货，再点${b}。只有货架上的包才卖得出去。`; } },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
-    p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，开张 10 分钟后还会碰上倒爷按这个价扫货（第一张账单前他最多拿走半个货架）。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
+    // the 倒爷 line quotes their own ceiling (game.ts TYPES.flipper.tol): 「市价附近」 read like the default 95%, and at 95% they walked out
+    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚。开张 10 分钟后还有倒爷：他只收市价 ${flip}% 上下或更低的包，标到那么低会被他成批扫走（第一张账单前最多拿走半个货架），默认价他多半嫌贵。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
-  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
+  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill()
+      || (billAt > 0 && Date.now() - billAt > BILL_READ && G.shelves().some(r => r.id && !r.qty)), // read for 8 s and a shelf is empty: 补货 comes first (a shelf stood empty ~50 s behind 知道了)
     at: () => shown(document.getElementById('due')),
     p: () => { const b = G.nextBill(); if (!b) return null;
       return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
@@ -135,12 +140,14 @@ function place() {
     }
     pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
   }
-  // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
+  // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable. The bill chip on a phone:
+  // above the bottom tabs, not under the chip (it lay over the first row of the cards just turned)
+  const bill = phone() && anchor.matches('#due');
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
-  const below = a.bottom + gap + h <= vh - 8 || top - gap - h < 8; // phones: the tabs sit at the bottom, so tab steps open upward
+  const below = !bill && (a.bottom + gap + h <= vh - 8 || top - gap - h < 8); // phones: the tabs sit at the bottom, so tab steps open upward
   const x = clamp(a.left + a.width / 2 - w / 2, 8, vw - w - 8);
-  pop.style.left = `${x}px`; pop.style.top = `${below ? a.bottom + gap : top - gap - h}px`;
-  pop.dataset.side = below ? 'below' : 'above';
+  pop.style.left = `${x}px`; pop.style.top = `${bill ? vh - h - 8 : below ? a.bottom + gap : top - gap - h}px`;
+  pop.dataset.side = bill ? 'free' : below ? 'below' : 'above'; // free: no arrow (the chip is at the top, the box at the bottom; the dashed ring shows which)
   pop.style.setProperty('--ax', `${clamp(a.left + a.width / 2 - x, 16, w - 16)}px`);
 }
 
@@ -160,6 +167,7 @@ export function renderGuide() {
   anchor = here ?? pick(`.subnav a[href="#${step.page}"]`, `.nav a[href="#${step.page}"]`);
   if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
+  if (step.h === '账单' && !billAt) billAt = Date.now();
   const n = replay >= 0, end = i === STEPS.length - 1;
   render(html`<p class="co-k">${step.h === '补货' ? '新手 · 提醒' : `新手 ${NUMBERED.indexOf(step) + 1}/${NUMBERED.length}`}</p>
     <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到${page() === 'case' && step.page === 'shelf' ? '「货架」' : `「${TAB[step.page]}」页`}</small>`}</h3>

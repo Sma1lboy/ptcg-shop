@@ -80,13 +80,16 @@ export function initSlip() {
 // A box stays up while what it says still holds, and its key keeps the count and price it was printed with while the cash covers them:
 // a box swapped for another between reading and clicking (新到 → another set's 进一架), or a key that read 40 and bought 46, did
 // something else than what the player read. Only a pack left mid-reveal on another page cuts in (after a sold-out shelf). ----------
-type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'done' };
+type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'intake'; n: number; paid: number } | { kind: 'done' };
 type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
-// on a shelf, while one stands empty; notes: 第一笔生意 / 引导走完了, each up until its 知道了 (a 9 s note went by unseen); grew: the
-// 下一步 (k + level) already said, or seen on 成长
-let memo: Memo | null = null, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
+// on a shelf, while one stands empty; notes: 第一笔生意 / 第一次收卡 / 引导走完了, each up until its 知道了 (a 9 s note went by unseen);
+// grew: the 下一步 (k + level) already said, or seen on 成长
+let memo: Memo | null = null, soldBefore = G.state.cust.sold, tookBefore = G.state.intake?.n ?? 0, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
 const notes: Note[] = [];
+// who speaks for a sold-out shelf: the guide's 补货 step while the guide runs — except during a reveal, when the guide's bubble is put
+// away and the shelf would stand empty unsaid until the last card (~a minute of walk-outs)
+const shelfMine = () => hold || !guiding();
 // the 下一步 the box names, once per item: when the 闲钱 covers it, or covers something else on 成长 while it waits (cash piled up
 // with 「3 项买得起」 on the tab and nothing said, because the 下一步 itself was still out of reach)
 const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || growCount() > 0) ? `${g.k}:${g.lv}` : ''; };
@@ -108,16 +111,16 @@ function outIds() {
 }
 function holds(m: Memo) {
   switch (m.kind) {
-    case 'first': case 'done': return notes[0] === m;
+    case 'first': case 'intake': case 'done': return notes[0] === m;
     case 'hand': return away();
-    case 'out': return (away() || !guiding()) && m.ids.every(i => out.has(i));
+    case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i));
     case 'new': return !guiding() && !away() && fresh.has(m.id);
     case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
   }
 }
 function pick(): Memo | null {
   if (away()) return out.size ? { kind: 'out', ids: outIds() } : { kind: 'hand' };
-  if (!guiding() && out.size) return { kind: 'out', ids: outIds() };
+  if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
   if (notes.length) return notes[0];
   if (guiding()) return null;
   const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey();
@@ -130,6 +133,9 @@ function watchShop() {
     notes.push({ kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' });
   }
   soldBefore = s.cust.sold;
+  // the first time a pack buyer sells the hits they tore open back to the shop (收卡): cash goes down with nobody pressing anything
+  if (!tookBefore && s.intake?.n) notes.push({ kind: 'intake', n: s.intake.n, paid: s.intake.cost });
+  tookBefore = s.intake?.n ?? 0;
   const on = racked();
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
@@ -138,14 +144,16 @@ function watchShop() {
   for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
   // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
-  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'hand' : (memo.kind === 'first' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && !guiding());
+  const cut = memo && (away() ? memo.kind !== 'out' && (memo.kind !== 'hand' || out.size > 0) : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine());
   memo = memo && holds(memo) && !cut ? memo : pick();
   showMemo();
 }
 function close() { notes.shift(); memo = null; watchShop(); }
 function showMemo() {
   const el = $('memo'), was = el.hidden;
-  el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open') || storyOpen(); // yields to the reveal only where it plays
+  // yields to a reveal where it plays, except a sold-out shelf: a corner box off the cards (desktop: over the rail's empty lower half;
+  // phone: over the display case under the table's head), never over the pack or the cards being turned
+  el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open' && memo.kind !== 'out') || storyOpen();
   if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
   if (el.hidden) return;
   // the box's identity: which note, and for a shelf note how each set gets fixed (上架 / 进一架 / neither) and whether that leaves the
@@ -160,6 +168,11 @@ function showMemo() {
   if (m.kind === 'first') {
     render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
       <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>${ok}</div>`), el);
+    return;
+  }
+  if (m.kind === 'intake') { // money going out that nobody pressed for: 收卡 is the shop's second trade, and where the case's cards come from
+    render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的 ${m.n} 张闪卡按你的收卡价卖给了你，<b class="loss">−${money(m.paid)}</b>。</p>
+      <p class="mm-say">现金少了，卡进了单卡库存；挂进「货柜」的展示柜，来找卡的顾客会按展示柜的标价买走。收卡价在货柜「顾客」里调，调低就少收。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'done') {

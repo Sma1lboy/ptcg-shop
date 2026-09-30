@@ -65,12 +65,16 @@ function packSummary(cards: Pull[], set: { id: string }) {
   const v = S.packValue(cards), cost = G.wholesale(set.id), d = v - cost;
   const best = cards.reduce((a, b) => (b.price > a.price ? b : a));
   const stock = G.state.stock[set.id] || 0;
+  // this set's back room is empty but another set's isn't (the guide keeps one pack of each): that one is the next pack, right here
+  // (a phone player had only 分享 / 进 1 包 under the pack, the rail's 开 1 包 below the fold)
+  const [otherId, otherN] = stock ? ['', 0] : Object.entries(G.state.stock).find(([id, n]) => n > 0 && id !== set.id && G.unlocked(id)) ?? ['', 0];
   return `<div class="summary">
       <p>这包开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。最值钱：${esc(best.name)}。</p>
       <p class="rank">${rankText(set.id, v).text}。</p>
       ${bookLine(set.id)}
       <div class="btns">
-        ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>` : ''}
+        ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>`
+          : otherId ? `<button type="button" class="primary" data-act="open1" data-id="${otherId}">开一包${esc(G.setById(otherId).name)}（剩 ${otherN}）</button>` : ''}
         ${shareBtn()}
         ${G.state.cash >= cost ? `<button type="button" data-act="buyopen" data-id="${set.id}">进 1 包马上开</button>` : ''}
       </div></div>`;

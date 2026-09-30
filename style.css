@@ -649,7 +649,10 @@ button:disabled { cursor: not-allowed; }
 :is(.notice, .slip)[hidden] { display: none; }
 /* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 350 = the
    tray's 300 width + 24 inset + the slot's 10px overhang + a gap. Phones reserve the stub's height above the view instead (below) */
-@media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
+@media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); }
+  /* 店里的话 hangs in the same corner: on 货柜 / 欧气 / 成长 it lay over each row's right end (标价 −/+, 每包, 开 1 包), so the page steps
+     aside for it too. Not on 开包: the table would resize mid-reveal, and the box sits over the rail's empty lower half there */
+  :root:not([data-page="open"]):has(#memo:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
 :is(.notice, .slip) .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
@@ -671,14 +674,14 @@ button:disabled { cursor: not-allowed; }
 /* 店里的话 (notice.ts memo): a BW message box out of the slot — the text box's white face in both themes, the double frame, a dark
    pixel title bar; the one key that fixes it is the box's yellow key */
 .memo[hidden] { display: none; }
-.memo .mm-box { --panel: var(--paper); --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --frame: #3A4150; --frame-in: #C3CAD6; --btn-face: #F4F6F9; --btn-ink: #262B33;
+.memo .mm-box { --panel: var(--paper); --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --loss: var(--paper-loss); --frame: #3A4150; --frame-in: #C3CAD6; --btn-face: #F4F6F9; --btn-ink: #262B33;
   margin: 0 0 12px; padding: 0 14px 12px; color: var(--ink); border: 3px solid var(--frame); border-radius: var(--r-frame); background: var(--paper);
   box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--frame-in), 0 6px 18px rgba(0, 0, 0, .25); animation: print .6s .15s steps(12, jump-end) backwards; }
 .memo h2 { margin: 0 -14px 10px; padding: 7px 14px; border-radius: calc(var(--r-frame) - 3px) calc(var(--r-frame) - 3px) 0 0; background: var(--hud); color: var(--hud-ink);
   font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
 .memo p { margin: 0 0 8px; font-size: var(--fs-body); line-height: 1.55; text-wrap: pretty; }
 .memo .mm-say { color: var(--muted); font-size: var(--fs-cap); }
-.memo .gain { color: var(--gain); }
+.memo .gain { color: var(--gain); } .memo .loss { color: var(--loss); }
 .memo .mm-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .memo .mm-btns .primary { flex: 1 1 auto; }
 .memo .mm-go { color: var(--ink); font-weight: 600; }
@@ -839,6 +842,7 @@ button:disabled { cursor: not-allowed; }
 .coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 16px); width: 16px; height: 9px; background: var(--frame); }
 .coach[data-side="below"]::before { top: -17px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .coach[data-side="above"]::before { bottom: -17px; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+.coach[data-side="free"]::before { display: none; } /* the phone's bill step: the box sits above the tabs, far from the chip it's about */
 .coach:is([data-side="right"], [data-side="left"]) { width: 400px; } /* beside a mat button: wider and shorter, so it stays within the summary's height, clear of the price tags above */
 .coach:is([data-side="right"], [data-side="left"]) :is(.co-k, h3) { display: inline; margin-right: 8px; } /* 新手 5/5 and the heading on one line */
 .coach:is([data-side="right"], [data-side="left"])::before { left: auto; top: calc(var(--ay, 50%) - 16px); width: 9px; height: 16px; }
@@ -1507,7 +1511,8 @@ button:disabled { cursor: not-allowed; }
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
   /* phones: the slot spans the screen under the top bar. The receipt shows only its stub — one line (关店 N 小时 · the net);
      tapping it prints the rest */
-  .pops { left: 16px; right: 16px; width: auto; max-width: 400px; margin-inline: auto; }
+  /* 28px lower than the bar's edge: the +$ tag under the cash (.delta, ~22px) stays in sight while a box hangs (it was covered) */
+  .pops { top: calc(var(--top-h) + 28px); left: 16px; right: 16px; width: auto; max-width: 400px; margin-inline: auto; }
   .notice:not(.unrolled) .paper { display: none; }
   .notice:not(.unrolled) .stub { display: flex; }
   /* 店里的话 on a phone: the title and the key say it (「X卖空了」+「进一架 N 并上架」); the why line would push the box to a third of
