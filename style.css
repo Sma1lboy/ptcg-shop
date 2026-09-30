@@ -1085,7 +1085,7 @@ button:disabled { cursor: not-allowed; }
 .bk-zoom:popover-open { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
 .bk-zoom::backdrop { background: rgba(4, 8, 14, .55); }
 .bk-zoom p { margin: 0 0 6px; }
-.bk-zoom-n { font: 400 var(--fs-lg)/1.25 var(--font-display); }
+.bk-zoom-n { font: 600 var(--fs-lg)/1.25 var(--font-body); } /* a card name comes from data, and the pixel face only holds the game's own text: system face */
 .bk-zoom .cf-cap { margin-bottom: 8px; }
 .pk-ghost { display: grid; align-content: center; justify-items: center; gap: 8px; background: none; box-shadow: none; border: 1px dashed var(--line-strong); color: var(--muted); }
 .pk-ghost b { font: 600 56px/1 var(--font-tag); } .pk-ghost .mk { font-size: 22px; }
