@@ -41,6 +41,7 @@ function flush() {
   }
   seen[q.id] = 1; if (q.key) seen[q.key] = 1; save(); // marked on start, so skipping counts as seen
   cur = { id: q.id, ctx: q.ctx, scene: 0, line: 0, typed: 0 };
+  G.pause(true); // the shop's clock stops while a scene plays: no walk-ins, no bill countdown (game.ts pause)
   draw(); dlg().showModal(); type();
   document.dispatchEvent(new Event('ptcg:story'));
 }
@@ -61,7 +62,7 @@ function next() {
   if (++cur.line >= sc[cur.scene].lines.length) { cur.line = 0; if (++cur.scene >= sc.length) return end(); }
   cur.typed = 0; draw(); type();
 }
-function end() { clearInterval(timer); cur = null; if (dlg().open) dlg().close(); document.dispatchEvent(new Event('ptcg:story')); setTimeout(flush, 400); }
+function end() { clearInterval(timer); cur = null; G.pause(false); if (dlg().open) dlg().close(); document.dispatchEvent(new Event('ptcg:story')); setTimeout(flush, 400); }
 
 const SIDE: Partial<Record<Who, string>> = { adou: 'left', jiu: 'right' };
 function draw() {
