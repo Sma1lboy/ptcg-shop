@@ -138,7 +138,7 @@ function place() {
 
 // the 3D table moves its labels with an inline transform, after this renders and whenever the camera settles: follow them
 const follow = new MutationObserver(place);
-let last = -2;
+let last = -2, lastAt = ''; // the step and the button it pointed at when last shown
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
@@ -160,7 +160,10 @@ export function renderGuide() {
         : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>`
         : step.h === '账单' && here ? html`<button type="button" class="ghost" data-coach="bill">知道了</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
-  if (i !== last && here) seek = performance.now() + 1500;
+  // a new step, or the same step on another button (进货 walks one set's 进一架, then the next set's): bring it into view once
+  const at = here ? `${(here as HTMLElement).dataset.act ?? ''}:${(here as HTMLElement).dataset.id ?? ''}` : '';
+  if ((i !== last || at !== lastAt) && here) seek = performance.now() + 1500;
+  if (here) lastAt = at;
   // a key in the box pressed (先按这个价卖, 知道了) and the next step drawn over it: lit reuses the box's first button, so the focus
   // was left on 「跳过引导」 and the next Enter skipped the guide. A new step starts with the focus on the page, not in the box
   if (i !== last && pop.contains(document.activeElement)) (document.activeElement as HTMLElement).blur();
