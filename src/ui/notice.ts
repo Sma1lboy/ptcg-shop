@@ -123,7 +123,11 @@ function showMemo() {
   el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open') || storyOpen(); // yields to the reveal only where it plays
   if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
   if (el.hidden) return;
-  const m = memo!;
+  const m = memo!, ident = m.kind === 'out' ? `out:${[...out].join()}` : m.kind === 'new' ? `new:${m.id}` : m.kind === 'grow' ? `grow:${m.k}` : m.kind;
+  // under the pointer the same note keeps its words: a key's count and price follow the cash every second, and the text changed under
+  // the cursor (进一架 52 → 56 → 60); a different note (a set restocked, another sold out) still replaces it
+  if (!was && el.dataset.ident === ident && el.matches(':hover')) return;
+  el.dataset.ident = ident;
   if (m.kind === 'first') { // a key to put it away: on a phone the guide's bubble waits while the box is up (they'd overlap)
     render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
       <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>
@@ -154,7 +158,7 @@ function showMemo() {
   const id = ids[0], set = G.setById(id), f = fixes[0], names = ids.map(x => G.setById(x).name).join('、');
   const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}">都补上${cost ? ` ${money(cost)}` : ''}</button>`
     : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}">上架 ${f.up} 包</button>`
-    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" title="${shelfFill(id).title}">进一架 ${shelfFill(id).n} 并上架 ${money(f.cost)}</button>`
+    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${shelfFill(id).n}" title="${shelfFill(id).title}">进一架 ${shelfFill(id).n} 并上架 ${money(f.cost)}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
   const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); watchShop(); };
   const head = m.kind === 'out' ? html`<h2>${names}卖空了</h2><p class="mm-why">货架空着不进钱，来买${ids.length > 1 ? '这几个系列' : set.name}的顾客一半空手走。</p>`

@@ -42,7 +42,8 @@ export function bindEvents() {
       case 'shelve': G.shelve(id, +b.dataset.n!); break;
       case 'refill': for (const x of id.split(',')) { // 店里的话: one set or every sold-out one — a shelf's worth each, up at once (the pack kept back to open stays)
         if ((G.state.stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); continue; }
-        const n = shelfFill(x).n; if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - 1));
+        const n = b.dataset.n ? +b.dataset.n : shelfFill(x).n; // one set: the count its key reads
+        if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - 1));
       } break;
       case 'unshelve': G.unshelve(id, +b.dataset.n!); break;
       case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d! * G.PCT_STEP); break;
