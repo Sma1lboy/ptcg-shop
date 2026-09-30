@@ -63,8 +63,11 @@ const STEPS: Step[] = [
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
-  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill()
-      || (billAt > 0 && Date.now() - billAt > BILL_READ && G.shelves().some(r => r.id && !r.qty)), // read for 8 s and a shelf is empty: 补货 comes first (a shelf stood empty ~50 s behind 知道了)
+  { page: 'open', h: '账单', done: () => {
+      // read for 8 s and a shelf is empty: 补货 comes first (a shelf stood empty ~50 s behind 知道了) — and that counts as read, for good:
+      // it came back after the restock and wanted 知道了 a second time
+      if (!rec.bill && billAt > 0 && Date.now() - billAt > BILL_READ && G.shelves().some(r => r.id && !r.qty)) { rec.bill = 1; save(); }
+      return !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(); },
     at: () => shown(document.getElementById('due')),
     p: () => { const b = G.nextBill(); if (!b) return null;
       return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
@@ -75,7 +78,7 @@ const STEPS: Step[] = [
     at: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
       return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
     p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;
-      return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。点${key}再进一架、摆上去，这就是每天的活。`; } },
+      return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货柜」页签上的数字）。点${key}再进一架、摆上去，这就是每天的活。`; } },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
     alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
     p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'

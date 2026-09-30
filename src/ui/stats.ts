@@ -3,7 +3,7 @@ import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money } from './common.ts';
 
-let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = Date.now(), why = '';
+let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = Date.now(), why = '', lastAt = 0;
 
 // What the till's change was made of, when it all came from the counter: packs sold stay a bare 「+$」 (the 第一笔生意 note says what
 // it is), a case card sold reads 「卖卡 +$」, hits bought off a customer 「收卡 −$」 — a net −$136 with packs sold and cards bought in the
@@ -23,7 +23,11 @@ export function renderStats(reveal = false) {
   const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = G.shelves().reduce((a, o) => a + o.qty, 0);
   const held = reveal ? lastHeld : Object.values(s.singles).reduce((a, c) => a + c.price * c.count, 0);
   lastHeld = held;
-  if (lastCash != null && Math.abs(s.cash - lastCash) >= .005) { delta = s.cash - lastCash; why = sources(delta); stamp++; }
+  if (lastCash != null && Math.abs(s.cash - lastCash) >= .005) {
+    // changes in one go (都补上 buys and shelves set after set, one emit each) add up to one tag: it showed only the last set's −$
+    const now = performance.now(), same = now - lastAt < 60; lastAt = now;
+    if (same) { delta += s.cash - lastCash; why = ''; } else { delta = s.cash - lastCash; why = sources(delta); stamp++; }
+  }
   else if (lastCash == null) seenAt = Math.max(seenAt, ...s.recent.map(v => v.at)); // what happened before this page opened isn't news
   lastCash = s.cash;
   render(html`<p class="cash"><span class="k">现金</span><b>${money(s.cash)}</b>${stamp ? keyed(stamp, html`<span class="delta ${delta >= 0 ? 'gain' : 'loss'}" aria-hidden="true">${why || `${delta >= 0 ? '+' : '−'}${money(Math.abs(delta))}`}</span>`) : ''}</p>

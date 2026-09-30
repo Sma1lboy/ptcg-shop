@@ -220,5 +220,7 @@ export function initMemo() {
   document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
   document.addEventListener('ptcg:guidedone', () => { notes.push({ kind: 'done' }); watchShop(); });
-  addEventListener('hashchange', () => { if (location.hash === '#grow') grew = growKey() || grew; watchShop(); }); // 成长 seen on its own: its 下一步 needs no note
+  // a look at 成长 doesn't count as told: a glance before the guide ended (nothing bought) silenced 「钱够升级了」 for good while the cash
+  // piled up to $2k. While 成长 shows, the box stays down (holds / pick); leaving without buying, it may still say the 下一步 once
+  addEventListener('hashchange', watchShop);
 }
