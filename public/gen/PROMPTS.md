@@ -26,6 +26,8 @@ BW 风格的像素画：三张训练家式半身立绘（阿豆、九姐、店�
 
 **还原成真像素**（`cut2.py`，没进仓库，要重出时照做；和图标的 `cut.py` 同一个取样法）：立绘先按品红键抠掉背景，从颜色边缘反推模型画的像素格距（4–24 px 之间最贴整数倍的那个，三张都在 8.6–9 左右），每格取中间 40% 的前景中位色，得到约 110×170 的真像素图；场景按 256 格宽强制取样（模型画场景时格距不够稳，反推不出来），得到 256×171。都存无损 webp（立绘约 17–20 KB，场景约 50–65 KB），页面上 `image-rendering: pixelated` 放大。
 
+**减色**（发布前评审：取样后的图每张还有 4–19k 种颜色，读起来是「现代高清像素画」，不像掌机的有限调色板）：Pillow `quantize(FASTOCTREE, dither=NONE)`，场景 48 色、立绘 32 色，半透明像素按 128 阈值归到全透或全实，存无损 webp（场景 11–15 KB，立绘 3–4 KB）。八叉树留得住口红、手帕、路灯这些小面积的点缀色（中位切分会把它们吃掉）。要重出时取样完照做。
+
 ## 模板
 
 > Original pixel-art game art in the style of 2010 handheld monster-collecting RPGs (Nintendo DS era): original character and places, not copied from any existing game, not resembling any official character, no logos, no text, no letters, no numbers, no ball-shaped objects, no creatures. True pixel art: every pixel a crisp solid square scaled up with hard nearest-neighbour edges, no anti-aliasing, no gradients, no blur, no painterly texture. Light from the upper-left. Shared palette for every image in this game: charcoal #262B33 for outlines, off-white #F4F6F9, cool greys #C8CED8 #8C97A8 #59606D, sky blue #52B6F2, deep blue #2A74D0, navy #1D3F86, leaf green #3EC06E, coral red #E8483A, dark red #9A2A20, warm skin tones #F2C9A0 #D9A27A, dark hair #3A3030; no purple, no neon, no gold.
