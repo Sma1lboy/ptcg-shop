@@ -98,7 +98,7 @@ export function energy(name: string) { // basic energy: the type mark on the typ
 }
 
 // Blank card stock with the name, for a scan that can't load where there's no DOM to print it on (the 3D table): the same
-// silver rim, paper and print as .cf-failed. The name is Latin in the data, so it wraps on words.
+// silver rim, paper and print as .cf-failed. The Chinese names are at most 11 characters, so it wraps only on the space some carry (English names wrap on words).
 export function stock(name: string) {
   const rim = tok('--stock-rim', '#C9CED6'), paper = tok('--stock', '#E9ECF0'), ink = tok('--stock-ink', '#1F2833'), font = tok('--font-body', 'sans-serif').replace(/"/g, "'");
   const esc = (t: string) => t.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);

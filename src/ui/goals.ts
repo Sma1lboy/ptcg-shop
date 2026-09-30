@@ -7,7 +7,7 @@ import { repeat } from 'lit-html/directives/repeat.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import type { Visit } from '../game.ts';
-import { G, $, money, toShelf, shelveLabel, lately, restock, rarLabel } from './common.ts';
+import { G, $, money, toShelf, shelveLabel, lately, restock, rarLabel, rarNames, RAR } from './common.ts';
 import { hold } from './mat.ts';
 import { point, swapHint } from './shelf.ts';
 import { spot } from './case.ts';
@@ -115,7 +115,7 @@ function packs(rec: Visit[]) {
 // with cards but walk-outs means they sell faster than they come in. The row ends with where that set's hits come from and the
 // move that brings more: a set on a shelf is torn open at the counter and sold to you at the 收卡价 (the rail below); a set on
 // no shelf reaches the shop only through your own packs, so 收卡价 cannot help it. Hovering a cell lights those cards (case.ts).
-const TIER = ['RR 档', 'IR 档', 'SIR 档'], TIER_MARK = ['RR', 'IR', 'SIR'];
+const TIER_MARK = ['RR', 'IR', 'SIR'], TIER = TIER_MARK.map(k => `${RAR[k].zh}档`);
 function gaps(rec: Visit[]) {
   const s = G.state, seekers = rec.filter(v => v.t === 'seeker');
   if (!seekers.some(v => v.r === 'none')) return '';
@@ -142,7 +142,7 @@ function gaps(rec: Visit[]) {
     if (racked) {
       const sellers = rec.filter(v => v.offer && v.set === id), took = sellers.reduce((a, v) => a + (v.took || 0), 0), low = sellers.filter(v => v.sell === 'low').length;
       const hard = G.SEEK[2].reduce((a, k) => a + (set.rates[k] || 0), 0);
-      return html`柜台上拆这个系列的卖给你 ${took} 张${low ? html` · <b>${low} 位嫌收得低</b>${told ? '' : (told = true, '，提下面的收卡价')}` : ''}${hard ? ` · SIR 档约 ${Math.round(100 / hard)} 包出一张` : ''}`;
+      return html`柜台上拆这个系列的卖给你 ${took} 张${low ? html` · <b>${low} 位嫌收得低</b>${told ? '' : (told = true, '，提下面的收卡价')}` : ''}${hard ? ` · ${TIER[2]}约 ${Math.round(100 / hard)} 包出一张` : ''}`;
     }
     const act = stock && free ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${toShelf(id)}">${shelveLabel(id, false)}</button>`
       : swap?.id === id && (stock || G.lvl('clerk')) ? html`<button type="button" @click=${() => G.place(swap.i, id)}>换上货架</button>`
@@ -172,7 +172,7 @@ let allGaps = false;
 function showcase(rec: Visit[]) {
   const s = G.state, free = G.slots() - s.shown.length, mine = Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind));
   // a tier row only for its price notes now (who balked at what); who left empty-handed is the 缺货表's
-  const rows = [...G.SEEK.map((kinds, tier) => ({ label: `找 ${kinds.join('/')}`, vs: rec.filter(v => v.t === 'seeker' && v.tier === tier), fit: (c: { kind: string; price: number }) => kinds.includes(c.kind) })),
+  const rows = [...G.SEEK.map((kinds, tier) => ({ label: `找 ${rarNames(kinds)}`, vs: rec.filter(v => v.t === 'seeker' && v.tier === tier), fit: (c: { kind: string; price: number }) => kinds.includes(c.kind) })),
     { label: `收藏党（$${G.BIG_CARD} 以上）`, vs: rec.filter(v => v.t === 'collector'), fit: (c: { kind: string; price: number }) => c.price >= G.BIG_CARD }].filter(r => r.vs.length)
     // collectors left empty-handed while the binder holds a card they would take go first: its 上柜 is the cheapest fix on the page
     .map(r => ({ ...r, ready: r.label.startsWith('收藏') && count(r.vs, 'none') && mine.some(([, c]) => r.fit(c)) ? 1 : 0 })).sort((a, b) => b.ready - a.ready);
@@ -182,7 +182,7 @@ function showcase(rec: Visit[]) {
   const pct = G.casePct(), would = all.filter(v => v.max! >= pct - 1e-9).length, none = count(all, 'none');
   const moves = G.caseMoves(), fill = moves && free > 0 ? html`<button type="button" data-act="fillcase">补满柜位（${moves} 张）</button>` : '';
   // supply against demand: who would buy at the tag against every hit the shop has, in the case and in the binder
-  const verdict = !cards ? html`<b>柜里和卡本里都没有闪卡</b>：${none} 位空手走了。开包开出的、柜台上收来的闪卡（RR 以上）都进卡本`
+  const verdict = !cards ? html`<b>柜里和卡本里都没有闪卡</b>：${none} 位空手走了。开包开出的、柜台上收来的闪卡（${RAR.RR.zh}以上）都进卡本`
     : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加卡本只有 ${cards} 张：卡比人少，标价往上调也卖得完，收卡价提一档能多收些`
     : html`按 ${pc(pct)} ${would} 位会买，柜里加卡本 ${cards} 张`;
   return html`<p class="c-h">点是顾客最多肯出市价的几成：实的按现在的单卡标价会买。点轨上哪一档，展示柜和卡本的标价就改到哪一档</p>

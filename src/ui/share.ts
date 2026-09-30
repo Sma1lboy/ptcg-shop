@@ -2,7 +2,7 @@
 import { card } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, rarLabel } from './common.ts';
+import { G, $, money, rarLabel, RAR } from './common.ts';
 import { back, stock } from './card.ts';
 import type { ShareSpec } from './mat.ts';
 
@@ -42,7 +42,7 @@ export function grade() {
 }
 export type Grade = ReturnType<typeof grade>;
 // The big hits pulled, best first: the share image's last line and the page's tally.
-export const hits = () => { const t = G.state.tally; return ([['MHR', '超级金卡'], ['SIR', 'SIR'], ['HR', '金卡'], ['IR', 'IR'], ['UR', 'UR']] as const).filter(([k]) => t[k]).map(([k, n]) => [n, t[k]] as const); };
+export const hits = () => { const t = G.state.tally; return (['MHR', 'SIR', 'HR', 'IR', 'UR'] as const).filter(k => t[k]).map(k => [RAR[k].zh, t[k]] as const); };
 
 // ---------- card art for share images ----------
 // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
@@ -86,19 +86,20 @@ const BW = { bg: '#E9ECF0', panel: '#FFFFFF', frame: '#3A4150', frameIn: '#C3CAD
 // in pixel type they run past the window.
 const pixel = (size: number) => `400 ${size}px ${css('--font-pixel')}`;
 const plain = (size: number) => `400 ${size}px ${css('--font-body')}`;
-function text(x: CanvasRenderingContext2D, s: string, px: number, py: number, size: number, color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow) {
-  x.font = pixel(size); x.textAlign = align; x.textBaseline = 'alphabetic';
+// `face` is `plain` for what comes out of the card data (card names): the pixel face holds only the glyphs the game's own text prints.
+function text(x: CanvasRenderingContext2D, s: string, px: number, py: number, size: number, color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow, face = pixel) {
+  x.font = face(size); x.textAlign = align; x.textBaseline = 'alphabetic';
   if (shadow) { const d = Math.max(2, Math.round(size / 32) * 2); x.fillStyle = shadow; x.fillText(s, px + d, py + d); }
   x.fillStyle = color; x.fillText(s, px, py);
 }
 // The largest of `sizes` at which s fits in w (the smallest if none does).
-function pixelFit(x: CanvasRenderingContext2D, s: string, w: number, sizes: number[]) {
-  for (const z of sizes) { x.font = pixel(z); if (x.measureText(s).width <= w) return z; }
+function pixelFit(x: CanvasRenderingContext2D, s: string, w: number, sizes: number[], face = pixel) {
+  for (const z of sizes) { x.font = face(z); if (x.measureText(s).width <= w) return z; }
   return sizes[sizes.length - 1];
 }
 // A pixel line that shrinks through `sizes` to fit w, and is cut with an ellipsis only at the smallest.
-function line(x: CanvasRenderingContext2D, s: string, px: number, py: number, w: number, sizes: number[], color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow) {
-  const z = pixelFit(x, s, w, sizes); x.font = pixel(z); text(x, fit(x, s, w), px, py, z, color, align, shadow);
+function line(x: CanvasRenderingContext2D, s: string, px: number, py: number, w: number, sizes: number[], color: string, align: CanvasTextAlign = 'left', shadow: string | null = BW.inkShadow, face = pixel) {
+  const z = pixelFit(x, s, w, sizes, face); x.font = face(z); text(x, fit(x, s, w), px, py, z, color, align, shadow, face);
 }
 // Body-font text broken into lines of at most w (Chinese breaks anywhere).
 function wrap(x: CanvasRenderingContext2D, s: string, w: number) {
@@ -170,7 +171,7 @@ function tcard(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: 
     text(x, k, rx + 20, ry + 33, 24, BW.band, 'left', null);
     const vx = rx + 20 + 72 + 16; let room = rw - (vx - rx) - 20;
     x.font = pixel(24);
-    if (best && i === 2) { const pw = x.measureText(alt!).width; text(x, fit(x, v, room - pw - 16), vx, ry + 33, 24, BW.ink, 'left', null); const nw = x.measureText(fit(x, v, room - pw - 16)).width; text(x, alt!, vx + nw + 16, ry + 33, 24, BW.ink, 'left', null); return; }
+    if (best && i === 2) { const pw = x.measureText(alt!).width; x.font = plain(24); const nm = fit(x, v, room - pw - 16), nw = x.measureText(nm).width; text(x, nm, vx, ry + 33, 24, BW.ink, 'left', null, plain); text(x, alt!, vx + nw + 16, ry + 33, 24, BW.ink, 'left', null); return; }
     text(x, fit(x, alt && x.measureText(v).width > room ? alt : v, room), vx, ry + 33, 24, BW.ink, 'left', null);
   });
   // the verdict word, then how far above the simulated players it stands
@@ -204,7 +205,7 @@ function spread(x: CanvasRenderingContext2D, px: number, py: number, w: number, 
 }
 async function drawCard() {
   const g = grade(), L = g.L, best = g.best, sims = S.luckSamples(G.state.packsBy), bestLine = g.bestLine, hitList = hits().map(([n, c]) => `${n} ×${c}`), hitsLine = hitList.join(' · ');
-  await fonts(L.title + '欧气卡铺鉴定训练家卡店开了最贵超过期望你战利品分布' + g.what + g.head + hitsLine + `ID No. ${g.cert}` + `第${G.state.branch.n + 1}家` + '卡价市价概率实开统计 · ' + money(L.value) + money(L.expected) + (best ? best.name + money(g.bestNow) : ''));
+  await fonts(L.title + '欧气卡铺鉴定训练家卡店开了最贵超过期望你战利品分布' + g.what + g.head + hitsLine + `ID No. ${g.cert}` + `第${G.state.branch.n + 1}家` + '卡价市价概率实开统计 · ' + money(L.value) + money(L.expected) + (best ? money(g.bestNow) : ''));
   const [art, who] = await Promise.all([best ? loadArt(best) : loadOne(back()), loadOne('gen/story/owner.webp')]); // no hit yet: the card lies face down
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
   const x = c.getContext('2d')!, X = 48, CW = W - 96;
@@ -240,7 +241,7 @@ async function drawPack(d: ShareSpec) {
   const row = d.n > 1 ? d.front.filter(c => c !== d.best).slice(0, 4) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
   const sub = d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里', what = d.n > 1 ? `${d.n} 包共开出` : '这包开出', diff = d.value - d.cost;
   const gain = `${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, rank = d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank;
-  await fonts(top + d.set + d.best.name + row.map(c => c.name + rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计欧气卡铺 · ');
+  await fonts(top + d.set + row.map(c => rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计欧气卡铺 · ');
   const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, X = 48, CW = W - 96, WB = H - 96;
   screen(x, W, H);
@@ -257,13 +258,13 @@ async function drawPack(d: ShareSpec) {
   const plate = (cx: number, py: number, pw: number, cd: { name: string; kind: string; price: number }, big: boolean) => {
     box(x, cx, py, pw, 112, 12);
     if (!big) { // narrow plate: name, rarity and price on a line each
-      line(x, cd.name, cx + pw / 2, py + 44, pw - 24, [24], BW.ink, 'center', null);
-      x.font = pixel(24); const rl = rarLabel(cd.kind); // the full name when it fits, else the code printed on the card (SIR)
-      text(x, x.measureText(rl).width <= pw - 24 ? rl : cd.kind, cx + pw / 2, py + 74, 24, BW.muted, 'center', null);
+      line(x, cd.name, cx + pw / 2, py + 44, pw - 24, [24], BW.ink, 'center', null, plain);
+      x.font = pixel(24); const rl = rarLabel(cd.kind); // the full name when it fits, else the short one
+      text(x, x.measureText(rl).width <= pw - 24 ? rl : RAR[cd.kind]?.zh ?? cd.kind, cx + pw / 2, py + 74, 24, BW.muted, 'center', null);
       line(x, money(cd.price), cx + pw / 2, py + 100, pw - 24, [24], BW.ink, 'center', null);
       return;
     }
-    line(x, cd.name, cx + pw / 2, py + 52, pw - 24, [36, 24], BW.ink, 'center', null);
+    line(x, cd.name, cx + pw / 2, py + 52, pw - 24, [36, 24], BW.ink, 'center', null, plain);
     text(x, rarLabel(cd.kind), cx + 20, py + 92, 24, BW.muted, 'left', null);
     line(x, money(cd.price), cx + pw - 20, py + 92, pw - 40 - 96, [36], BW.ink, 'right', null);
   };

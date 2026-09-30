@@ -18,18 +18,21 @@ export function bar(p: number, label: string, o: { hp?: boolean; k?: string } = 
   return html`<span class="bar${o.hp ? ' hp' : ''}" data-k=${o.k ?? nothing} data-hp=${o.hp ? (v > .5 ? 'hi' : v > .2 ? 'mid' : 'lo') : nothing} role="img" aria-label=${label}><i style="--p:${v}"></i></span>`;
 }
 
-// Rarity names; `jp` is the name Chinese/Japanese players use. t = tier (0 bulk … 5 SIR/HR/MHR) for flip time, sound and glow. The printed symbols are card.ts mark().
+// Rarity names, always written in Chinese in text (the printed symbols are card.ts mark()); `jp` is the name Chinese/Japanese players use for the same tier.
+// t = tier (0 bulk … 5 SIR/HR/MHR) for flip time, sound and glow.
 export const RAR: Record<string, { zh: string; jp?: string; t: number }> = {
   E: { zh: '基础能量', t: 0 }, FE: { zh: '闪能量', t: 2 },
   C: { zh: '普通', t: 0 }, U: { zh: '非普通', t: 0 }, R: { zh: '稀有', t: 1 },
-  REV: { zh: '反闪', t: 1 }, RR: { zh: '双稀有 RR', t: 2 }, ACE: { zh: 'ACE SPEC', t: 2 },
-  PB: { zh: '精灵球闪', t: 2 }, UR: { zh: '超稀有 UR', jp: 'SR', t: 3 },
-  IR: { zh: '插画稀有 IR', jp: 'AR', t: 4 }, MB: { zh: '大师球闪', t: 4 },
-  SIR: { zh: '特殊插画 SIR', jp: 'SAR', t: 5 }, HR: { zh: '金卡 HR', jp: 'UR', t: 5 },
-  MHR: { zh: '超级金卡 MHR', jp: 'MUR', t: 5 }, // Mega Evolution series: replaces HR
+  REV: { zh: '反闪', t: 1 }, RR: { zh: '双稀有', t: 2 }, ACE: { zh: 'ACE SPEC', t: 2 },
+  PB: { zh: '精灵球闪', t: 2 }, UR: { zh: '超稀有', jp: 'SR', t: 3 },
+  IR: { zh: '插画稀有', jp: 'AR', t: 4 }, MB: { zh: '大师球闪', t: 4 },
+  SIR: { zh: '特殊插画', jp: 'SAR', t: 5 }, HR: { zh: '金卡', jp: 'UR', t: 5 },
+  MHR: { zh: '超级金卡', jp: 'MUR', t: 5 }, // Mega Evolution series: replaces HR
 };
 export const rar = (c: { kind: string; r: string }) => RAR[c.kind] || RAR[c.r] || RAR.C;
 export const rarLabel = (k: string) => { const r = RAR[k]; return r.jp ? `${r.zh}（${r.jp}）` : r.zh; };
+// Names only, for a line that would otherwise print codes: rarNames(['RR', 'ACE', 'PB']) → 双稀有/ACE SPEC/精灵球闪.
+export const rarNames = (ks: readonly string[]) => ks.map(k => RAR[k]?.zh ?? k).join('/');
 
 // 上架 from the set table and the 顾客 panel keeps 1 pack in the back room, so a new player who shelves a fresh box can still open
 // one; the shelf's own 补满 moves them all. The count is what will actually move (the set's shelves, or one empty shelf, hold so many).

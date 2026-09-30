@@ -196,7 +196,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
   // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
   const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
-    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（RR 及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
+    luck: { name: '手气', group: '幸运', desc: '开包时闪卡（双稀有及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
     talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.5, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
     crowd: { name: '人气', group: '经营', desc: '进店人数，乘在口碑客流外面，不受客流上限递减', max: 10, base: 300 * COST_X, grow: 1.5, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
     watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久（要先雇店员，没店员一律 1 小时）', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
@@ -308,6 +308,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         if (s.week == null) { migrated = true; st.owe = st.debt = Math.round(DEBT0 * (1 + DEBT_STEP * st.branch.n)); } // pre-债务 saves: 九姐 turns up now
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
+        for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...(st.trophy ? [st.trophy] : [])] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
         return st;
       } } catch {}
     return fresh();

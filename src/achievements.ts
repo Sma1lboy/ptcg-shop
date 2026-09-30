@@ -20,7 +20,7 @@ export const TIERS: [string, string][] = [['black', '荣誉'], ['gold', '金牌'
 export const tier = (a: Ach) => (!a.cash ? 'black' : a.cash >= 300 ? 'gold' : a.cash >= 50 ? 'silver' : 'white');
 const GOLD = ['IR', 'SIR', 'HR', 'MHR'];   // the gold-star rarities (and the Mega series' four-pointed star)
 const LUCK_MIN = 30;                        // packs before 欧气检测 titles count: fewer and one lucky pull decides it
-const cards = (test: (name: string, r: string) => boolean) => new Set(SETS.flatMap(s => DATA[s.id].cards.filter(c => test(c.name, c.r)).map(c => `${s.id}|${c.n}`)));
+const cards = (test: (name: string, r: string) => boolean) => new Set(SETS.flatMap(s => DATA[s.id].cards.filter(c => test(c.en, c.r)).map(c => `${s.id}|${c.n}`)));
 const PIKACHU = cards(n => n.startsWith('Pikachu')), CHARIZARD = cards(n => n.includes('Charizard')), MOON = cards((n, r) => n === 'Umbreon ex' && r === 'SIR');
 
 const f = (G: Game, k: string) => G.state.feat[k] || 0;
@@ -38,15 +38,15 @@ const maxLevel = (G: Game) => Object.values(G.UPGRADES).reduce((a, u) => a + u.c
 // Game settings (rewards are invented, shown in the footer). Paced for a player's first 10 minutes, first hour and first 10 hours.
 export const ACH: Ach[] = [
   { id: 'open-1', group: 'open', seal: '开张', name: '开张第一包', desc: '店里拆开的第一包', cash: 5, prog: G => [Math.min(packs(G), 1), 1] },
-  { id: 'hit-1', group: 'open', seal: '初闪', name: '第一张闪卡', desc: '开出 RR 或更稀有的卡', cash: 5, prog: G => [Math.min(tally(G, S.HITS), 1), 1] },
+  { id: 'hit-1', group: 'open', seal: '初闪', name: '第一张闪卡', desc: '开出双稀有或更稀有的卡', cash: 5, prog: G => [Math.min(tally(G, S.HITS), 1), 1] },
   { id: 'ten-1', group: 'open', seal: '十连', name: '第一次十连', desc: '一次开 10 包', cash: 10, prog: G => [Math.min(f(G, 'ten'), 1), 1] },
-  { id: 'double', group: 'open', seal: '双闪', name: '一包双闪', desc: '同一包里开出两张 RR 或更稀有的卡', cash: 30, prog: G => [Math.min(f(G, 'dbl'), 2), 2] },
-  { id: 'gold-1', group: 'open', seal: '金星', name: '第一张金星', desc: '开出 IR、SIR 或金卡（卡面右下角是金星）', cash: 30, prog: G => [Math.min(tally(G, GOLD), 1), 1] },
-  { id: 'sir-1', group: 'open', seal: 'SIR', name: '特殊插画', desc: '开出第一张 SIR', cash: 100, prog: G => [Math.min(tally(G, ['SIR']), 1), 1] },
-  { id: 'hr-1', group: 'open', seal: '金卡', name: '第一张金卡', desc: '开出金卡 HR 或超级金卡 MHR', cash: 150, prog: G => [Math.min(tally(G, ['HR', 'MHR']), 1), 1] },
+  { id: 'double', group: 'open', seal: '双闪', name: '一包双闪', desc: '同一包里开出两张双稀有或更稀有的卡', cash: 30, prog: G => [Math.min(f(G, 'dbl'), 2), 2] },
+  { id: 'gold-1', group: 'open', seal: '金星', name: '第一张金星', desc: '开出插画稀有、特殊插画或金卡（卡面右下角是金星）', cash: 30, prog: G => [Math.min(tally(G, GOLD), 1), 1] },
+  { id: 'sir-1', group: 'open', seal: '特殊插画', name: '特殊插画', desc: '开出第一张特殊插画', cash: 100, prog: G => [Math.min(tally(G, ['SIR']), 1), 1] },
+  { id: 'hr-1', group: 'open', seal: '金卡', name: '第一张金卡', desc: '开出金卡或超级金卡', cash: 150, prog: G => [Math.min(tally(G, ['HR', 'MHR']), 1), 1] },
   { id: 'packs-100', group: 'open', seal: '百包', name: '拆了一百包', desc: '累计开 100 包', cash: 50, prog: G => [Math.min(packs(G), 100), 100] },
   { id: 'packs-1000', group: 'open', seal: '千包', name: '拆了一千包', desc: '累计开 1,000 包', cash: 500, prog: G => [Math.min(packs(G), 1000), 1000] },
-  { id: 'mhr-1', group: 'open', seal: '超级金卡', name: '超级金卡', desc: '在超级进化系列里开出 MHR（每包 0.08%）', cash: 1000, prog: G => [Math.min(tally(G, ['MHR']), 1), 1] },
+  { id: 'mhr-1', group: 'open', seal: '超级金卡', name: '超级金卡', desc: '在超级进化系列里开出超级金卡（每包 0.08%）', cash: 1000, prog: G => [Math.min(tally(G, ['MHR']), 1), 1] },
 
   { id: 'euro', group: 'luck', seal: '欧洲人', name: '欧洲人', desc: `开满 ${LUCK_MIN} 包后，欧气检测超过 90% 的模拟玩家`, cash: 50, prog: G => luck(G, p => p >= 0.9) },
   { id: 'emperor', group: 'luck', seal: '欧皇', name: '欧皇本皇', desc: `开满 ${LUCK_MIN} 包后，欧气检测超过 99% 的模拟玩家`, cash: 300, prog: G => luck(G, p => p >= 0.99) },
@@ -81,10 +81,10 @@ export const ACH: Ach[] = [
   { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡铺', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
 
   { id: 'flipped', group: 'hidden', seal: '被扫货', name: '被倒爷扫了货', desc: '标价低到倒爷一口气扫走一个系列', hint: '有人专挑便宜货下手', cash: 20, prog: G => yes(Object.keys(G.state.flipT).length > 0) },
-  { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张 RR 以上都没有', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },
+  { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张双稀有以上都没有', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },
   { id: 'pikachu', group: 'hidden', seal: '皮卡丘', name: '皮卡丘来了', desc: '开出任何一张皮卡丘', hint: '店里的招牌电气鼠', cash: 30, prog: G => yes(pulled(G, PIKACHU)) },
   { id: 'charizard', group: 'hidden', seal: '喷火龙', name: '喷火龙', desc: '开出任何一张喷火龙', hint: '每个世代都有人追它', cash: 50, prog: G => yes(pulled(G, CHARIZARD)) },
-  { id: 'moon', group: 'hidden', seal: '月亮', name: '月亮伊布', desc: '在棱镜进化里开出月亮伊布 ex SIR', hint: '棱镜进化里最贵的那一张', cash: 200, prog: G => yes(pulled(G, MOON)) },
+  { id: 'moon', group: 'hidden', seal: '月亮', name: '月亮伊布', desc: '在棱镜进化里开出月亮伊布 ex 的特殊插画', hint: '棱镜进化里最贵的那一张', cash: 200, prog: G => yes(pulled(G, MOON)) },
   { id: 'night', group: 'hidden', seal: '夜猫子', name: '夜猫子', desc: '凌晨 1 点到 5 点之间开包', hint: '打烊以后还在拆', cash: 20, prog: G => [Math.min(f(G, 'night'), 1), 1] },
 ];
 

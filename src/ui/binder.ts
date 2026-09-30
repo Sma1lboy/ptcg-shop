@@ -12,7 +12,7 @@ import { html, render, nothing } from 'lit-html';
 import { SETS, DATA } from '../sets.ts';
 import * as S from '../sim.ts';
 import { logo } from '../assets.ts';
-import { G, $, money, rarLabel } from './common.ts';
+import { G, $, money, rarLabel, RAR } from './common.ts';
 import { face, cap, mark } from './card.ts';
 import { hold, huntable } from './mat.ts';
 
@@ -176,7 +176,7 @@ function handLine(id: string) {
   const miss = G.handMissing(id), by: Record<string, number> = {};
   for (const c of miss) by[c.r] = (by[c.r] || 0) + 1;
   const left = Object.entries(by).sort((a, b) => (S.RANK[b[0]] ?? 0) - (S.RANK[a[0]] ?? 0)), top = miss[0];
-  return html`<div class="dx-hand"><small class="muted">${h ? html`亲手开出还差 ${left.map(([r, n]) => `${r} ${n}`).join(' · ')}；最难的 ${top.name}（${top.r}）平均 ${packsFmt(top.packs)} 包出一张` : '亲手开出：补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
+  return html`<div class="dx-hand"><small class="muted">${h ? html`亲手开出还差 ${left.map(([r, n]) => `${RAR[r]?.zh ?? r} ${n}`).join(' · ')}；最难的 ${top.name}（${rarLabel(top.r)}）平均 ${packsFmt(top.packs)} 包出一张` : '亲手开出：补的不算，只数开包开出来的'} · 开齐：下次开分店名气 +${G.HAND_FAME}</small>
       ${G.unlocked(id) && huntable(id) ? html`<div class="btns"><button type="button" data-act="autorun" data-id="${id}" title="十包一轮自动开，出一张没亲手开出过的卡就停；仓库不够按进货价补">连开到出新卡</button></div>` : nothing}</div>`;
 }
 
@@ -213,7 +213,7 @@ export function renderBinder() {
         <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}${sealOf(s.id) ? ` · ${sealOf(s.id) === 'gold' ? '亲手开齐' : '大师套'}` : ''}${newTag(s.id)}</small></button>`)}
     </div>
     ${tab ? html`${spread(tab)}
-      ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张 RR 以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
+      ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张${RAR.RR.zh}以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
     ${handSum()}
     <div class="bk-zoom" id="bk-zoom" popover>${zoomed()}</div>`, $('dex'));
 }

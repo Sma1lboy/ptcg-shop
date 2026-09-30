@@ -4,7 +4,7 @@
 import { html, render, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { Visit, State } from '../game.ts';
-import { G, $, money } from './common.ts';
+import { G, $, money, rarNames } from './common.ts';
 
 const hhmm = (t: number) => new Date(t).toTimeString().slice(0, 5);
 const set = (id?: string) => (id ? G.setById(id).name : '');
@@ -29,7 +29,7 @@ function said(v: Visit) {
     case 'flipper:sold': return v.card ? `收走 ${v.card}（标价是市价的 ${pc(v.pct!)}）` : `整架扫走 ${v.n} 包${set(v.set)}：标价是市价的 ${pc(v.pct!)}，他肯出到 ${pc(v.max!)}`;
     case 'flipper:pricey': return v.why === 'cool' ? `${set(v.set)}刚收过一批还没出手，这次不收` : `只收低于市价 ${pc(v.max!)} 的货，空手走了`;
     case 'flipper:none': return '店里没货可扫';
-    case 'seeker:none': return `想找一张${v.set ? `${set(v.set)}的` : ''} ${G.SEEK[v.tier!].join('/')}，柜里和卡本里都没有`;
+    case 'seeker:none': return `想找一张${v.set ? `${set(v.set)}的` : ''} ${rarNames(G.SEEK[v.tier!])}，柜里和卡本里都没有`;
     case 'collector:none': return `想看 $${G.BIG_CARD} 以上的卡，柜里没有`;
     default: return v.r === 'sold' ? `买走 ${v.card}${v.n! > 1 ? ` 等 ${v.n} 张` : ''}` : dear(` ${v.card} `); // seeker (case or binder) / collector at the case
   }
