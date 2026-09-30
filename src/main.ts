@@ -25,9 +25,11 @@ import { initSound } from './ui/sound.ts';
 import { initMenu } from './ui/menu.ts';
 import { initWalk } from './ui/walk.ts';
 
-// While a pack is being revealed only the top bar's till, the shelf and the rail update (the rail's and shelf's open buttons off; the
-// singles' worth in the top bar stays at its pre-pack value); the rest would show the pull early. The mat fires ptcg:release when done.
-function renderAll() { if (hold) { renderStats(true); renderShelf(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
+// While a pack is being revealed the panels that would show the pull early (luck, binder, singles, the till roll, the case, the closing
+// receipt) wait; the rest keep up with the shop, which goes on selling (a player who leaves a pack half-flipped for 货柜 or 成长 saw
+// frozen counts): the top bar (its singles' worth stays at the pre-pack value), the bill, the ledger, 成长, the tab counts, the shelf
+// and the rail (their open buttons off). The mat fires ptcg:release when done.
+function renderAll() { if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle(); }
 
 bindEvents(); bindMatInput();
 document.addEventListener('ptcg:release', renderAll);

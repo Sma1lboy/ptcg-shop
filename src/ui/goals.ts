@@ -245,8 +245,7 @@ function clerk() {
       <p class="muted">勾选的系列：店员每 ${G.CLERK_ROUND / 60} 分钟进一次货补货架（钱不够就少买）；仓库里的货随时搬上架，留 ${G.CLERK_KEEP} 包给你拆。人多了货架一两分钟就卖空，把仓库进满，货架就不用空着等下一轮。</p>`;
 }
 
-function renderGoals() {
-  if (hold) return;
+function renderGoals() { // mid-reveal too: customers() leaves the binder's cards out while a pack is in hand (hold), the rest is the shop
   customers();
   render(html`<h2>店员 · 自动进货</h2>${clerk()}`, $('clerk'));
 }

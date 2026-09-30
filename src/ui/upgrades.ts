@@ -53,7 +53,7 @@ function buyables() {
 // cheapest level that changes the running shop. 看店 only pays someone who closes the page and 手气 only someone who opens packs,
 // and 人气 / 扩建 under 2% more walk-ins are left out; those come back only when nothing else is left.
 const MIN_TRAFFIC = 0.02;
-function nextStep() {
+export function nextStep() { // 成长's 下一步 — also what notice.ts's 「钱够升级了」 names
   const all = buyables().sort((a, b) => a.cost - b.cost);
   if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return { ...r, why: '有解锁的系列还没有货架摆' }; }
   const gain = (k: string) => G.peek(k, G.rate) / G.rate() - 1;

@@ -31,7 +31,7 @@ const racked = (id: string) => G.shelves().some(r => r.id === id);
 const toStock = () => sellable().find(x => !(G.state.stock[x.id] || 0) && !racked(x.id) && G.state.cash >= G.wholesale(x.id) * 10);
 const toRack = () => sellable().find(x => (G.state.stock[x.id] || 0) > 1 && !racked(x.id) && G.shelves().some(r => !r.id));
 const inRow = (id: string, q: string) => pick(`#shelf .set[data-spot="set:${id}"] ${q}`);
-const mins = (s: number) => Math.max(1, Math.ceil(s / 60));
+const mins = (s: number) => Math.max(1, Math.floor(s / 60)); // 17:11 on the chip is 「约 17 分钟」, not 18
 // an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid, or 30 packs opened once
 // the first bill has landed (a pack-happy newcomer opens 30 in three minutes and still needs 账单), or a second shop / a
 // bankruptcy (billsPaid counts this shop only) means the loop is known, whatever the flags say
@@ -58,6 +58,11 @@ const STEPS: Step[] = [
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
+  // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
+  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
+    at: () => shown(document.getElementById('due')),
+    p: () => { const b = G.nextBill(); if (!b) return null;
+      return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off. Not a
   // numbered step (it comes and goes with the shelves); the key and the text are one: the sold-out set's own row — 上架 N 包 when
   // the back room holds more than the one pack kept to open, else its 进一架
@@ -66,11 +71,6 @@ const STEPS: Step[] = [
       return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
     p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;
       return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。点${key}再进一架、摆上去，这就是每天的活。`; } },
-  // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
-  { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
-    at: () => shown(document.getElementById('due')),
-    p: () => { const b = G.nextBill(); if (!b) return null;
-      return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
     alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
     p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'

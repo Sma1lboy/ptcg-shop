@@ -3,7 +3,7 @@
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money, shelfFill, toShelf } from './common.ts';
-import { growCount } from './upgrades.ts';
+import { nextStep } from './upgrades.ts';
 import { go } from './layout.ts';
 import { guiding } from './guide.ts';
 import { hold } from './mat.ts';
@@ -77,10 +77,12 @@ export function initSlip() {
 // every sold-out set at once when the cash covers them all), a set just unlocked while a shelf stands empty (the same key puts it
 // up), and the first time the spare cash covers a level on 成长. It waits out a pack reveal and the story; while the guide runs its
 // own steps (进货, 补货) speak for these. ----------
-type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' } | { kind: 'new'; id: string } | { kind: 'done' } | { kind: 'grow' } | { kind: 'hand' };
+type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' } | { kind: 'new'; id: string } | { kind: 'done' } | { kind: 'grow'; k: string } | { kind: 'hand' };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
-// on a shelf, while one stands empty. Sold out comes first, then new, then 成长; grew: the 成长 note was said (or 成长 visited) — once
-let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = false;
+// on a shelf, while one stands empty. Sold out comes first, then new, then 成长; grew: the 下一步 (k + level) already said, or seen on
+// 成长 — each next level is said once, when the 闲钱 first covers it (the first-level-only note left minutes 8–11 with cash piling up)
+let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
+const stepKey = () => { const g = nextStep(); return g && !G.canBranch() && g.cost <= G.spare() ? `${g.k}:${g.lv}` : ''; };
 const racked = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id!))];
 const unlocked = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
 const known = new Set(unlocked());
@@ -101,10 +103,9 @@ function watchShop() {
     // a pack left mid-reveal while the player is on another page: the story, the labels, the new cards and an overdue bill's grace all
     // wait for it (mat.ts hold), so the box says so — after a sold-out shelf, whose key works from anywhere, guide or not
     const away = hold && document.documentElement.dataset.page !== 'open';
-    // 成长: nothing bought there yet and the badge has something yellow (levels the 闲钱 covers)
-    const nu = [...fresh][0], grow = !grew && !s.bought?.length && growCount() > 0 && location.hash !== '#grow';
+    const nu = [...fresh][0], k = location.hash === '#grow' ? '' : stepKey(), grow = k && k !== grew ? k : '';
     memo = away ? (out.size ? { kind: 'out' } : { kind: 'hand' })
-      : guiding() ? null : out.size ? { kind: 'out' } : nu ? { kind: 'new', id: nu } : grow ? { kind: 'grow' } : null;
+      : guiding() ? null : out.size ? { kind: 'out' } : nu ? { kind: 'new', id: nu } : grow ? { kind: 'grow', k: grow } : null;
   }
   showMemo();
 }
@@ -123,9 +124,10 @@ function showMemo() {
   if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
   if (el.hidden) return;
   const m = memo!;
-  if (m.kind === 'first') {
-    render(keyed('first', html`<div class="mm-box" @click=${close}><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
-      <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p></div>`), el);
+  if (m.kind === 'first') { // a key to put it away: on a phone the guide's bubble waits while the box is up (they'd overlap)
+    render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
+      <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${close}>知道了</button></div></div>`), el);
     return;
   }
   if (m.kind === 'done') {
@@ -139,10 +141,11 @@ function showMemo() {
     return;
   }
   if (m.kind === 'grow') {
+    const g = nextStep()!;
     // 成长's 下一步 just under the sticky top bar (scrollIntoView put it under the bar, the key cut off)
-    const toGrow = () => { grew = true; go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
-    render(keyed('grow', html`<div class="mm-box"><h2>钱够升级了</h2><p>闲钱 <b>${money(G.spare())}</b>（现金留出下一张账单以后的钱）够买「成长」页上 ${growCount()} 项。「下一步」那一格就是眼下最该升的一项。</p>
-      <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>去「成长」看看</button><button type="button" class="mm-x" @click=${() => { grew = true; watchShop(); }}>先不管</button></div></div>`), el);
+    const toGrow = () => { grew = m.k; go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
+    render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2><p>下一步是<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），${money(g.cost)}；闲钱 <b>${money(G.spare())}</b>，账单的钱已经留出来了。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>去「成长」升级</button><button type="button" class="mm-x" @click=${() => { grew = m.k; watchShop(); }}>先不管</button></div></div>`), el);
     return;
   }
   // every sold-out set at once when each has a fix and the cash covers them together; else the first one alone
@@ -165,5 +168,5 @@ export function initMemo() {
   document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
   document.addEventListener('ptcg:guidedone', () => { brief({ kind: 'done' }); showMemo(); });
-  addEventListener('hashchange', () => { if (location.hash === '#grow') grew = true; watchShop(); }); // 成长 found on its own: the note has nothing to add
+  addEventListener('hashchange', () => { if (location.hash === '#grow') grew = stepKey() || grew; watchShop(); }); // 成长 seen on its own: its 下一步 needs no note
 }
