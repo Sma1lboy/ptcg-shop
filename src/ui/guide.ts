@@ -95,7 +95,7 @@ function place() {
   // a new step's button off screen, or a strip with no room under its button: scroll, once. Kept pending for a moment, because
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
-  if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
+  if (performance.now() < seek && !tab && !anchor.matches('.s3-shelf > :not(.in), #due')) { // a tab, #due: the fixed top bar, always in view
     const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     const room = dock ? Math.min(vh - h - 40, vh * .55) : innerHeight - 70; // docked: the button (and the row under it) stays well above the box
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }

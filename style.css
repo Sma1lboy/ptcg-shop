@@ -170,6 +170,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* the guide's one-line hint under a page tab (guide.ts, the step is on another page) gets its own row above the page instead of
    lying on the page's first heading */
 @media (min-width: 780px) { :root:has(#coach[data-strip="tab"]:popover-open) main { padding-top: 76px; }
+  :root:has(#coach[data-strip="tab"]:popover-open) body { overflow-anchor: none; } /* the page moves down to make the row; scroll anchoring scrolled it back under the hint */
   :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - 96px); } /* the table still fits the screen */ }
 .page { display: grid; gap: 20px 24px; align-items: start; }
 .page[hidden] { display: none; }
