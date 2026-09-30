@@ -63,6 +63,7 @@
 | `src/ui/layout.ts` | 各页的 hash 路由（`#open #shelf #case #luck #grow #ach`，`#case` 是货柜页的展示柜视图；只隐藏不重渲染，翻牌进度不丢）、从别页开包先切到开包页、导航上成长的可买数、货柜的提示点（离开货柜后有人没买到/嫌贵走了，数字是 `G.missed()` 之和） |
 | `src/ui/rail.ts` | 开包页右边的窄栏：仓库里的包（换系列开）、欧气结论 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
+| `ROADMAP.md` | 产品化 loop 的状态：当前里程碑、候选里程碑、待办池（标里程碑、文件、验收）、竞品拆解、完成记录。每轮开始读、结束写 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |
 | `scripts/` | 数据抓取（fetch-data 卡表和单卡价、fetch-packs 整包价）、卡图镜像（fetch-images）、自动玩家（autoplay）、配色约束检查（contrast）、像素字子集（pixel-font） |
 | `test/sim.test.mjs` | 唯一的测试 |
