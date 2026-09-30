@@ -6,6 +6,7 @@
 // played past it (GRAD) never sees it. The footer's 新手引导 replays every step with a 下一步 button.
 import { html, render, nothing } from 'lit-html';
 import { G, $, money } from './common.ts';
+import { SETS } from '../sets.ts';
 import { hold } from './mat.ts';
 import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
@@ -23,6 +24,13 @@ const shown = (el: Element | null) => (el && el.getClientRects().length ? el : n
 // first visible match, in the order given (a comma selector would return document order)
 const pick = (...sels: string[]) => { for (const q of sels) for (const el of document.querySelectorAll(q)) if (shown(el)) return el; return null; };
 const firstShelved = () => G.shelves().find(r => r.id)?.id;
+// the sets a new shop can sell (two at the start): 进货 and 摆上货架 walk each of them to a full shelf — a customer whose set isn't on
+// the shelf leaves half the time, so one stocked set of two lost about a third of the walk-ins (GAMEPLAY.md §8 开张期)
+const sellable = () => SETS.filter(x => G.unlocked(x.id));
+const racked = (id: string) => G.shelves().some(r => r.id === id);
+const toStock = () => sellable().find(x => !(G.state.stock[x.id] || 0) && !racked(x.id) && G.state.cash >= G.wholesale(x.id) * 10);
+const toRack = () => sellable().find(x => (G.state.stock[x.id] || 0) > 1 && !racked(x.id) && G.shelves().some(r => !r.id));
+const inRow = (id: string, q: string) => pick(`#shelf .set[data-spot="set:${id}"] ${q}`);
 const mins = (s: number) => Math.max(1, Math.ceil(s / 60));
 // an old or imported save (every screenshot of a late game still had 「新手 5/5」 on it): two bills paid, or 30 packs opened once
 // the first bill has landed (a pack-happy newcomer opens 30 in three minutes and still needs 账单), or a second shop / a
@@ -34,12 +42,14 @@ const graduated = () => { const s = G.state;
 // alt: a button off the step's page that answers it just as well (the share button under a finished pack, for 测欧气)
 type Step = { page: string; h: string; p: (el: Element | null) => unknown; done: () => boolean; at: () => Element | null; alt?: () => Element | null };
 const STEPS: Step[] = [
-  { page: 'shelf', h: '进货', done: () => sum(G.state.stock) + sum(G.state.opened) > 0 || G.shelves().some(r => r.id), // a labelled shelf stays labelled once it sells out
-    at: () => pick('#shelf .set .primary[data-act="buy"]', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
-    p: el => { const id = (el as HTMLElement | null)?.dataset.id;
-      return html`点「进 10」从批发商进一箱。${id ? `${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，` : '进货价比市价低，'}差价就是卖一包的毛利。`; } },
-  { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id),
-    at: () => pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'),
+  { page: 'shelf', h: '进货', done: () => !toStock() && (sum(G.state.stock) + sum(G.state.opened) > 0 || G.shelves().some(r => r.id)), // a labelled shelf stays labelled once it sells out
+    at: () => { const x = toStock(); return x ? inRow(x.id, '.primary[data-act="buy"]') ?? inRow(x.id, '[data-act="buy"][data-n="10"]:not(:disabled)') : null; },
+    p: el => { const b = el as HTMLElement | null, id = b?.dataset.id, first = !sum(G.state.stock) && !G.shelves().some(r => r.id), key = `「${b?.textContent?.trim() || '进 10'}」`;
+      if (!id) return '进货价比市价低，差价就是卖一包的毛利。';
+      return first ? html`点${key}从批发商进货：${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，差价就是卖一包的毛利。一个货架放 ${G.depth()} 包；只进 10 包，半分钟就卖光，剩下的时间货架空着。`
+        : html`${G.setById(id).name}也进一架（点${key}）。来的顾客想买的系列不一样，货架上没有他要的那个，一半人直接走。`; } },
+  { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id) && !toRack(),
+    at: () => { const x = toRack(); return x ? inRow(x.id, '[data-act="shelve"]:not(:disabled)') : pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'); },
     // quote the button as it reads right now (「摆上空货架 9 包」the first time, 「上架 1 包」once the set has a shelf): a new player looks for those words
     p: el => { const b = `「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '摆上空货架'}」`; return sum(G.state.stock) ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。` : `仓库空了：先进货，再点${b}。只有货架上的包才卖得出去。`; } },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
@@ -51,7 +61,7 @@ const STEPS: Step[] = [
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off
   { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
     at: () => pick('#shelf .set .primary:not(:disabled)', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
-    p: el => (sum(G.state.stock) ? `仓库里有货，货架是空的：点「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '上架'}」。` : '货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。进一箱、摆上去，这就是每天的活。') },
+    p: el => (sum(G.state.stock) ? `仓库里有货，货架是空的：点「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '上架'}」。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。点「${el?.textContent?.trim() || '进一架'}」进货、再摆上去，这就是每天的活。`) },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
   { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
     at: () => shown(document.getElementById('due')),

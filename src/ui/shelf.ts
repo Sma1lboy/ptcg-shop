@@ -11,7 +11,7 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import type { Shelf } from '../game.ts';
 import { SETS, LOOK } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, logoUrl, imgUrl, toShelf, shelveLabel, lately, restock } from './common.ts';
+import { G, $, money, logoUrl, imgUrl, toShelf, shelveLabel, lately, restock, shelfFill } from './common.ts';
 import { hold } from './mat.ts';
 import { packFront } from '../table3d.js';
 
@@ -171,9 +171,12 @@ function draw() {
     const next = !stock ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
     const sum = html`${own ? html`仓库 <b>${stock}</b> · 货架 ${onShelf ? html`<b>${onShelf}</b>/${own * deep}` : html`<b>卖空了</b>`} <span class="sticker">${money(G.ask(set.id))}</span>`
       : html`没上架 · 仓库 <b>${stock}</b>`}${miss ? html` · <b>${miss}</b> 位没买到` : nothing}`;
-    // later on, when filling the back room costs under a quarter of the cash, the next step is 进满, not ten packs at a time
+    // later on, when filling the back room costs under a quarter of the cash, the next step is 进满; before that 进一架 (a shelf's
+    // worth: ten packs sold out in half a minute, the shelf then stood bare for minutes), and only when cash won't cover a shelf 进 10
     const fill = full.n === room && full.n > 10 && full.n * w * 4 <= s.cash;
+    const shelfN = shelfFill(set.id), rack = !fill && shelfN.full && shelfN.n > 10;
     const go = next === 'buy' ? (fill ? html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>`
+      : rack ? html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${shelfN.n}" title="${shelfN.title}">${shelfN.text}</button>`
       : html`<button type="button" class="primary" data-act="buy" data-id="${set.id}" data-n="${can(10) ? 10 : 1}" ?disabled=${!can(1)}>进 ${can(10) ? 10 : 1}</button>`)
       : next === 'shelve' ? html`<button type="button" class="primary" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}">${shelveLabel(set.id, own > 0 || !free)}</button>`
       : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
@@ -182,7 +185,8 @@ function draw() {
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>
-            <button type="button" class="${can(10) && !fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
+            <button type="button" class="${can(10) && !fill && !rack ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
+            ${shelfN.n > 10 && shelfN.n !== full.n ? html`<button type="button" class="${rack ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${shelfN.n}" title="${shelfN.title}">${shelfN.text}</button>` : nothing}
             ${full.n > 10 ? html`<button type="button" class="${fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>` : nothing}</span>
         </div>
         <div class="verb v-shelf" role="group" aria-label="${set.name} 货架">

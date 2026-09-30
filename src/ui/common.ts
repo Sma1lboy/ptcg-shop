@@ -56,4 +56,13 @@ export function restock(id: string) {
   const room = G.WAREHOUSE - (G.state.stock[id] || 0), n = Math.max(0, Math.min(room, Math.floor(G.state.cash / G.wholesale(id))));
   return { n, text: `${n === room ? '进满' : '进'} ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id))}${n < room ? `（仓库还能放 ${room}，钱只够这些）` : '，仓库放满'}` };
 }
+// 进一架: what fills this set's shelves (one empty shelf when it has none yet) plus the one pack 上架 keeps back for the player to open,
+// less what the back room already holds; capped by the cash. The guide's first buy and the usual restock (DESIGN.md「引导」): ten packs
+// sold out in about half a minute, a shelf of forty sells for minutes. n 0 when the back room already covers the shelf.
+export function shelfFill(id: string) {
+  const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth();
+  const want = Math.max(0, Math.min(room + 1 - (G.state.stock[id] || 0), G.WAREHOUSE - (G.state.stock[id] || 0)));
+  const n = Math.min(want, Math.floor(G.state.cash / G.wholesale(id)));
+  return { n, full: n === want, text: `进一架 ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id))}：摆满${own.length > 1 ? '这个系列的货架' : '一个货架'}（${G.depth()} 包），仓库留 1 包自己拆` };
+}
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };
