@@ -3,7 +3,7 @@
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money, shelfFill, toShelf } from './common.ts';
-import { nextStep } from './upgrades.ts';
+import { nextStep, growCount } from './upgrades.ts';
 import { go } from './layout.ts';
 import { guiding } from './guide.ts';
 import { hold } from './mat.ts';
@@ -75,22 +75,59 @@ export function initSlip() {
 // Things a new player can't see from 开包: the first sale ever (「顾客在货架上买走了你的包」, the money in the top bar is that), shelves
 // that sell out once the guide is over (their fix is a key right in the box: 上架 what the back room holds, or 进一架 and put it up —
 // every sold-out set at once when the cash covers them all), a set just unlocked while a shelf stands empty (the same key puts it
-// up), and the first time the spare cash covers a level on 成长. It waits out a pack reveal and the story; while the guide runs its
-// own steps (进货, 补货) speak for these. ----------
-type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' } | { kind: 'new'; id: string } | { kind: 'done' } | { kind: 'grow'; k: string } | { kind: 'hand' };
+// up), 成长's 下一步 once the 闲钱 covers it, and a pack left half-flipped. It waits out the story, and a reveal while 开包 shows it;
+// while the guide runs its own steps (进货, 补货) speak for the shelves.
+// A box stays up while what it says still holds, and its key keeps the count and price it was printed with while the cash covers them:
+// a box swapped for another between reading and clicking (新到 → another set's 进一架), or a key that read 40 and bought 46, did
+// something else than what the player read. Only a pack left mid-reveal on another page cuts in (after a sold-out shelf). ----------
+type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'done' };
+type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
-// on a shelf, while one stands empty. Sold out comes first, then new, then 成长; grew: the 下一步 (k + level) already said, or seen on
-// 成长 — each next level is said once, when the 闲钱 first covers it (the first-level-only note left minutes 8–11 with cash piling up)
-let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
-const stepKey = () => { const g = nextStep(); return g && !G.canBranch() && g.cost <= G.spare() ? `${g.k}:${g.lv}` : ''; };
+// on a shelf, while one stands empty; notes: 第一笔生意 / 引导走完了, each up until its 知道了 (a 9 s note went by unseen); grew: the
+// 下一步 (k + level) already said, or seen on 成长
+let memo: Memo | null = null, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
+const notes: Note[] = [];
+// the 下一步 the box names, once per item: when the 闲钱 covers it, or covers something else on 成长 while it waits (cash piled up
+// with 「3 项买得起」 on the tab and nothing said, because the 下一步 itself was still out of reach)
+const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || growCount() > 0) ? `${g.k}:${g.lv}` : ''; };
 const racked = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id!))];
 const unlocked = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
 const known = new Set(unlocked());
+// a pack left mid-reveal while the player is on another page: the story, the labels, the new cards and an overdue bill's grace all wait for it (mat.ts hold)
+const away = () => hold && document.documentElement.dataset.page !== 'open';
+// what fixes one set's empty shelf: 上架 from the back room (more than the pack kept to open), else 进一架 bought and put up (events.ts
+// 'refill' does the same per set); null when the cash doesn't cover a shelf's worth
+function fix(id: string) {
+  const up = toShelf(id); if ((G.state.stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 };
+  const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null;
+}
+// every sold-out set at once when each has a fix and the cash covers them together; else the first one alone
+function outIds() {
+  const all = [...out], fixes = all.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+  return all.length > 1 && fixes.every(Boolean) && cost <= G.state.cash ? all : all.slice(0, 1);
+}
+function holds(m: Memo) {
+  switch (m.kind) {
+    case 'first': case 'done': return notes[0] === m;
+    case 'hand': return away();
+    case 'out': return (away() || !guiding()) && m.ids.every(i => out.has(i));
+    case 'new': return !guiding() && !away() && fresh.has(m.id);
+    case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
+  }
+}
+function pick(): Memo | null {
+  if (away()) return out.size ? { kind: 'out', ids: outIds() } : { kind: 'hand' };
+  if (!guiding() && out.size) return { kind: 'out', ids: outIds() };
+  if (notes.length) return notes[0];
+  if (guiding()) return null;
+  const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey();
+  return nu ? { kind: 'new', id: nu } : k && k !== grew ? { kind: 'grow', k } : null;
+}
 function watchShop() {
   const s = G.state;
   if (soldBefore === 0 && s.cust.sold > 0) { // this save's first sale (a reload after it starts above zero: never again)
     const v = s.recent.find(x => x.r === 'sold' && !!x.n && !x.card);
-    brief({ kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' });
+    notes.push({ kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' });
   }
   soldBefore = s.cust.sold;
   const on = racked();
@@ -99,44 +136,35 @@ function watchShop() {
   for (const id of unlocked()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
   const free = G.shelves().some(r => !r.id);
   for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
-  if (memo?.kind !== 'first' && memo?.kind !== 'done') {
-    // a pack left mid-reveal while the player is on another page: the story, the labels, the new cards and an overdue bill's grace all
-    // wait for it (mat.ts hold), so the box says so — after a sold-out shelf, whose key works from anywhere, guide or not
-    const away = hold && document.documentElement.dataset.page !== 'open';
-    const nu = [...fresh][0], k = location.hash === '#grow' ? '' : stepKey(), grow = k && k !== grew ? k : '';
-    memo = away ? (out.size ? { kind: 'out' } : { kind: 'hand' })
-      : guiding() ? null : out.size ? { kind: 'out' } : nu ? { kind: 'new', id: nu } : grow ? { kind: 'grow', k: grow } : null;
-  }
+  // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
+  // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
+  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'hand' : (memo.kind === 'first' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && !guiding());
+  memo = memo && holds(memo) && !cut ? memo : pick();
   showMemo();
 }
-// a brief note (the first sale, the guide's end): up for 9 s or until tapped, then back to whatever the shelves say
-function brief(m: Memo) { memo = m; clearTimeout(memoTimer); memoTimer = window.setTimeout(close, 9000); }
-function close() { clearTimeout(memoTimer); if (memo?.kind === 'first' || memo?.kind === 'done') memo = null; watchShop(); }
-// what fixes one set's empty shelf: 上架 from the back room (more than the pack kept to open), else 进一架 bought and put up (events.ts
-// 'refill' does the same per set); null when the cash doesn't cover a shelf's worth
-function fix(id: string) {
-  const up = toShelf(id); if ((G.state.stock[id] || 0) > 1 && up) return { cost: 0, up };
-  const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0 } : null;
-}
+function close() { notes.shift(); memo = null; watchShop(); }
 function showMemo() {
   const el = $('memo'), was = el.hidden;
   el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open') || storyOpen(); // yields to the reveal only where it plays
   if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
   if (el.hidden) return;
-  const m = memo!, ident = m.kind === 'out' ? `out:${[...out].join()}` : m.kind === 'new' ? `new:${m.id}` : m.kind === 'grow' ? `grow:${m.k}` : m.kind;
-  // under the pointer the same note keeps its words: a key's count and price follow the cash every second, and the text changed under
-  // the cursor (进一架 52 → 56 → 60); a different note (a set restocked, another sold out) still replaces it
-  if (!was && el.dataset.ident === ident && el.matches(':hover')) return;
-  el.dataset.ident = ident;
-  if (m.kind === 'first') { // a key to put it away: on a phone the guide's bubble waits while the box is up (they'd overlap)
+  // the box's identity: which note, and for a shelf note how each set gets fixed (上架 / 进一架 / neither) and whether that leaves the
+  // next bill short — a count or a price that moved with the cash keeps its printed value, but a key that would now do something else
+  // (the back room ran out) or a bill line that stopped being true is printed again
+  const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+  const b = G.nextBill(), short = !!(cost && b && G.state.cash - cost < b.amount);
+  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}` : m.kind === 'grow' ? `grow:${m.k}` : m.kind;
+  if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) return; // the same box keeps its words (above)
+  el.dataset.ident = ident; el.dataset.cost = '0';
+  const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>知道了</button></div>`; // a note's key: on a phone the guide's bubble waits while the box is up
+  if (m.kind === 'first') {
     render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
-      <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>
-      <div class="mm-btns"><button type="button" class="primary" @click=${close}>知道了</button></div></div>`), el);
+      <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'done') {
-    render(keyed('done', html`<div class="mm-box" @click=${close}><h2>引导走完了</h2><p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
-      <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说；每周九姐按顶栏的倒计时来收账。</p></div>`), el);
+    render(keyed('done', html`<div class="mm-box"><h2>引导走完了</h2><p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
+      <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说；每周九姐按顶栏的倒计时来收账。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'hand') {
@@ -145,25 +173,28 @@ function showMemo() {
     return;
   }
   if (m.kind === 'grow') {
-    const g = nextStep()!;
+    const g = nextStep()!, spare = G.spare(), now = g.cost <= spare;
     // 成长's 下一步 just under the sticky top bar (scrollIntoView put it under the bar, the key cut off)
     const toGrow = () => { grew = m.k; go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
-    render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2><p>下一步是<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），${money(g.cost)}；闲钱 <b>${money(G.spare())}</b>，账单的钱已经留出来了。</p>
-      <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>去「成长」升级</button><button type="button" class="mm-x" @click=${() => { grew = m.k; watchShop(); }}>先不管</button></div></div>`), el);
+    render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2>${now
+      ? html`<p>下一步是<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），${money(g.cost)}；闲钱 <b>${money(spare)}</b>，账单的钱已经留出来了。</p>`
+      : html`<p>闲钱 <b>${money(spare)}</b> 够买「成长」页上 ${growCount()} 项；「下一步」<b>${g.name} Lv ${g.lv + 1}</b> 还差 ${money(g.cost - spare)}。账单的钱已经留出来了。</p>`}
+      <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>${now ? '去「成长」升级' : '去「成长」看看'}</button><button type="button" class="mm-x" @click=${() => { grew = m.k; watchShop(); }}>先不管</button></div></div>`), el);
     return;
   }
-  // every sold-out set at once when each has a fix and the cash covers them together; else the first one alone
-  const all = m.kind === 'out' ? [...out] : [m.id], fixes = all.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-  const ids = all.length > 1 && fixes.every(Boolean) && cost <= G.state.cash ? all : all.slice(0, 1);
-  const id = ids[0], set = G.setById(id), f = fixes[0], names = ids.map(x => G.setById(x).name).join('、');
+  const ids = sets, id = ids[0], set = G.setById(id), f = fixes[0], names = ids.map(x => G.setById(x).name).join('、');
+  el.dataset.cost = String(cost);
   const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}">都补上${cost ? ` ${money(cost)}` : ''}</button>`
     : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}">上架 ${f.up} 包</button>`
-    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${shelfFill(id).n}" title="${shelfFill(id).title}">进一架 ${shelfFill(id).n} 并上架 ${money(f.cost)}</button>`
+    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${f.n}" title="${shelfFill(id).title}">进一架 ${f.n} 并上架 ${money(f.cost)}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
-  const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); watchShop(); };
+  // the key spends into the bill's money: said on the box (the 成长 note keeps it, this one used to take the till down to $3). No
+  // amount left over in it: the words stay while the cash moves (above)
+  const bill = short && b ? html`<p class="mm-say">补完以后第 ${b.week} 周的账（${money(b.amount)}，还有约 ${Math.max(1, Math.floor(G.dueIn() / 60))} 分钟）暂时不够；货架上的包几分钟就卖回来。</p>` : '';
+  const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); memo = null; watchShop(); };
   const head = m.kind === 'out' ? html`<h2>${names}卖空了</h2><p class="mm-why">货架空着不进钱，来买${ids.length > 1 ? '这几个系列' : set.name}的顾客一半空手走。</p>`
     : html`<h2>新到：${set.name}</h2><p class="mm-why">营收够了，${set.name}可以进货了；店里还有一个空货架，摆上去就多一个系列在卖。</p>`;
-  render(keyed(`${m.kind}:${ids.join()}`, html`<div class="mm-box">${head}
+  render(keyed(ident, html`<div class="mm-box">${head}${bill}
     <div class="mm-btns">${key}<button type="button" class="mm-x" aria-label="先不管" @click=${x}>先不管</button></div></div>`), el);
 }
 export function initMemo() {
@@ -171,6 +202,6 @@ export function initMemo() {
   G.on(watchShop); watchShop();
   document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
-  document.addEventListener('ptcg:guidedone', () => { brief({ kind: 'done' }); showMemo(); });
-  addEventListener('hashchange', () => { if (location.hash === '#grow') grew = stepKey() || grew; watchShop(); }); // 成长 seen on its own: its 下一步 needs no note
+  document.addEventListener('ptcg:guidedone', () => { notes.push({ kind: 'done' }); watchShop(); });
+  addEventListener('hashchange', () => { if (location.hash === '#grow') grew = growKey() || grew; watchShop(); }); // 成长 seen on its own: its 下一步 needs no note
 }
