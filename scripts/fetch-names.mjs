@@ -27,7 +27,7 @@ async function cached(file, make) {
 }
 async function fetchRetry(url, kind, body) {
   for (let i = 0; i < 5; i++) {
-    try { const r = await fetch(url, { headers: UA, ...(body && { method: 'POST', body }) }); if (r.ok) return kind === 'text' ? await r.text() : await r.json(); console.log('  HTTP', r.status, url.slice(0, 90)); } catch (e) { console.log('  fetch error', e.message, url.slice(0, 90)); }
+    try { const r = await fetch(url, { headers: UA, ...(body && { method: 'POST', body }) }); if (r.ok) return kind === 'text' ? await r.text() : await r.json(); console.log('  retry: HTTP', r.status); } catch (e) { console.log('  retry:', e.message); }
     await sleep(600 * 2 ** i);
   }
   throw new Error('fetch failed: ' + url);
@@ -61,15 +61,17 @@ async function wikiRows(set, title) {
 }
 // the wiki's own converter turns the traditional characters some names are stored with into simplified
 async function simplify(names) {
-  const uniq = [...new Set(names)], out = {};
-  for (let i = 0; i < uniq.length; i += 80) {
-    const chunk = uniq.slice(i, i + 80); await sleep(500); // the wiki answers 429 to a burst
+  const file = 'data/raw/simplified.json', known = existsSync(file) ? JSON.parse(await readFile(file, 'utf8')) : {};
+  const todo = [...new Set(names)].filter(n => !(n in known));
+  for (let i = 0; i < todo.length; i += 80) {
+    const chunk = todo.slice(i, i + 80); await sleep(500); // the wiki answers 429 to a burst
     const j = await fetchRetry(WIKI, 'json', new URLSearchParams({ action: 'parse', text: chunk.join('\n\n'), contentmodel: 'wikitext', prop: 'text', variant: 'zh-hans', format: 'json' }));
     const ps = [...j.parse.text['*'].matchAll(/<p>([\s\S]*?)<\/p>/g)].map(m => m[1].replace(/<[^>]+>/g, '').trim().replace(/[\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xFEE0))); // full-width letters and digits ＰＰ → PP, punctuation stays
     if (ps.length !== chunk.length) throw new Error(`simplify: ${ps.length} != ${chunk.length}`);
-    chunk.forEach((n, k) => { out[n] = ps[k].replace(/&amp;/g, '&').replace(/&#160;/g, ' ').replace(/&#0?39;/g, "'"); });
+    chunk.forEach((n, k) => { known[n] = ps[k].replace(/&amp;/g, '&').replace(/&#160;/g, ' ').replace(/&#0?39;/g, "'"); });
   }
-  return out;
+  if (todo.length) await writeFile(file, JSON.stringify(known));
+  return known;
 }
 
 // --- PokeAPI: dex number → 简中 species name (language_id 12 = zh-Hans)
@@ -132,6 +134,7 @@ for (const [id, s] of Object.entries(sets)) {
     if (!/[\u4e00-\u9fff]/.test(zh)) continue; // an untranslated row (still English)
     // Trainer rows carry the artwork's character after a space («博士的研究 奥琳博士», the English card is just "Professor's Research"); a real space stays only in "Technical Machine: X"
     if (cat !== 'Pokemon' && !c.name.includes(':')) zh = zh.split(' ')[0];
+    zh = zh.replace(/^基本(.+能量)$/, '基础$1'); // the game's own basic Energy (sim.ts) is 基础X能量
     out[id][c.n] = zh; bump(c.name, zh);
   }
 }
