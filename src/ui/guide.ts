@@ -72,8 +72,9 @@ const phone = () => innerWidth < 780;
 // what the popover may not cover from below: the phone's bottom tabs
 const floor = () => (phone() ? Math.min(innerHeight, document.querySelector('.nav')?.getBoundingClientRect().top ?? innerHeight) : innerHeight);
 // On the mat the thing to look at sits above the button (the 3D pack above its label, the cards and the pack's value above the
-// share button), so opening above would cover it. Desktop: beside the anchor, bottom edges level, and in a summary past its
-// text too. Phone: a strip without the heading, below the button, scrolled up to make room for it.
+// share button), so opening above would cover it. Desktop: on the mat beside the anchor, bottom edges level, and in a summary past
+// its text too; a button on a page gets the docked message box (below). Phone: a strip without the heading, below the button,
+// scrolled up to make room for it.
 let seek = 0; // until when a new step may still scroll its button into view
 function place() {
   const pop = $('coach');
@@ -81,14 +82,13 @@ function place() {
   const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav');
   // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
   // 「测欧气：到「欧气」页」, on every screen: the full text under a tab covered what the player was reading on this page (成长's
-  // 账本, 成就's totals, the 开包 title) and had nothing to do with it
-  if ((phone() && onMat) || tab) pop.dataset.strip = tab ? 'tab' : 'mat'; else delete pop.dataset.strip;
-  if (onMat && !phone()) pop.dataset.side = 'right';
-  // the stock keys (进 1 / 进 10 / 进 N) of a set's row on 货柜: the bubble sits left of the row's first key, over that row's own name
-  // and numbers, instead of below (the next set's keys) or above (the shelf's pickers and 加一个货架). Keys further right in the
-  // row (摆上空货架, the price rail) open below: to their left are the stock keys
-  const row = !phone() && !!anchor.closest('#shelf .set') && anchor.matches('[data-act="buy"]');
-  if (row) pop.dataset.side = 'left'; else if (!(onMat && !phone())) pop.dataset.side = 'below'; // measured at the width it opens with
+  // 账本, 成就's totals, the 开包 title) and had nothing to do with it.
+  // A button on a page (货柜's 进 10 / 摆上空货架 / the price, 欧气's heading) on a desktop: the step is a BW message box docked at the
+  // bottom of the screen, the way BW's tutorials talk in the text box, and the button (dashed ring) is scrolled into the upper part.
+  // A bubble beside it always covered something the step was about: the row's name and stock, the next set's keys, the pickers.
+  const dock = !phone() && !onMat && !tab && !anchor.matches('#due');
+  if ((phone() && onMat) || tab) pop.dataset.strip = tab ? 'tab' : 'mat'; else if (dock) pop.dataset.strip = 'dock'; else delete pop.dataset.strip;
+  if (onMat && !phone()) pop.dataset.side = 'right'; else pop.dataset.side = 'below'; // measured at the width it opens with
   const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
   let w = pop.offsetWidth, h = pop.offsetHeight;
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -96,13 +96,12 @@ function place() {
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
   if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
-    // a page button on a desktop too: the bubble opens below the button (over the rows under it) rather than above, where it
-    // covered the shelf's pickers and 加一个货架 the step is next to; only as far as the button stays under the top bar
-    const below = pop.dataset.strip === 'mat' || (!phone() && !onMat && !tab && !row);
-    const need = below ? Math.min(a.bottom + gap + h + 24 - vh, a.top - 120) : 0; // 16px to spare: the 3D labels settle a few px after the scroll
+    const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
+    const room = dock ? Math.min(vh - h - 40, vh * .55) : innerHeight - 70; // docked: the button (and the row under it) stays well above the box
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
-    else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    else if (a.top < 70 || a.bottom > room) { seek = 0; scrollBy({ top: a.top - Math.max(90, (70 + room - a.height) / 2), behavior: 'smooth' }); }
   }
+  if (dock) { pop.style.left = ''; pop.style.top = ''; return; } // style.css places it
   if (onMat && !phone()) {
     let right = a.right; const sum = anchor.closest('.summary');
     if (sum) for (const el of sum.querySelectorAll('p, button')) {
@@ -117,17 +116,6 @@ function place() {
       return;
     }
     pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
-  }
-  if (row) { // left of the row's first key (not just of the step's key: 进 1 sits right beside 进 10), over the set's name and numbers
-    const keys = [...anchor.closest('#shelf .set')!.querySelectorAll('button[data-act]')].map(b => b.getBoundingClientRect()).filter(r => r.width && Math.abs(r.top - a.top) < a.height);
-    const x = Math.min(a.left, ...keys.map(r => r.left)) - gap - w;
-    if (x >= 8) {
-      const y = clamp(a.top + a.height / 2 - h / 2, 8, vh - h - 8);
-      pop.style.left = `${x}px`; pop.style.top = `${y}px`;
-      pop.style.setProperty('--ay', `${clamp(a.top + a.height / 2 - y, 16, h - 16)}px`);
-      return;
-    }
-    pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight;
   }
   // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;

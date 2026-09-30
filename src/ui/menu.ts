@@ -32,10 +32,12 @@ function place() {
   // tab under the cursor: a ▶ beside it would land on the neighbour tab's icon. A <summary> has its own ▸ (two arrows side by side),
   // and the table (a pack in hand, mat.ts) is pointed at by its own hint line
   cur.classList.toggle('off', !!a.closest('.nav, .subnav, .bk-tabs, #mat:not(:has(:focus))') || a.matches('summary'));
-  // left of the control, the way BW points at a row — inside its left padding when it has room for the ▶ (a command button),
-  // so it never lands on what sits just left of it (a neighbour key, the 「95%」 of the price row); outside only for a bare one
-  const pad = parseFloat(getComputedStyle(a).paddingLeft) || 0;
-  cur.style.left = `${pad >= 14 ? r.left + 3 : Math.max(2, r.left - 16)}px`; cur.style.top = `${mid}px`;
+  // left of the control, the way BW points at a row — inside its left padding when it has room for the ▶ (a command button), and
+  // inside its left edge whenever something else sits just left of it (a neighbour key, the 「95%」 before the price rail's −: the
+  // element under that spot is then not a box that holds the control); outside only for a bare one
+  const pad = parseFloat(getComputedStyle(a).paddingLeft) || 0, left = r.left > 18 ? document.elementFromPoint(r.left - 9, mid) : null;
+  const inside = pad >= 14 || (!!left && left !== a && !left.contains(a) && !cur.contains(left));
+  cur.style.left = `${inside ? r.left + 3 : Math.max(2, r.left - 16)}px`; cur.style.top = `${mid}px`;
 }
 
 // BW's cursor stays where A was pressed. A press here often re-renders or removes its control (a tab switches the page, a
