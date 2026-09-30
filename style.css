@@ -1712,7 +1712,8 @@ button:disabled { cursor: not-allowed; }
 .due.late { background: var(--danger-face); color: var(--danger-ink); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .18), 0 0 0 2px #101318; }
 .due.late :is(.k, small) { color: var(--danger-ink); }
 .due:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
-@media (max-width: 779px) { .due { padding: 3px 8px; gap: 4px; } .due small, .due:not(.late) .k { display: none; } .due b { min-width: 0; font-size: var(--fs-cap); } .due .bar { width: 44px; --in: 3px; } .due .bar::before { display: none; } }
+@media (max-width: 779px) { .due { padding: 3px 8px; gap: 4px; } .due small, .due:not(.late) .k { display: none; } .due b { min-width: 0; font-size: var(--fs-cap); } .due .bar { width: 44px; --in: 3px; } .due .bar::before { display: none; }
+  .due:not(.late) b::before { content: "账 "; color: var(--muted); } /* the countdown alone read as a clock: 账 says it is 九姐's (the guide's 账单 step explains it once) */ }
 
 .page-grow > .ledger { grid-column: 1 / -1; }
 .lg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 40px; }

@@ -7,6 +7,7 @@ import { guiding } from './guide.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 import { bill, owed } from '../debt.ts';
+import { SETS } from '../sets.ts';
 
 // On a phone the receipt first shows only its tear-off stub (style.css): one line under the top bar with the hours and the net,
 // so it doesn't cover or push down what the player came back to press; tapping the stub prints the whole receipt.
@@ -69,47 +70,69 @@ export function initSlip() {
 }
 
 // ---------- 店里的话 (#memo, DESIGN.md「店里的话」): a BW message box printed out of the same slot, on whatever page the player is on.
-// Two things a new player can't see from 开包: the first sale ever (「顾客在货架上买走了你的包」, the money in the top bar is that), and a
-// shelf that sells out once the guide is over (its fix is a key right in the box: 上架 what the back room holds, or 进一架 and put it up).
-// It waits out a pack reveal and the story; the guide's own 补货 step speaks for a sold-out shelf while the guide runs. ----------
-type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out'; id: string };
-// out: sets whose shelf sold out and haven't been restocked or waved off (先不管); the box says the first of them once nothing else is up
-let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>();
+// Things a new player can't see from 开包: the first sale ever (「顾客在货架上买走了你的包」, the money in the top bar is that), a shelf
+// that sells out once the guide is over (its fix is a key right in the box: 上架 what the back room holds, or 进一架 and put it up),
+// and a set just unlocked while a shelf stands empty (the same key puts it up). It waits out a pack reveal and the story; while the
+// guide runs its own steps (进货, 补货) speak for these. ----------
+type Memo = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'out' | 'new'; id: string } | { kind: 'done' };
+// out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
+// on a shelf, while one stands empty. The box says the first of them (sold out before new) once nothing else is up
+let memo: Memo | null = null, memoTimer = 0, soldBefore = G.state.cust.sold, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>();
 const racked = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id!))];
+const unlocked = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
+const known = new Set(unlocked());
 function watchShop() {
   const s = G.state;
   if (soldBefore === 0 && s.cust.sold > 0) { // this save's first sale (a reload after it starts above zero: never again)
     const v = s.recent.find(x => x.r === 'sold' && !!x.n && !x.card);
-    memo = { kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' };
-    clearTimeout(memoTimer); memoTimer = window.setTimeout(() => { if (memo?.kind === 'first') { memo = null; watchShop(); } }, 9000);
+    brief({ kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' });
   }
   soldBefore = s.cust.sold;
   const on = racked();
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
-  if (memo?.kind !== 'first') { const id = guiding() ? undefined : [...out][0]; memo = id ? { kind: 'out', id } : null; }
+  for (const id of unlocked()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
+  const free = G.shelves().some(r => !r.id);
+  for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
+  if (memo?.kind !== 'first' && memo?.kind !== 'done') {
+    const id = guiding() ? undefined : [...out][0], nu = id || guiding() ? undefined : [...fresh][0];
+    memo = id ? { kind: 'out', id } : nu ? { kind: 'new', id: nu } : null;
+  }
   showMemo();
 }
+// a brief note (the first sale, the guide's end): up for 9 s or until tapped, then back to whatever the shelves say
+function brief(m: Memo) { memo = m; clearTimeout(memoTimer); memoTimer = window.setTimeout(close, 9000); }
+function close() { clearTimeout(memoTimer); if (memo?.kind === 'first' || memo?.kind === 'done') memo = null; watchShop(); }
 function showMemo() {
-  const el = $('memo');
-  if (!memo || hold || storyOpen()) { el.hidden = true; return; }
-  el.hidden = false;
-  const m = memo;
+  const el = $('memo'), was = el.hidden;
+  el.hidden = !memo || hold || storyOpen();
+  if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
+  if (el.hidden) return;
+  const m = memo!;
   if (m.kind === 'first') {
-    render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
+    render(keyed('first', html`<div class="mm-box" @click=${close}><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
       <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p></div>`), el);
+    return;
+  }
+  if (m.kind === 'done') {
+    render(keyed('done', html`<div class="mm-box" @click=${close}><h2>引导走完了</h2><p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
+      <p class="mm-say">钱够了去「成长」升级；每周九姐按顶栏的倒计时来收账。</p></div>`), el);
     return;
   }
   const id = m.id, set = G.setById(id), stock = G.state.stock[id] || 0, fill = shelfFill(id), up = toShelf(id);
   const key = stock > 1 && up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${up}">上架 ${up} 包</button>`
     : fill.n > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${fill.n}" title="${fill.title}">进一架 ${fill.n} 并上架 ${money(fill.n * G.wholesale(id))}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
-  render(keyed(`out:${id}`, html`<div class="mm-box"><h2>${set.name}卖空了</h2><p>货架空着不进钱，来买${set.name}的顾客一半空手走。</p>
-    <div class="mm-btns">${key}<button type="button" class="mm-x" aria-label="先不管" @click=${() => { out.delete(id); watchShop(); }}>先不管</button></div></div>`), el);
+  const x = () => { (m.kind === 'out' ? out : fresh).delete(id); watchShop(); };
+  const head = m.kind === 'out' ? html`<h2>${set.name}卖空了</h2><p>货架空着不进钱，来买${set.name}的顾客一半空手走。</p>`
+    : html`<h2>新到：${set.name}</h2><p>营收够了，${set.name}可以进货了；店里还有一个空货架，摆上去就多一个系列在卖。</p>`;
+  render(keyed(`${m.kind}:${id}`, html`<div class="mm-box">${head}
+    <div class="mm-btns">${key}<button type="button" class="mm-x" aria-label="先不管" @click=${x}>先不管</button></div></div>`), el);
 }
 export function initMemo() {
   for (const id of racked()) stocked[id] = G.shelfQty(id) > 0;
   G.on(watchShop);
   document.addEventListener('ptcg:release', () => setTimeout(showMemo, 600));
   document.addEventListener('ptcg:story', () => setTimeout(showMemo, 400));
+  document.addEventListener('ptcg:guidedone', () => { brief({ kind: 'done' }); showMemo(); });
 }

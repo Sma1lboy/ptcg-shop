@@ -168,7 +168,8 @@ function draw() {
     if (!G.unlocked(set.id)) return html`<article class="set locked">${head()}
         <p class="set-mkt">累计营业额 ${money(G.unlockAt(set.id))} 解锁进货（现在 ${money(G.revenue())}）</p></article>`;
     const margin = G.ask(set.id) - w;
-    const next = !stock ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
+    // the one pack 上架 keeps back is the player's to open: with it alone left and the shelf bare, the next step is to buy, not 「上架 1 包」
+    const next = !stock || (stock <= 1 && !onShelf && own > 0) ? 'buy' : !onShelf && canShelve ? 'shelve' : 'open', p = (k: string) => (next === k ? 'primary' : '');
     const sum = html`${own ? html`仓库 <b>${stock}</b> · 货架 ${onShelf ? html`<b>${onShelf}</b>/${own * deep}` : html`<b>卖空了</b>`} <span class="sticker">${money(G.ask(set.id))}</span>`
       : html`没上架 · 仓库 <b>${stock}</b>`}${miss ? html` · <b>${miss}</b> 位没买到` : nothing}`;
     // later on, when filling the back room costs under a quarter of the cash, the next step is 进满; before that 进一架 (a shelf's

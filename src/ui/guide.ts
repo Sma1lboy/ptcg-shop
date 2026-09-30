@@ -12,7 +12,7 @@ import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1 };
+type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1; done?: 1 }; // done: every step was reached once — the guide is over for good (a sold-out shelf or a new set later is notice.ts's, not a step replayed)
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -58,10 +58,14 @@ const STEPS: Step[] = [
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
-  // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off
+  // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off. Not a
+  // numbered step (it comes and goes with the shelves); the key and the text are one: the sold-out set's own row — 上架 N 包 when
+  // the back room holds more than the one pack kept to open, else its 进一架
   { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
-    at: () => pick('#shelf .set .primary:not(:disabled)', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
-    p: el => (sum(G.state.stock) ? `仓库里有货，货架是空的：点「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '上架'}」。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。点「${el?.textContent?.trim() || '进一架'}」进货、再摆上去，这就是每天的活。`) },
+    at: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
+      return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
+    p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;
+      return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。点${key}再进一架、摆上去，这就是每天的活。`; } },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
   { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
     at: () => shown(document.getElementById('due')),
@@ -75,9 +79,11 @@ const STEPS: Step[] = [
 
 const TAB: Record<string, string> = { open: '开包', shelf: '货柜', luck: '欧气', grow: '成长' };
 let replay = -1; // index while replaying from the footer, else -1
-const current = () => (replay >= 0 ? replay : rec.off || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
+const current = () => (replay >= 0 ? replay : rec.off || rec.done || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
 // the guide still has a step to show (notice.ts leaves a sold-out shelf to the guide's own 补货 until then)
 export const guiding = () => current() >= 0;
+// 新手 n/6: the numbered steps skip 补货, which only turns up when a shelf is empty (the numbers jumped 4 → 6 → 5 on a phone)
+const NUMBERED = STEPS.filter(s => s.h !== '补货');
 
 let anchor: Element | null = null;
 const phone = () => innerWidth < 780;
@@ -143,9 +149,10 @@ const follow = new MutationObserver(place);
 let last = -2, lastAt = ''; // the step and the button it pointed at when last shown
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
+  if (i < 0 && replay < 0 && !rec.off && !rec.done && !graduated() && sum(G.state.opened) > 0) { rec.done = 1; save(); document.dispatchEvent(new Event('ptcg:guidedone')); } // the last step just done: once, said by notice.ts
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
-  // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜
-  const printing = document.getElementById('ach-pop')?.hidden === false;
+  // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜; on a phone the shop's message box too
+  const printing = document.getElementById('ach-pop')?.hidden === false || (phone() && document.getElementById('memo')?.hidden === false);
   if (!step || hold || storyOpen() || printing) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button wherever it is visible (at() only finds shown ones: 开一包's 「开 1 包」 right there on 货柜, the top bar's
   // bill chip on any page), else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
@@ -154,7 +161,7 @@ export function renderGuide() {
   if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
   const n = replay >= 0, end = i === STEPS.length - 1;
-  render(html`<p class="co-k">新手 ${i + 1}/${STEPS.length}</p>
+  render(html`<p class="co-k">${step.h === '补货' ? '新手 · 提醒' : `新手 ${NUMBERED.indexOf(step) + 1}/${NUMBERED.length}`}</p>
     <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到${page() === 'case' && step.page === 'shelf' ? '「货架」' : `「${TAB[step.page]}」页`}</small>`}</h3>
     <p>${step.p(here)}</p>
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
@@ -180,7 +187,7 @@ export function bindGuide() {
   sawLuck(); // a reload straight onto #luck counts too
   addEventListener('hashchange', () => { sawLuck(); renderGuide(); });
   addEventListener('resize', place); addEventListener('scroll', place, { passive: true });
-  document.addEventListener('ptcg:release', renderGuide); document.addEventListener('ptcg:story', renderGuide);
+  document.addEventListener('ptcg:release', renderGuide); document.addEventListener('ptcg:story', renderGuide); document.addEventListener('ptcg:memo', renderGuide);
   document.addEventListener('click', e => {
     const t = e.target as Element, b = t.closest<HTMLElement>('[data-coach], [data-act]'); if (!b) return;
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }
