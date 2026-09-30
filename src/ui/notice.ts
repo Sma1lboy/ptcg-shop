@@ -120,7 +120,8 @@ function holds(m: Memo) {
   }
 }
 function pick(): Memo | null {
-  if (away()) return out.size ? { kind: 'out', ids: outIds() } : { kind: 'hand' };
+  // away: a sold-out shelf first, then an unread 第一次收卡 (cash fell with only 「收卡 −$」 to say why), then the half-flipped pack
+  if (away()) return out.size ? { kind: 'out', ids: outIds() } : notes[0]?.kind === 'intake' ? notes[0] : { kind: 'hand' };
   if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
   if (notes.length) return notes[0];
   if (guiding()) return null;
@@ -145,7 +146,7 @@ function watchShop() {
   for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
   // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
-  const cut = memo && (away() ? memo.kind !== 'out' && (memo.kind !== 'hand' || out.size > 0) : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine());
+  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine());
   memo = memo && holds(memo) && !cut ? memo : pick();
   showMemo();
 }
@@ -178,7 +179,7 @@ function showMemo() {
   }
   if (m.kind === 'done') {
     render(keyed('done', html`<div class="mm-box"><h2>引导走完了</h2><p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
-      <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说；每周九姐按顶栏的倒计时来收账。</p>${ok}</div>`), el);
+      <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说。每周九姐按顶栏的倒计时来收账：到点现金够就自动付，不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'hand') {
@@ -188,8 +189,10 @@ function showMemo() {
   }
   if (m.kind === 'grow') {
     const g = nextStep()!, spare = G.spare(), now = g.cost <= spare;
-    // 成长's 下一步 just under the sticky top bar (scrollIntoView put it under the bar, the key cut off)
-    const toGrow = () => { grew = m.k; go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
+    // 成长's 下一步 just under the sticky top bar (scrollIntoView put it under the bar, the key cut off). Going there doesn't count as
+    // told: a player pulled away before 升级 (a 新到 box landing in the same seconds) heard nothing more for six minutes; the box is
+    // down while 成长 shows and comes back when they leave without buying — only 先不管 or buying the level ends it
+    const toGrow = () => { go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
     render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2>${now
       ? html`<p>下一步是<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），${money(g.cost)}；闲钱 <b>${money(spare)}</b>，账单的钱已经留出来了。</p>`
       : html`<p>闲钱 <b>${money(spare)}</b> 够买「成长」页上 ${growCount()} 项；「下一步」<b>${g.name} Lv ${g.lv + 1}</b> 还差 ${money(g.cost - spare)}。账单的钱已经留出来了。</p>`}

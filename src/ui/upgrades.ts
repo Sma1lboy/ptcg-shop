@@ -122,7 +122,7 @@ export function renderUpgrades() {
       ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? (goal.cost <= G.spare() ? '下一步，现在就能升' : '下一步，钱够但要动账单的钱') : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
         <button type="button" class="gg-what" @click=${() => seek(`tn-${goal.k}`)}><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span><i aria-hidden="true">↓</i></button>
-        ${cash >= goal.cost ? html`<button type="button" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
+        ${cash >= goal.cost ? html`<button type="button" class="${goal.cost <= G.spare() ? 'primary' : ''}" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
           : html`${bar(cash / goal.cost, `攒了 ${Math.round(cash / goal.cost * 100)}%`)}
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
         ${spareLine()}
