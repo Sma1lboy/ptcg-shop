@@ -13,7 +13,7 @@
 | CodePen 单文件 | `npm run pen` → `dist/pen.html`，超过 1,000,000 字符构建直接失败 |
 | 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
 | 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
-| 像素字 | `node scripts/pixel-font.mjs`（加了新文案后重切字体子集，要 `uv`）；`--check` 列出源码里有、字体里没有的字，缺就退出 1 |
+| 像素字 | `node scripts/pixel-font.mjs`（加了新文案后重切字体子集，要 `uv`：用户已同意，用 uvx 跑 fonttools，不进 package.json）；`--check` 列出源码里有、字体里没有的字，缺就退出 1 |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
