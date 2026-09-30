@@ -512,7 +512,10 @@ export function bindMatInput() {
   document.addEventListener('click', e => { if (!ripMoved || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
 
   document.addEventListener('keydown', e => {
-    if (e.code !== 'Space' || (e.target as Element).closest('input, textarea') || $('mat').closest('[hidden]')) return; // not while another page is showing
+    // Space, and BW's A (Enter / Z) when no control has the focus (a pack just picked with the keys: its button is gone and the
+    // focus rests on the table) — tear, flip, flip the next. On a focused control Enter / Z are that control's own (menu.ts)
+    const t = e.target as Element, a = (e.key === 'Enter' || e.key === 'z' || e.key === 'Z') && !t.closest('button, a, summary, input, select, textarea, [tabindex="0"], dialog');
+    if ((e.code !== 'Space' && !a) || t.closest('input, textarea') || $('mat').closest('[hidden]')) return; // not while another page is showing
     FX.unlock();
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }

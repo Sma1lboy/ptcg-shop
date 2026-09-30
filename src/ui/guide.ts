@@ -84,6 +84,11 @@ function place() {
   // 账本, 成就's totals, the 开包 title) and had nothing to do with it
   if ((phone() && onMat) || tab) pop.dataset.strip = tab ? 'tab' : 'mat'; else delete pop.dataset.strip;
   if (onMat && !phone()) pop.dataset.side = 'right';
+  // the stock keys (进 1 / 进 10 / 进 N) of a set's row on 货柜: the bubble sits left of the row's first key, over that row's own name
+  // and numbers, instead of below (the next set's keys) or above (the shelf's pickers and 加一个货架). Keys further right in the
+  // row (摆上空货架, the price rail) open below: to their left are the stock keys
+  const row = !phone() && !!anchor.closest('#shelf .set') && anchor.matches('[data-act="buy"]');
+  if (row) pop.dataset.side = 'left'; else if (!(onMat && !phone())) pop.dataset.side = 'below'; // measured at the width it opens with
   const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
   let w = pop.offsetWidth, h = pop.offsetHeight;
   const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -93,7 +98,7 @@ function place() {
   if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
     // a page button on a desktop too: the bubble opens below the button (over the rows under it) rather than above, where it
     // covered the shelf's pickers and 加一个货架 the step is next to; only as far as the button stays under the top bar
-    const below = pop.dataset.strip === 'mat' || (!phone() && !onMat && !tab);
+    const below = pop.dataset.strip === 'mat' || (!phone() && !onMat && !tab && !row);
     const need = below ? Math.min(a.bottom + gap + h + 24 - vh, a.top - 120) : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
     else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
@@ -113,6 +118,17 @@ function place() {
     }
     pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
   }
+  if (row) { // left of the row's first key (not just of the step's key: 进 1 sits right beside 进 10), over the set's name and numbers
+    const keys = [...anchor.closest('#shelf .set')!.querySelectorAll('button[data-act]')].map(b => b.getBoundingClientRect()).filter(r => r.width && Math.abs(r.top - a.top) < a.height);
+    const x = Math.min(a.left, ...keys.map(r => r.left)) - gap - w;
+    if (x >= 8) {
+      const y = clamp(a.top + a.height / 2 - h / 2, 8, vh - h - 8);
+      pop.style.left = `${x}px`; pop.style.top = `${y}px`;
+      pop.style.setProperty('--ay', `${clamp(a.top + a.height / 2 - y, 16, h - 16)}px`);
+      return;
+    }
+    pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight;
+  }
   // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
   const below = a.bottom + gap + h <= vh - 8 || top - gap - h < 8; // phones: the tabs sit at the bottom, so tab steps open upward
@@ -128,7 +144,9 @@ let last = -2;
 export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
-  if (!step || hold || storyOpen()) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
+  // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜
+  const printing = document.getElementById('ach-pop')?.hidden === false;
+  if (!step || hold || storyOpen() || printing) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button wherever it is visible (at() only finds shown ones: 开一包's 「开 1 包」 right there on 货柜, the top bar's
   // bill chip on any page), else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
   const here = step.at() ?? step.alt?.() ?? null;

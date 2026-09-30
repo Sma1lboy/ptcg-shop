@@ -127,8 +127,12 @@ export function initStory() {
   // away — a first-time player presses it to hurry the text. Only 跳过 (reachable with the arrow keys) ends the scene
   d.addEventListener('cancel', e => { e.preventDefault(); next(); });
   // Escape itself is caught on keydown: Chrome closes a modal dialog on the second Esc without a click in between, whatever the
-  // cancel handler says
-  d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); next(); } });
+  // cancel handler says. A key held down (auto-repeat) only finishes the line being typed, like holding BW's B: it never turns a
+  // run of pages, nor presses the scene's last key
+  d.addEventListener('keydown', e => {
+    if (e.repeat && ['Escape', 'Enter', ' ', 'z', 'Z', 'x', 'X'].includes(e.key)) { e.preventDefault(); e.stopImmediatePropagation(); if (cur && cur.typed < text(cur).length) next(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); next(); }
+  });
   d.addEventListener('close', () => { if (cur) end(); }); // closed some other way: still release the guide
   G.on(onEmit);
   document.addEventListener('ptcg:release', () => setTimeout(flush, 600)); // after the pack's summary is on the mat

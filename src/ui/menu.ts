@@ -29,12 +29,27 @@ function place() {
   const host = a.closest<HTMLElement>('dialog[open], :popover-open') ?? document.body; if (cur.parentElement !== host) host.append(cur);
   const r = a.getBoundingClientRect(), mid = r.top + r.height / 2;
   // a tab (the menu's page tabs, 货柜's view tabs, the binder's pockets) shows where it is by its own focus ring, as BW frames the
-  // tab under the cursor: a ▶ beside it would land on the neighbour tab's icon
-  cur.classList.toggle('off', !!a.closest('.nav, .subnav, .bk-tabs'));
-  // left of the control, the way BW points at a row; when another control sits right there (a row of buttons), inside its left
-  // padding instead, so the ▶ never lands on the neighbour
-  const next = r.left > 18 && document.elementFromPoint(r.left - 9, mid)?.closest(ITEMS);
-  cur.style.left = `${next && next !== a ? r.left + 4 : Math.max(2, r.left - 16)}px`; cur.style.top = `${mid}px`;
+  // tab under the cursor: a ▶ beside it would land on the neighbour tab's icon. A <summary> has its own ▸ (two arrows side by side),
+  // and the table (a pack in hand, mat.ts) is pointed at by its own hint line
+  cur.classList.toggle('off', !!a.closest('.nav, .subnav, .bk-tabs, #mat:not(:has(:focus))') || a.matches('summary'));
+  // left of the control, the way BW points at a row — inside its left padding when it has room for the ▶ (a command button),
+  // so it never lands on what sits just left of it (a neighbour key, the 「95%」 of the price row); outside only for a bare one
+  const pad = parseFloat(getComputedStyle(a).paddingLeft) || 0;
+  cur.style.left = `${pad >= 14 ? r.left + 3 : Math.max(2, r.left - 16)}px`; cur.style.top = `${mid}px`;
+}
+
+// BW's cursor stays where A was pressed. A press here often re-renders or removes its control (a tab switches the page, a
+// pack picked from the rail puts the rail's keys to sleep and the pack on the table): when the focus falls to the page body,
+// put it back — on the table while a pack is in hand on 开包 (Enter / Z / Space tear and flip there, mat.ts), else on the
+// control itself if it's still there, else on this page's tab
+function keep(pressed: HTMLElement) {
+  setTimeout(() => {
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const mat = document.getElementById('mat'), inHand = !!mat && !mat.closest('[hidden]') && !!mat.querySelector('.pack, .scene3d, .deck, .haul');
+    const to = inHand ? mat : pressed.isConnected && shown(pressed) && pressed.matches(ITEMS) ? pressed : document.querySelector<HTMLElement>('.nav a[aria-current="page"]');
+    if (to === mat && mat) mat.tabIndex = -1;
+    to?.focus({ preventScroll: true }); place();
+  }, 60);
 }
 
 // the nearest control in the arrow's direction: straight ahead counts more than off to the side
@@ -81,6 +96,7 @@ export function initMenu() {
       if (!a || !a.matches(ITEMS)) return;
       if (e.key === 'z' || e.key === 'Z') { e.preventDefault(); a.click(); }
       if (!a.closest('#mat, #story')) ui('ok'); // the mat and the story have their own sounds for a press (flip, page)
+      keep(a);
     } else if ((e.key === 'Escape' || e.key === 'x' || e.key === 'X') && !e.repeat) { // held down, it backs out one level, not all the way
       if (top) {
         ui('back');

@@ -1074,7 +1074,7 @@ function shelfGrid(n) {
       const r = Math.floor(k / cols), c = k % cols, inRow = Math.min(cols, n - r * cols), at = new V3((c - (inRow - 1) / 2) * SGX, 0, ((rows - 1) / 2 - r) * SGZ + off);
       pos.push(at);
       for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(at.clone().add(new V3(dx * (PW / 2 + .6), 0, dz * PH / 2)));
-      pts.push(at.clone().add(new V3(0, 0, PH / 2 + (short() ? 4.6 : camera.aspect < .8 ? 6 : 3.2)))); // the label under it (portrait: and the 下一个解锁 line under the front row's)
+      pts.push(at.clone().add(new V3(0, 0, PH / 2 + (short() ? 4.6 : camera.aspect < .8 ? 6 : 4.4)))); // the label under it and, under the front row's, the 下一个解锁 line (a 1024×768 window put it over their second lines)
     }
     // One or two rows: the showcase's top stays in shot behind them (only its height counts; on a phone its sides are cropped)
     const back = rows <= 2; if (back) pts.push(new V3(SX, 2.2 + 12.4, SZ - 1.2)); // the slabs' tops
@@ -1466,7 +1466,8 @@ function world() {
     slabs.setMatrixAt(i, m4.compose(at, q, new V3(1, 1, 1)));
     const ins = new T.Mesh(new T.PlaneGeometry(6.8, 10.7), new T.MeshStandardMaterial({ map: t, roughness: .6, envMapIntensity: .3 }));
     ins.position.copy(at).add(new V3(0, 0, .02)); ins.quaternion.copy(q); show.add(ins);
-    loadImg(ASSETS.card(set, n, 'low')).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
+    // off the CDN (file://, pen) one scan's response carries its CORS header twice and the browser refuses it as a texture: try the other size before leaving the insert blank
+    loadImg(ASSETS.card(set, n, 'low')).then(img => img || loadImg(ASSETS.card(set, n, 'high'))).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
   });
   show.add(slabs, led, new T.Mesh(pane, [glass])); // an array, or three draws the whole box and ignores the groups
 
