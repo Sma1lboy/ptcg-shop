@@ -842,13 +842,22 @@ button:disabled { cursor: not-allowed; }
 .coach p { margin: 0; text-wrap: pretty; }
 .coach .co-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .coach-on { outline: 2px dashed var(--sticker-edge); outline-offset: 3px; }
-/* 声音 (src/ui/sound.ts): the footer's popover, the same BW window as the guide. Controls stay native (ink as their accent: not yellow, which is only for prices and the one primary button) */
+/* 声音 (src/ui/sound.ts): the footer's popover, the same BW window as the guide. The controls are drawn as BW options: a
+   checkbox is a small framed box that fills with the cursor blue and a white tick; the volume is the EXP bar (dark plate, pale
+   track, --exp fill to --v) with a square blue knob. Pixel labels */
 .sound { position: fixed; inset: auto 16px 16px auto; margin: 0; width: min(300px, calc(100vw - 32px)); padding: 12px 16px 14px; color: var(--ink);
-  font-size: var(--fs-body); line-height: 1.6; accent-color: var(--ink); }
+  font-size: var(--fs-body); line-height: 1.6; }
 .sound h3 { margin: 0 0 6px; font: 400 var(--fs-h)/1.4 var(--font-pixel); }
-.sd-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
-.sd-row input[type="range"] { flex: 1; }
+.sd-row { display: flex; align-items: center; gap: 8px; min-height: 36px; font: 400 var(--fs-cap)/1.5 var(--font-pixel); }
 .sd-row input { margin: 0; } .sd-row input:disabled { opacity: .5; }
+.sd-row input[type="checkbox"] { appearance: none; flex: none; width: 18px; height: 18px; border: 2px solid var(--frame); border-radius: 4px; background: var(--btn-face);
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)); cursor: pointer; }
+.sd-row input[type="checkbox"]:checked { background: var(--sel) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 7 6'%3E%3Cpath d='M0 3h1v1h1v1h1V4h1V3h1V2h1V1h1v1H6v1H5v1H4v1H3v1H2V5H1V4H0z' fill='%23fff'/%3E%3C/svg%3E") center / 10px no-repeat; box-shadow: none; }
+.sd-row input[type="range"] { flex: 1; appearance: none; height: 14px; border-radius: 7px; cursor: pointer;
+  background: linear-gradient(var(--exp), var(--exp)) 3px 3px / calc((100% - 6px) * var(--v, 1)) 8px no-repeat, linear-gradient(color-mix(in oklab, var(--hud-ink) 16%, var(--hud)), color-mix(in oklab, var(--hud-ink) 16%, var(--hud))) 3px 3px / calc(100% - 6px) 8px no-repeat, var(--hud);
+  box-shadow: 0 0 0 1px var(--frame); }
+.sd-row input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 18px; border: 2px solid #101318; border-radius: 3px; background: var(--sel); }
+.sd-row input[type="range"]::-moz-range-thumb { width: 8px; height: 14px; border: 2px solid #101318; border-radius: 3px; background: var(--sel); }
 .sd-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
 :is(.nav, .subnav) a.coach-on { outline-offset: -6px; }
 
@@ -1211,8 +1220,12 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button.in { opacity: 1; }
 /* everything the scene lays over the canvas is a BW status plate — the dark box a battle prints a name and HP in: --hud face,
    a near-black rim, a thin light inner rule, a hard drop. The pointed one gets the menu cursor's blue ring */
-:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .ip-next, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum) { border-radius: 6px; background: var(--hud);
+:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .ip-next, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum, .deck .card.up + figcaption) { border-radius: 6px; background: var(--hud);
   box-shadow: 0 0 0 2px #101318, inset 0 0 0 1px rgba(255, 255, 255, .14), 0 4px 0 2px rgba(0, 0, 0, .3); }
+/* the 2D single pack: a flipped card's caption is the same plate as the 3D table's tag under it */
+.deck .card.up + figcaption { align-self: center; padding: 1px 6px; }
+/* the 2D single pack once its summary is in: the card in hand a size down, so the summary's keys fit the table without a scroll */
+.mat:has(> .summary) .deck .stage { width: min(190px, 54vw, 22vh); }
 :is(.s3-shelf button:not(:disabled):is(:hover, :focus-visible), .idle-pack:not(:disabled):is(:hover, :focus-visible) .ip-tag) { box-shadow: 0 0 0 2px #101318, 0 0 0 4px var(--sel), 0 0 14px 2px var(--sel-glow); }
 :is(.s3-shelf, .ip-tag) b { font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
 :is(.s3-shelf, .ip-tag) small { font-size: var(--fs-cap); color: var(--mat-muted); }

@@ -40,7 +40,8 @@ const STEPS: Step[] = [
       return html`点「进 10」从批发商进一箱。${id ? `${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，` : '进货价比市价低，'}差价就是卖一包的毛利。`; } },
   { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id),
     at: () => pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'),
-    p: () => (sum(G.state.stock) ? '点「摆上空货架」。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。' : '仓库空了：先进货，再点「摆上空货架」。只有货架上的包才卖得出去。') },
+    // quote the button as it reads right now (「摆上空货架 9 包」the first time, 「上架 1 包」once the set has a shelf): a new player looks for those words
+    p: el => { const b = `「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '摆上空货架'}」`; return sum(G.state.stock) ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。` : `仓库空了：先进货，再点${b}。只有货架上的包才卖得出去。`; } },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
     p: () => { const id = firstShelved(); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚；标在市价附近或更低，还可能碰上倒爷按这个价整架收走。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
@@ -50,7 +51,7 @@ const STEPS: Step[] = [
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off
   { page: 'shelf', h: '补货', done: () => G.shelves().some(r => r.qty > 0),
     at: () => pick('#shelf .set .primary:not(:disabled)', '#shelf .set [data-act="buy"][data-n="10"]:not(:disabled)'),
-    p: () => (sum(G.state.stock) ? '仓库里有货，货架是空的：点「摆上空货架」。' : '货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。进一箱、摆上去，这就是每天的活。') },
+    p: el => (sum(G.state.stock) ? `仓库里有货，货架是空的：点「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '上架'}」。` : '货架卖空了。空货架不进钱，想买的顾客空手走（「货架」页签上的数字）。进一箱、摆上去，这就是每天的活。') },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
   { page: 'open', h: '账单', done: () => !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(),
     at: () => shown(document.getElementById('due')),
@@ -90,7 +91,10 @@ function place() {
   // the 3D table places its labels (and fades them in) only after the page shows and its canvas resizes. place() runs again
   // on every scroll step.
   if (performance.now() < seek && !anchor.matches('.s3-shelf > :not(.in), #due')) { // #due: the fixed top bar, always in view
-    const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
+    // a page button on a desktop too: the bubble opens below the button (over the rows under it) rather than above, where it
+    // covered the shelf's pickers and 加一个货架 the step is next to; only as far as the button stays under the top bar
+    const below = pop.dataset.strip === 'mat' || (!phone() && !onMat && !tab);
+    const need = below ? Math.min(a.bottom + gap + h + 24 - vh, a.top - 120) : 0; // 16px to spare: the 3D labels settle a few px after the scroll
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
     else if (a.top < 70 || a.bottom > innerHeight - 70) { seek = 0; anchor.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
   }

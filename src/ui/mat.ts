@@ -159,7 +159,9 @@ const head3D = () => {
       ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
 };
 // An empty warehouse (a new shop): the head says the guide's first step too; the pack on the table is the other way in.
-const idleLine = () => Object.values(G.state.stock).some(n => n > 0) ? '点桌上的包，开一包' : '仓库还空着：先去货柜进货，或点桌上的包现进现开';
+// A phone's head row has room for about ten characters beside 今天拆哪包？ and 音效: the short form, so the step isn't cut to 「先去…」.
+const idleLine = () => Object.values(G.state.stock).some(n => n > 0) ? '点桌上的包，开一包'
+  : matchMedia('(max-width: 779px)').matches ? '先去「货柜」进货' : '仓库还空着：先去货柜进货，或点桌上的包现进现开';
 const hint3D = (k: keyof typeof HINT) => { const h = document.getElementById('s3-hint'); if (h) h.textContent = HINT[k](); };
 const on3D = {
   onTear() {

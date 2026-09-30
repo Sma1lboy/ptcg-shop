@@ -58,7 +58,7 @@ function onLine(e: Event) {
 function renderPanel() {
   render(html`<h3>声音</h3>
     <label class="sd-row"><input type="checkbox" .checked=${FX.muted()} @change=${(e: Event) => FX.setMuted((e.target as HTMLInputElement).checked)}> 静音</label>
-    <label class="sd-row">音量 <input type="range" min="0" max="100" step="5" .value=${String(Math.round(FX.volume() * 100))} ?disabled=${FX.muted()}
+    <label class="sd-row">音量 <input type="range" min="0" max="100" step="5" .value=${String(Math.round(FX.volume() * 100))} style=${`--v: ${FX.volume()}`} ?disabled=${FX.muted()}
       @input=${(e: Event) => FX.setVolume(+(e.target as HTMLInputElement).value / 100)}></label>
     <label class="sd-row"><input type="checkbox" .checked=${FX.ambience()} ?disabled=${FX.muted()} @change=${(e: Event) => FX.setAmbience((e.target as HTMLInputElement).checked)}> 店里的环境声</label>
     <p class="sd-note">环境声是打烊后的店：灯管的嗡嗡声和一点空调风。剧情里的雨声、开包和顾客的声音不受这项影响。</p>`, $('sound'));

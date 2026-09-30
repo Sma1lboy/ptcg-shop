@@ -122,7 +122,12 @@ export function resetStory() { for (const k in seen) delete seen[k]; save(); que
 export function initStory() {
   const d = dlg();
   d.addEventListener('click', e => { if (!(e.target as Element).closest('.st-skip')) next(); });
-  d.addEventListener('cancel', e => { e.preventDefault(); end(); }); // Esc = skip
+  // Esc / X (menu.ts sends X through the same cancel) is BW's B: finish the line or turn the page, never throw the whole scene
+  // away — a first-time player presses it to hurry the text. Only 跳过 (reachable with the arrow keys) ends the scene
+  d.addEventListener('cancel', e => { e.preventDefault(); next(); });
+  // Escape itself is caught on keydown: Chrome closes a modal dialog on the second Esc without a click in between, whatever the
+  // cancel handler says
+  d.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); next(); } });
   d.addEventListener('close', () => { if (cur) end(); }); // closed some other way: still release the guide
   G.on(onEmit);
   document.addEventListener('ptcg:release', () => setTimeout(flush, 600)); // after the pack's summary is on the mat
