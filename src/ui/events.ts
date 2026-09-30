@@ -40,6 +40,7 @@ export function bindEvents() {
       case 'trophy': G.setTrophy(b.dataset.key!); break;
       case 'untrophy': G.clearTrophy(); break;
       case 'shelve': G.shelve(id, +b.dataset.n!); break;
+      case 'refill': if (G.buy(id, +b.dataset.n!)) G.shelve(id, Math.max(0, (G.state.stock[id] || 0) - 1)); break; // 店里的话: a shelf's worth, up at once (the one pack kept back to open)
       case 'unshelve': G.unshelve(id, +b.dataset.n!); break;
       case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d! * G.PCT_STEP); break;
       case 'cprice': G.setCardPrice(+b.dataset.i!, G.cardPct(G.state.shown[+b.dataset.i!]) + +b.dataset.d! * G.PCT_STEP); break;

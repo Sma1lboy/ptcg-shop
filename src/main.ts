@@ -10,7 +10,7 @@ import { renderBinder, initBinder } from './ui/binder.ts';
 import { renderSingles } from './ui/singles.ts';
 import { renderUpgrades } from './ui/upgrades.ts';
 import { renderCase } from './ui/case.ts';
-import { renderNotice, initSlip } from './ui/notice.ts';
+import { renderNotice, initSlip, initMemo } from './ui/notice.ts';
 import { renderSources, renderBasis } from './ui/sources.ts';
 import { renderMat, refreshIdle, bindMatInput, hold } from './ui/mat.ts';
 import { bindEvents } from './ui/events.ts';
@@ -40,7 +40,7 @@ document.addEventListener('visibilitychange', seen); seen();
 
 renderBasis(); bindLayout(); initLedger();
 initSound(); // after the boot tick: the hours the shop was closed ring nothing; before the story, which sets the opening's first scene
-initSlip();
+initSlip(); initMemo();
 initStory(); // before the guide: the story comes first, the guide waits until it is closed
 bindGuide();
 

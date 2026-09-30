@@ -273,25 +273,25 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* game buttons (DESIGN.md「按钮」): BW command buttons — a rounded face with a darker lip underneath, a dark rim, pixel print.
    Secondary is the pale command, primary the card-border yellow (one per group), danger deep red (清空存档 only). Hover lifts
    the face under the blue cursor ring, pressed drops onto the lip, disabled is a flat grey face. All CSS: no images to miss */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) { /* :is so it outranks the bare `button { color: inherit }` */
   --lip: color-mix(in oklab, var(--btn-face) 72%, var(--frame));
   min-height: 34px; padding: 6px 16px 8px; border: 2px solid var(--frame); border-radius: 8px;
   background: var(--btn-face); color: var(--btn-ink); box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5);
   font: 400 var(--fs-cap)/1.5 var(--font-pixel); text-decoration: none; text-shadow: 1px 1px 0 color-mix(in oklab, var(--btn-ink) 16%, var(--btn-face));
   transition: box-shadow .12s, transform .08s, background-color .12s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 0 2px var(--sel); }
 /* pressed: the face drops onto its lip */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   box-shadow: inset 0 -1px 0 var(--lip), inset 0 2px 0 rgba(0, 0, 0, .12); transform: translateY(2px); padding-bottom: 6px; }
 /* primary = the card-border yellow command: dark print, dark rim */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
   --lip: #C9A018; background-color: var(--sticker); color: var(--sticker-ink); border-color: var(--sticker-ink); text-shadow: 1px 1px 0 #FCE68A; }
 /* danger: the one irreversible button, a deep red command so it can't pass for a normal one */
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
@@ -668,6 +668,20 @@ button:disabled { cursor: not-allowed; }
 .slip .paper { padding-bottom: 20px; }
 .slip dl { margin-bottom: 8px; }
 .slip .note { margin: 0; padding-top: 8px; border-top: 1px dashed var(--line-strong); color: var(--muted); font-size: var(--fs-cap); text-align: right; }
+/* 店里的话 (notice.ts memo): a BW message box out of the slot — the text box's white face in both themes, the double frame, a dark
+   pixel title bar; the one key that fixes it is the box's yellow key */
+.memo[hidden] { display: none; }
+.memo .mm-box { --panel: var(--paper); --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --frame: #3A4150; --frame-in: #C3CAD6; --btn-face: #F4F6F9; --btn-ink: #262B33;
+  margin: 0 0 12px; padding: 0 14px 12px; color: var(--ink); border: 3px solid var(--frame); border-radius: var(--r-frame); background: var(--paper);
+  box-shadow: inset 0 0 0 3px var(--paper), inset 0 0 0 4px var(--frame-in), 0 6px 18px rgba(0, 0, 0, .25); animation: print .6s .15s steps(12, jump-end) backwards; }
+.memo h2 { margin: 0 -14px 10px; padding: 7px 14px; border-radius: calc(var(--r-frame) - 3px) calc(var(--r-frame) - 3px) 0 0; background: var(--hud); color: var(--hud-ink);
+  font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
+.memo p { margin: 0 0 8px; font-size: var(--fs-body); line-height: 1.55; text-wrap: pretty; }
+.memo .mm-say { color: var(--muted); font-size: var(--fs-cap); }
+.memo .gain { color: var(--gain); }
+.memo .mm-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.memo .mm-btns .primary { flex: 1 1 auto; }
+.memo .mm-go { color: var(--ink); font-weight: 600; }
 /* the tear-off stub (phones only, see the phone block): the receipt's first line on the same thermal paper, a button */
 .notice .stub { display: none; position: relative; align-items: baseline; gap: 10px; width: 100%; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 0;
   background: var(--paper); color: var(--ink); font: inherit; text-align: left; cursor: pointer; transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12)); }
@@ -1505,7 +1519,7 @@ button:disabled { cursor: not-allowed; }
      once), over the display case where nothing is pressed; with a receipt it scrolls with the page like anywhere else (above), and
      the table isn't pushed down */
   :root[data-page="open"] .pops { top: calc(var(--top-h) + 72px); }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 156px; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }

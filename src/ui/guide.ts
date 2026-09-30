@@ -76,6 +76,8 @@ const STEPS: Step[] = [
 const TAB: Record<string, string> = { open: '开包', shelf: '货柜', luck: '欧气', grow: '成长' };
 let replay = -1; // index while replaying from the footer, else -1
 const current = () => (replay >= 0 ? replay : rec.off || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
+// the guide still has a step to show (notice.ts leaves a sold-out shelf to the guide's own 补货 until then)
+export const guiding = () => current() >= 0;
 
 let anchor: Element | null = null;
 const phone = () => innerWidth < 780;
