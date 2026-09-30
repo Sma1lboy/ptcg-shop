@@ -119,6 +119,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       sets: { 'sv03.5': { w: 2.2, tol: 0.08, tag: '老粉专程来' }, 'sv08.5': { w: 1.6, tol: 0.05 }, sv09: { w: 0.6 }, me03: { w: 0.6 } } },
   ];
   const FLIP_COOLDOWN = 600;              // seconds: after a flipper buys a set's packs, nobody flips that set again until they resold
+  // 开张期 (game setting): the first ten packs the guide has a new player buy sold to one flipper in ~40 s at the default tag, leaving
+  // a bare shelf and about $1,030 in the till. So until the shop has traded OPENING seconds (shop time: stands still while a story plays,
+  // starts over with a new shop) no 倒爷 comes; until OPENING_CAP (the first bill) one takes at most FLIP_SHARE of what is on the
+  // shelf, rounded up. After that flippers are as before.
+  const OPENING = 10 * 60, OPENING_CAP = 20 * 60, FLIP_SHARE = 0.5;
   const SEEK = [['RR', 'ACE', 'PB'], ['UR', 'IR', 'MB'], ['SIR', 'HR', 'MHR']]; // what seekers ask for: one card of a rarity tier, from a given set (or any)
   const SEEK_W = [50, 35, 15];
   const BIG_CARD = 12;                    // collectors only look at case cards worth at least this much
@@ -280,6 +285,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null });
 
   let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
+  // 暂停 (pause): while a story scene plays the shop clock stands still (no walk-ins, no sales, no bill clock, no clerk round, no 行情
+  // reroll), unlike 离开, which is the shop trading without you. Set by pause(true) and read only by tick(); not saved.
+  let pausedAt: number | null = null;
   const listeners: ((ev?: GameEvent) => void)[] = [];
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
@@ -569,7 +577,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const gauss = () => Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random());
   const lognorm = (median: number, sigma: number) => median * Math.exp(sigma * gauss());
   const pickW = <T,>(items: T[], w: (it: T) => number) => { let x = random() * items.reduce((a, it) => a + w(it), 0); return items.find(it => (x -= w(it)) < 0) || items[0]; };
-  const typeWeight = (t: string) => TYPES[t].w * (street().types?.[t] ?? 1) * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
+  const typeWeight = (t: string) => t === 'flipper' && state.shopT < OPENING ? 0 : TYPES[t].w * (street().types?.[t] ?? 1) * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
   // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the trophy, plus personal spread.
   const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage') + SKILLS.talk.step * skill('talk')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
   const heatW = (id: string) => { const h = state.heat[id]; return h > 1 ? 2 : h < 1 ? 0.5 : 1; };
@@ -630,7 +638,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       const under = onShelf.filter(id => pctOf(id) <= tol), cheap = under.filter(id => !(state.flipT[id] > vnow)).sort((a, b) => pctOf(a) - pctOf(b))[0];
       const budget = lognorm(300, 0.5);
       if (cheap) { // a low price empties the shelf: they take up to 4–15 packs, then that set is off their list until resold
-        const n = Math.min(shelfQty(cheap), Math.floor(budget / ask(cheap)), 4 + Math.floor(random() * 12));
+        const n = Math.min(shelfQty(cheap), Math.floor(budget / ask(cheap)), 4 + Math.floor(random() * 12), state.shopT < OPENING_CAP ? Math.ceil(shelfQty(cheap) * FLIP_SHARE) : Infinity);
         if (n >= 1) { sellPacks(cheap, n, v); state.flipT[cheap] = vnow + FLIP_COOLDOWN * 1000; }
       }
       if (v.r !== 'sold') {
@@ -717,7 +725,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // player is away (see AWAY) the shop trades until offlineCap() after they left and the bill clock runs until one WEEK after.
   // busy = the player is watching packs being revealed (the UI holds the ledger and the story until it is done, up to ~3 minutes
   // of 连开): the shop and the bill clock run as usual, only an overdue bill's grace waits, as it does while they are away.
+  // Paused (see pause): nothing runs and lastTick stays put; the pause hands the gap back on resume, so it is never credited.
   function tick(busy = false) {
+    if (pausedAt !== null) { save(); return; } // keeps savedAt fresh: a tab closed mid-scene is credited only what it was closed for
     const now = clock(), from = lastTick; lastTick = now; reveal = busy;
     const gap = !state.away && now - from > AWAY * 1000; // nobody said the player left, but the page did not run: that was an absence
     if (gap) state.away = { at: from, secs: 0, sales: 0, revenue: 0, lost: 0 };
@@ -761,6 +771,20 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   function leave() { if (state.away) return; tick(); state.away = { at: clock(), secs: 0, sales: 0, revenue: 0, lost: 0 }; save(); }
   function back() { if (!state.away) return; tick(); home(clock()); if (!flush()) emit(); }
+  // pause(true) settles the shop up to now, then freezes it; pause(false) moves everything the shop timed by the wall clock
+  // (last tick, 行情, the clerk's next round, 倒爷 cooldowns, the start of an absence) forward by the frozen time, so the shop
+  // resumes exactly where it stopped. Idempotent: scenes queued back to back may pause twice. Shop time (bill clock, grace,
+  // OPENING) is counted in ticks and needs no shifting. A page closed while paused is credited like any closed page (see AWAY).
+  function pause(on: boolean) {
+    if (on === (pausedAt !== null)) return;
+    if (on) { tick(); pausedAt = clock(); return; }
+    const d = clock() - pausedAt!; pausedAt = null;
+    lastTick += d; vnow += d;
+    if (state.heatT) state.heatT += d;
+    if (state.clerkT) state.clerkT += d;
+    for (const id of Object.keys(state.flipT)) state.flipT[id] += d;
+    if (state.away) state.away.at += d;
+  }
   // ---------- 债务: weekly bills, loans, bankruptcy (numbers at WEEK above) ----------
   const debtScale = () => 1 + DEBT_STEP * state.branch.n;
   const debt0 = () => Math.round(DEBT0 * debtScale());
@@ -909,7 +933,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     state.cash = START_CASH + SEED_STEP * perk('seed'); state.owe = debt0(); setDebt();
     if (perk('fit')) state.up.racks = state.up.depth = perk('fit');
     if (perk('hire')) { state.up.clerk = 1; for (const s of SETS) state.auto[s.id] = true; }
-    luckCache = null; lastTick = vnow = clock();
+    luckCache = null; lastTick = vnow = clock(); if (pausedAt !== null) pausedAt = lastTick; // a new shop starts now, even mid-scene
     return old;
   }
   function branch() {
@@ -951,6 +975,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
+    pause, paused: () => pausedAt !== null, OPENING, OPENING_CAP, FLIP_SHARE,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,

@@ -4,6 +4,7 @@
 // racks / depth = the highest 货架 / 加层 level this player buys (to measure what those upgrades are worth).
 // node scripts/autoplay.mjs survive [hours=10] [seeds=20]: the 债务 survival table of GAMEPLAY.md (six kinds of player; 12 h × 10 seeds ≈ 25 s).
 // node scripts/autoplay.mjs pace [hours=16] [纯经营 普通 收图鉴]: the 成长节奏 table of GAMEPLAY.md §12.1 (longest wait between buys per 2 h).
+// node scripts/autoplay.mjs opening [packs=10] [seeds=10]: the first ten minutes of a fresh save (see opening() below).
 // node scripts/autoplay.mjs bills: the bill schedule next to the pure manager's weekly profit (GAMEPLAY.md「账单曲线」).
 import { createGame } from '../src/game.ts';
 import * as S from '../src/sim.ts';
@@ -138,6 +139,29 @@ export function noob({ hours = 5, seed = 1, log = 1800 } = {}) {
   return rows;
 }
 
+// 开张的头十分钟 (game.ts OPENING): a new player who plays the story (`story` seconds, the shop clock paused if the game can pause it, else running),
+// buys `packs` packs of the first set they can afford, shelves them at the default tag, and looks in every `look` seconds: restocks `packs` packs
+// if the shelf is empty. Nothing else is bought. Reports what the guide's first ten minutes feel like: flipper sweeps and when, seconds
+// with the shelf bare, the 货柜 badge (pack buyers who found their set missing, G.missed) when the story ends and at the tenth minute, and cash / profit.
+export function opening({ packs = 10, seed = 1, story = 40, look = 60, minutes = 10 } = {}) {
+  const { G, SETS, advance } = boot(seed), id = SETS.filter(x => G.unlocked(x.id)).map(x => x.id).find(i => G.wholesale(i) * packs <= G.state.cash);
+  const missed = () => SETS.reduce((a, x) => a + G.missed(x.id), 0), stock = () => G.shelfQty(id), out = { sweeps: [], bare: 0, restocks: 0, badge0: 0, badge: 0, cash: 0, profit: 0, sold: 0 };
+  if (G.pause) G.pause(true); for (let t = 0; t < story; t++) { advance(1); G.tick(); } if (G.pause) G.pause(false);
+  out.badge0 = missed();
+  const stockUp = () => { G.buy(id, packs); if (!G.shelves()[0].id) G.place(0, id); G.shelve(id, packs); };
+  stockUp();
+  let seen = G.state.recent[0]?.at ?? 0;
+  for (let t = 1; t <= minutes * 60; t++) {
+    advance(1); G.tick();
+    for (const v of G.state.recent) { if (v.at <= seen) break; if (v.t === 'flipper' && v.r === 'sold') out.sweeps.push(`${t}s×${v.n}`); }
+    seen = G.state.recent[0]?.at ?? seen;
+    if (!stock()) out.bare++;
+    if (t % look === 0 && !stock()) { stockUp(); out.restocks++; }
+  }
+  out.badge = missed(); out.cash = Math.round(G.state.cash); out.sold = G.state.cust.sold; out.profit = Math.round(G.state.cash + stock() * G.wholesale(id) - 1000); out.sweeps = out.sweeps.join(' ') || '—';
+  return out;
+}
+
 // The four kinds of player in GAMEPLAY.md「难度」, each over `seeds` seeds for `hours` of real time.
 export const KINDS = {
   纯经营: s => play({ hours: s.hours, seed: s.seed, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 3600 }),
@@ -176,7 +200,8 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
-  if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
+  if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number); for (const n of [packs]) { console.log(`${n} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs: n, seed: i + 1 }))); } }
+  else if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
   else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
   else if (mode === 'bills') { // one row per week until the debt is cleared: the bill against what the shop made that week before paying it
     const rows = play({ hours: 12, openShare: 0, pct: 0.95, reserve: 1, repay: true, log: 1200 }), G = rows.G, bill = w => Math.round(G.BILL0 * G.BILL_G ** (w - 1));
