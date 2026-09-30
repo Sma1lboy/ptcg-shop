@@ -650,9 +650,10 @@ button:disabled { cursor: not-allowed; }
 /* while the receipt hangs there, the page steps out of its column (it covered 加一个货架 and the rail's first 开 1 包); 350 = the
    tray's 300 width + 24 inset + the slot's 10px overhang + a gap. Phones reserve the stub's height above the view instead (below) */
 @media (min-width: 780px) { :root:has(#notice:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); }
-  /* 店里的话 hangs in the same corner: on 货柜 / 欧气 / 成长 it lay over each row's right end (标价 −/+, 每包, 开 1 包), so the page steps
-     aside for it too. Not on 开包: the table would resize mid-reveal, and the box sits over the rail's empty lower half there */
-  :root:not([data-page="open"]):has(#memo:not([hidden])) main { padding-right: max(var(--gap), calc(350px - max(0px, (100vw - 1680px) / 2))); } }
+  /* 店里的话 hangs in the same corner. It doesn't push the page aside like the receipt: that folded 货柜's table (one row per set,
+     @container ≥ 1340px) into two columns of cards every time a box came up, and moved the key the player was reaching for. The page
+     gets room at its end instead, so a row under the box scrolls clear of it */
+  :root:not([data-page="open"]):has(#memo:not([hidden])) body { padding-bottom: calc(var(--memo-h, 160px) + 40px); } }
 :is(.notice, .slip) .paper { position: relative; margin: 0 0 12px; padding: 14px 16px 26px; background: var(--paper); transform-origin: 50% 0;
   transform: rotate(-.6deg); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .12));
   -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 12px 100%;
@@ -1525,6 +1526,8 @@ button:disabled { cursor: not-allowed; }
      seen wherever the player has scrolled; they are brief and overlay */
   .pops:has(> #notice:not([hidden])) { position: absolute; }
   :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 22px + var(--notice-h, 44px)); }
+  /* 店里的话 (no receipt up): the page starts under the box, so the 货架 / 展示柜 view tabs aren't covered at the top of the page */
+  :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
   /* 开包: the slot hangs under the mat's head row (「今天拆哪包？」and 音效, ~60px — it's mat.ts's markup, so the number lives here
      once), over the display case where nothing is pressed; with a receipt it scrolls with the page like anywhere else (above), and
      the table isn't pushed down */

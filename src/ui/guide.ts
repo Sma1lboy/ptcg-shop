@@ -58,7 +58,7 @@ const STEPS: Step[] = [
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
     // the 倒爷 line quotes their own ceiling (game.ts TYPES.flipper.tol): 「市价附近」 read like the default 95%, and at 95% they walked out
-    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}。标高了嫌贵的顾客会走，标低了少赚。开张 10 分钟后还有倒爷：他只收市价 ${flip}% 上下或更低的包，标到那么低会被他成批扫走（第一张账单前最多拿走半个货架），默认价他多半嫌贵。每位顾客最多肯出多少，下面「顾客」里看得到。`; } },
+    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认是市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}：用虚线框里的 − / + 调，不想调就点下面「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚。开张 10 分钟后还有倒爷：他只收市价 ${flip}% 上下或更低的包，标到那么低会被他成批扫走（第一张账单前最多拿走半个货架），默认价他多半嫌贵。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },

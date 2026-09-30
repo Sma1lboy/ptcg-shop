@@ -113,7 +113,8 @@ function holds(m: Memo) {
   switch (m.kind) {
     case 'first': case 'intake': case 'done': return notes[0] === m;
     case 'hand': return away();
-    case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i));
+    // a set that sells out while the box is up joins it when the cash covers both (it stood unsaid for a minute behind the first)
+    case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
     case 'new': return !guiding() && !away() && fresh.has(m.id);
     case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
   }
@@ -213,6 +214,9 @@ function showMemo() {
 export function initMemo() {
   for (const id of racked()) { stocked[id] = G.shelfQty(id) > 0; if (!stocked[id]) out.add(id); } // a page opened on empty shelves: said like a sell-out just now
   G.on(watchShop); watchShop();
+  // the page makes room for the box instead of reflowing around it (style.css --memo-h): the phone's view tabs sat under it, and the
+  // desktop's rows under it can scroll clear of it
+  const el = $('memo'); new ResizeObserver(() => document.documentElement.style.setProperty('--memo-h', `${el.offsetHeight}px`)).observe(el);
   document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
   document.addEventListener('ptcg:guidedone', () => { notes.push({ kind: 'done' }); watchShop(); });
