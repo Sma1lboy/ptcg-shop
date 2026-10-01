@@ -42,9 +42,11 @@ export function renderNotice() {
   const empty = G.shelves().find(r => !r.id || !r.qty), pick = collectorCard();
   // a bill that fell due while away and is still unpaid: its grace only starts now (game.ts), the red chip counts it; 去凑钱 = the chip
   render(html`<button type="button" class="stub" aria-label="展开离店小票" @click=${() => { unrolled = true; renderNotice(); }}>
-      <b>离店小票</b><span>离开 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${d ? '现金' : '销售'} ${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
+      <b>离店小票</b><span>离线经营 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${d ? '现金' : '销售'} ${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
     <div class="paper"><h2>离店小票</h2>
-      <dl><dt>离开</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
+      <dl><dt>离线经营</dt><dd>${h}</dd><dt>商品成交</dt><dd>${o.sales} 位顾客</dd><dt>商品销售额</dt><dd class="gain">+${money(o.revenue)}</dd>
+        ${o.tickets ? html`<dt>收藏室门票</dt><dd class="gain">+${money(o.tickets)}</dd>` : ''}
+        ${o.bonus ? html`<dt>离线销售奖励</dt><dd class="gain">+${money(o.bonus)}</dd>` : ''}
         ${o.lost ? html`<dt>没找到要买的包或卡</dt><dd>${o.lost} 位顾客</dd>` : ''}
         ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}
         ${due ? html`<dt>第 ${due.week} 周的账还没付</dt><dd>${money(due.amount)}</dd>${short ? html`<dt>还差</dt><dd>${money(short)}</dd>` : ''}` : ''}</dl>
@@ -56,7 +58,7 @@ export function renderNotice() {
         ${d.restock ? html`<dt>店员进货</dt><dd>−${money(d.restock)}</dd>` : ''}
         ${d.bulk ? html`<dt>店员卖散卡</dt><dd>+${money(d.bulk)}</dd>` : ''}
         <dt>营业现金变化</dt><dd class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</dd>
-      </dl><p class="note">含收卡、补货和还账；不含成就奖金及回店后的操作。倒爷也可能买走柜里的卡。</p></details>` : html`<p class="note">这张旧小票只有合计，没有按顾客分类；销售入账不等于现金增加。</p>`}
+      </dl><p class="note">含收卡、补货、还账、门票和离线奖励；不含成就奖金及回店后的操作。倒爷也可能买走柜里的卡。</p></details>` : html`<p class="note">这张旧小票只有合计，没有按顾客分类；销售额不等于现金增加。</p>`}
       ${due ? html`<p class="due-note">不在店里时宽限不走，从现在接着算（离开时才到期的给满 ${G.GRACE / 60} 分钟），看顶栏的红牌子。</p>` : ''}
       ${!due ? html`<p class="note">${empty ? '现在有空货架，先去补货上架。' : pick ? `卡本里有收藏党会看的大卡，先把${pick[1].name}摆进展示柜。` : '货架还在卖。卡本里的闪卡会自动卖给找卡的；去看看单卡生意和缺货表。'}</p>` : ''}
       <div class="nt-btns">${due ? html`<button type="button" class="primary" @click=${() => $('due').click()}>${short ? '去凑钱' : '去看账单'}</button>`
@@ -206,10 +208,10 @@ function showMemo() {
     : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind;
   if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) return; // the same box keeps its words (above)
   el.dataset.ident = ident; el.dataset.cost = '0';
-  const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>知道了</button></div>`; // a note's key: on a phone the guide's bubble waits while the box is up
+  const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>${m.kind === 'done' ? '开始经营' : '关闭'}</button></div>`;
   if (m.kind === 'first') {
     render(keyed('first', html`<div class="mm-box"><h2>第一笔生意</h2><p>顾客在货架上买走了你的包${m.set ? `：${m.set} ${m.n} 包` : ''}${m.gain ? html`，<b class="gain">+${money(m.gain)}</b>` : ''}。</p>
-      <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>${ok}</div>`), el);
+      <p class="mm-say">顾客会自动购买货架上的包，切到其他页面也会继续经营；顶栏现金下方会显示收入来源。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'cards') {
@@ -230,14 +232,14 @@ function showMemo() {
     // counted as of now, not when the note was queued: the readout under the cash had already shown a bigger 收卡 −$ than it said
     const b = G.state.intake ?? { n: m.n, cost: m.paid };
     render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的闪卡按你的收卡价卖给了你：到现在收了 ${b.n} 张，<b class="loss">−${money(b.cost)}</b>。</p>
-      <p class="mm-say">现金少了，卡进了卡本；找卡的顾客会按单卡标价直接买走匹配的卡，不用先上柜。收藏党只看展示柜里的大卡。收卡价在货柜「顾客」里调，调低就少收。</p>
-      <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去看收到的卡</button><button type="button" @click=${close}>知道了</button></div></div>`), el);
+      <p class="mm-say">收购的卡已放进卡本。找卡的顾客能直接购买匹配的卡；收藏党只买展示柜里的大卡。收卡价可在「货柜」调整，调低后愿意卖卡给你的顾客会减少。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去看收到的卡</button><button type="button" @click=${close}>先不去</button></div></div>`), el);
     return;
   }
   if (m.kind === 'done') {
     // the guide ends on 欧气 (its last step): say what that page is, it had no word of its own
-    render(keyed('done', html`<div class="mm-box"><h2>引导走完了</h2>${location.hash === '#luck' ? html`<p>这一页是欧气：你开出的包值多少，在几千个开同样包的模拟玩家里排第几，下面的卡册按系列收着你开到的卡。</p>` : ''}<p>往后自己经营：货架卖空时，这里会打出一张条子，上面就是补货的键。</p>
-      <p class="mm-say">仓库里留的包随时去「开包」拆；钱够升级时这里也会说。每周九姐按顶栏的倒计时来收账：到点现金够就自动付，不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款。</p>${ok}</div>`), el);
+    render(keyed('done', html`<div class="mm-box"><h2>引导完成</h2>${location.hash === '#luck' ? html`<p>这里比较累计开包的卡牌总值与模拟玩家的结果；下方卡册记录你收录的卡。</p>` : ''}<p>以后货架卖空，这里会出现补货按钮；有闲钱可升级时也会提醒。</p>
+      <p class="mm-say">仓库里的包可以去「开包」页拆。账单到期自动付款；现金不足有 ${G.GRACE / 60} 分钟宽限，之后额度够则借款，不够则破产。倒计时和金额在顶栏账单里。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'hand') {
@@ -252,8 +254,8 @@ function showMemo() {
     // down while 成长 shows and comes back when they leave without buying — only 先不管 or buying the level ends it
     const toGrow = () => { go('grow'); requestAnimationFrame(() => { const bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0; scrollBy({ top: $('grow-top').getBoundingClientRect().top - bar - 12 }); }); watchShop(); };
     render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2>${now
-      ? html`<p>下一步是<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），${money(g.cost)}；闲钱 <b>${money(spare)}</b>，账单的钱已经留出来了。</p>`
-      : html`<p>闲钱 <b>${money(spare)}</b> 够买「成长」页上 ${growCount()} 项；「下一步」<b>${g.name} Lv ${g.lv + 1}</b> 还差 ${money(g.cost - spare)}。账单的钱已经留出来了。</p>`}
+      ? html`<p>可升级<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），花费 ${money(g.cost)}。留好账款和自动还款后，还能花 <b>${money(spare)}</b>。</p>`
+      : html`<p>留好账款和自动还款后，还能花 <b>${money(spare)}</b>，够买「成长」页上 ${growCount()} 项。推荐的<b>${g.name} Lv ${g.lv + 1}</b> 还差 ${money(g.cost - spare)}。</p>`}
       <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>${now ? '去「成长」升级' : '去「成长」看看'}</button><button type="button" class="mm-x" @click=${() => { grew = m.k; watchShop(); }}>先不管</button></div></div>`), el);
     return;
   }
@@ -265,7 +267,7 @@ function showMemo() {
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
   // the key spends into the bill's money: said on the box (the 成长 note keeps it, this one used to take the till down to $3). No
   // amount left over in it: the words stay while the cash moves (above)
-  const bill = short && b ? html`<p class="mm-say">补完以后第 ${b.week} 周的账（${money(b.amount)}，还有约 ${Math.max(1, Math.floor(G.dueIn() / 60))} 分钟）暂时不够；货架上的包几分钟就卖回来。</p>` : '';
+  const bill = short && b ? html`<p class="mm-say">补货后现金不足以付第 ${b.week} 周的账（${money(b.amount)}，约 ${Math.max(1, Math.floor(G.dueIn() / 60))} 分钟后到期），需要继续卖货或筹款。</p>` : '';
   const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); memo = null; watchShop(); };
   const head = m.kind === 'out' ? html`<h2>${names}卖空了</h2><p class="mm-why">货架空着不进钱，来买${ids.length > 1 ? '这几个系列' : set.name}的顾客一半空手走。</p>`
     : html`<h2>新到：${set.name}</h2><p class="mm-why">营收够了，${set.name}可以进货了；店里还有一个空货架，摆上去就多一个系列在卖。</p>`;

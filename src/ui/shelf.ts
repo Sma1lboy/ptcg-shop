@@ -88,10 +88,10 @@ function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnTyp
       <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>
       <div class="r-bay" aria-hidden="true">${Array.from({ length: boards }, (_, b) => html`<div class="board">${Array.from({ length: FACES }, (_, f) =>
         html`<i class="${row(r.qty - ((boards - 1 - b) * FACES + f) * per, per)}">${lift((boards - 1 - b) * FACES + f)}</i>`)}</div>`)}${id && !r.qty ? keyed(bt?.lost ? bt.k : 0, html`<span class="r-out ${bt?.lost ? 'shake' : ''}">卖空了</span>`) : nothing}
-        ${bt ? keyed(bt.k, html`<span class="r-beat ${bt.n ? '' : 'lost'}">${bt.n ? html`${bt.flip ? '倒爷扫走' : '卖出'} ${bt.n} 包 <em>+${money(bt.gain)}</em>` : `${bt.lost} 位空手走`}</span>`) : nothing}</div>
+        ${bt ? keyed(bt.k, html`<span class="r-beat ${bt.n ? '' : 'lost'}">${bt.n ? html`${bt.flip ? '倒爷买走' : '卖出'} ${bt.n} 包 <em>+${money(bt.gain)}</em>` : `${bt.lost} 位空手走`}</span>`) : nothing}</div>
       <p class="r-rail">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>0</b>/${deep}`}</span>` : html`<span>放 ${deep} 包</span>`}</p>
-      ${swept.length ? html`<p class="r-miss" title="倒爷只收便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就整架收走，按标价付钱；收过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再收这个系列">倒爷整架收走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
+      ${swept.length ? html`<p class="r-miss" title="倒爷只买便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就一次买走 4 到 15 包（不超过货架上有的），按标价付钱；买过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再买这个系列">倒爷买走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
       ${miss ? html`<p class="r-miss" title="${lately()}，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${lately()} <b>${miss}</b> 位没买到</p>` : nothing}
       ${sw ? html`<p class="r-miss r-swap" title="${lately()}：来买${G.setById(sw.id).name}却不在任何货架上的拆包玩家 ${sw.miss} 位；这个货架的系列买走的只有 ${sw.buyers} 位">${G.setById(sw.id).name} <b>${sw.miss} 位</b>没找到 · 这架只卖给 ${sw.buyers} 位${canSwap ? html` <button type="button" @click=${() => G.place(i, sw.id)}>换成${G.setById(sw.id).name}</button>` : '：在下面换系列'}</p>` : nothing}
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
@@ -118,8 +118,8 @@ function clerkNote() {
   const s = G.state, r = s.clerkRound!, cash = s.cash, need = G.clerkNeed(), b = G.nextBill(), missed = SETS.reduce((a, x) => a + G.missed(x.id), 0);
   const ago = Math.round((Date.now() - r.at) / 60000), next = Math.max(1, Math.ceil((s.clerkT - Date.now()) / 60000));
   const cheap = Math.min(...G.shelves().filter(x => x.id && s.auto[x.id]).map(x => G.wholesale(x.id!))), spend = Math.min(cash, need), left = cash - spend;
-  return html`<p class="wall-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮补满货架要 ${money(r.need)}，到现在只进了 ${money(r.spent)}，还差 <b>${money(short)}</b> 的货${missed ? html`；${lately()} <b>${missed} 位</b>来买整包没买到` : ''}。
-      店员只拿收银台里的现钱进货：巡货前钱被升级或账单花掉，货架就空着等他下一轮（约 ${next} 分钟后）。
+  return html`<p class="wall-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮补到店员的目标库存要 ${money(r.need)}，到现在只进了 ${money(r.spent)}，还差 <b>${money(short)}</b> 的货${missed ? html`；${lately()} <b>${missed} 位</b>来买整包没买到` : ''}。
+      店员只拿收银台里的现钱进货：轮到他进货时，现金被升级或账单花掉了，缺的货要等下一轮（约 ${next} 分钟后）。
       ${cash >= cheap ? html`<button type="button" class="primary" @click=${() => G.clerkNow()}>现在补货 ${money(spend)}</button>${b && left < b.amount ? html` <small>补完剩 ${money(left)}，九姐来收 ${money(b.amount)}：卖出去才回得来</small>` : nothing}`
         : html`<small>收银台里还不够一包，卖出几单再补。</small>`}</p>`;
 }
@@ -182,7 +182,7 @@ function draw() {
       : next === 'shelve' ? html`<button type="button" class="primary" data-act="shelve" data-id="${set.id}" data-n="${toShelf(set.id)}">${shelveLabel(set.id, own > 0 || !free)}</button>`
       : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
     return html`<article class="set ${unfolded(set.id) ? 'open' : ''}" data-spot="set:${set.id}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
-        <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 市价 × 你现在开包的概率（实测概率，有手气时乘上加成）算出的单包期望">开出期望 ${money(ev)}</span></p>
+        <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 单卡市价和开包时的概率计算；有手气时使用实测基础概率乘游戏加成后的概率">开出期望 ${money(ev)}</span></p>
         <div class="verb" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>

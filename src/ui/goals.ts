@@ -54,7 +54,7 @@ function priceRail(id: string, vs: Visit[], flip: number) {
         return [...Array.from({ length: nn }, (_, k) => [k, false, c.no] as const), ...Array.from({ length: nb }, (_, k) => [nn + k, true, c.buy] as const)]
           .filter(([k]) => k < STACK).map(([k, b, xs]) => html`<i class=${b ? 'buy' : ''} style="left:${left};bottom:calc(100% - var(--h) + ${k * DOT}px)" title="${who(xs, b)}"></i>`); })}
       <span class="sticker" style="left:clamp(30px, ${(pct - min) / (max - min) * 100}%, calc(100% - 30px))">${tag}</span>
-      ${flip && !near(G.MIN_PCT + 0.08) ? html`<small class="c-lo">倒爷 ≤${pc(flip)}</small>` : ''}${near(mark) ? '' : html`<small class="c-m" style="left:${at(mark)}">${sell ? '同行价' : '市价'}</small>`}
+      ${flip && !near(G.MIN_PCT + 0.08) ? html`<small class="c-lo">倒爷最高 ${pc(flip)}</small>` : ''}${near(mark) ? '' : html`<small class="c-m" style="left:${at(mark)}">${sell ? '同行价' : '市价'}</small>`}
       ${per > 1 && pct < 1.2 ? html`<small class="c-per">一个点 ≈ ${per} 位</small>` : ''}
     </div>`;
 }
@@ -95,8 +95,8 @@ function packs(rec: Visit[]) {
         [racked ? faint.length : 0, html`按 ${money(G.ask(id))} <b>${faint.length} 位会嫌贵</b>，他们最多肯出 ${spread(faint)}`, ''],
         [broke, `${broke} 位身上的钱不够一包`, ''],
         // a flipper pays the tag like anyone else, he only empties the shelf faster: said, but after anyone who walked out
-        [0.3, sweptN ? `倒爷整架扫走 ${sweptN} 包（照标价付钱，货架空得快）：标价高过市价的 ${pc(flip)} 就没人扫` : '', ''],
-        [0.3, racked && pct <= flip && !sweptN ? `倒爷会来扫货：标价高过市价的 ${pc(flip)} 就没人扫` : '', ''],
+        [0.3, sweptN ? `倒爷一次买走 ${sweptN} 包（照标价付钱）：标价高过市价的 ${pc(flip)}，倒爷就不买` : '', ''],
+        [0.3, racked && pct <= flip && !sweptN ? `倒爷会来买货：标价高过市价的 ${pc(flip)}，倒爷就不买` : '', ''],
         [0.5, racked && mine.length >= 3 && !faint.length && low > pct + 0.05 ? `按现在的标价都会买，最低的一位也肯出 ${money(low * mkt)}` : '', ''],
         [0.1, !mine.length && !missed && shelf ? `${lately()}没有人专门来买${name}${(s.heat[id] || 1) < 1 ? '（滞销）' : ''}` : '', ''],
       ] as const).filter(([n, t]) => n && t).sort((a, b) => b[0] - a[0]).slice(0, 2);
@@ -148,7 +148,7 @@ function gaps(rec: Visit[]) {
       : swap?.id === id && (stock || G.lvl('clerk')) ? html`<button type="button" @click=${() => G.place(swap.i, id)}>换上货架</button>`
       : stock ? html`<button type="button" data-act="open10" data-id="${id}" ?disabled=${hold}>自己开 ${Math.min(10, stock)} 包</button>`
       : html`：<a href="#shelf">在货架上给它腾一个</a>`;
-    return html`<b>没上货架</b>：柜台上没人拆，收卡价帮不上${act}`;
+    return html`<b>没上货架</b>：没有顾客买这个系列的包来当场拆，调收卡价也收不到它的卡${act}`;
   };
   return html`<table class="gaps" aria-label="找卡的：${lately()}空手走的，按系列和稀有度档">
       <thead><tr><th scope="col">找卡的 · 空手走</th>${TIER.map((l, t) => html`<th scope="col" title="${G.SEEK[t].map(rarLabel).join('、')}">${mark({ r: TIER_MARK[t], kind: TIER_MARK[t] }, false)} ${l}</th>`)}</tr></thead>
@@ -183,7 +183,7 @@ function showcase(rec: Visit[]) {
   const moves = G.caseMoves(), fill = moves && free > 0 ? html`<button type="button" data-act="fillcase">补满柜位（${moves} 张）</button>` : '';
   // supply against demand: who would buy at the tag against every hit the shop has, in the case and in the binder
   const verdict = !cards ? html`<b>柜里和卡本里都没有闪卡</b>：${none} 位空手走了。开包开出的、柜台上收来的闪卡（${RAR.RR.zh}以上）都进卡本`
-    : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加卡本只有 ${cards} 张：卡比人少，标价往上调也卖得完，收卡价提一档能多收些`
+    : would > 2 * cards ? html`按 ${pc(pct)} <b>${would} 位会买</b>，柜里加卡本只有 ${cards} 张：愿买的人比卡多得多，标价往上调多半也卖得完，收卡价提一档能多收些`
     : html`按 ${pc(pct)} ${would} 位会买，柜里加卡本 ${cards} 张`;
   return html`<p class="c-h">点是顾客最多肯出市价的几成：实的按现在的单卡标价会买。点轨上哪一档，展示柜和卡本的标价就改到哪一档</p>
     ${cards ? priceRail('', all, 0) : ''}
@@ -214,7 +214,7 @@ function sellerNote(vs: Visit[]) {
   const note = full && G.binderN() >= G.BINDER ? html`<b>卡本满了（${G.BINDER} 张）</b>，${full} 位没收成：大卡上柜、单卡标价降一档，或者卖一些给同行`
     : owe ? html`欠着九姐的账，${owe} 位的卡没收：账付了才收`
     : low > got.length ? html`按 ${pc(pct)} <b>${low} 位嫌你收得低</b>${up ? `，提到 ${pc(pct + G.PCT_STEP)} 能多收 ${up} 位` : ''}`
-    : html`收来的卡按单卡标价 ${pc(G.casePct())} 卖，每张赚市价的 ${Math.round((G.casePct() - pct) * 100)} 个百分点${cash ? `；${cash} 位的卡没收全：九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机的钱先留够那张账` : ''}`;
+    : html`收来的卡按单卡标价 ${pc(G.casePct())} 卖，每张差价是市价的 ${Math.round((G.casePct() - pct) * 100)} 个百分点（卖出去才到手）${cash ? `；${cash} 位的卡没收全：九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机的钱先留够那张账` : ''}`;
   return html`<div class="c-row c-sellers"><b>来卖卡的（拆包玩家当场拆）</b><span class="c-n">${tally([['来问', vs.length], ['卖给你', got.length], ['嫌收得低', low]])}</span></div>
     ${priceRail('buy', vs, 0)}
     <p class="c-note">${n ? `收了 ${n} 张闪卡，花 ${money(paid)}。` : ''}${note}。</p>`;
@@ -239,10 +239,10 @@ function customers() {
 }
 
 function clerk() {
-  if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）每 ${G.CLERK_ROUND / 60} 分钟巡一次货架，自动进货补上，你不在线也照样补。</p>`;
+  if (!G.lvl('clerk')) return html`<p class="muted">店员（店铺升级里）每 ${G.CLERK_ROUND / 60} 分钟用收银台的现金进货：1 级补到半架，2 级补满；你离店时也照样补。</p>`;
   return html`<ul class="auto">${SETS.filter(s => G.unlocked(s.id)).map(s =>
     html`<li><label><input type="checkbox" data-act="auto" data-id="${s.id}" .checked=${!!G.state.auto[s.id]}> ${s.name}</label></li>`)}</ul>
-      <p class="muted">勾选的系列：店员每 ${G.CLERK_ROUND / 60} 分钟进一次货补货架（钱不够就少买）；仓库里的货随时搬上架，留 ${G.CLERK_KEEP} 包给你拆。人多了货架一两分钟就卖空，把仓库进满，货架就不用空着等下一轮。</p>`;
+      <p class="muted">勾选的系列：店员每 ${G.CLERK_ROUND / 60} 分钟用现钱进货，1 级补到半架，2 级补满（钱不够就少买）；仓库里的货随时搬上架，留 ${G.CLERK_KEEP} 包给你拆。人多了货架一两分钟就卖空，把仓库进满，货架就不用空着等下一轮。</p>`;
 }
 
 function renderGoals() { // mid-reveal too: customers() leaves the binder's cards out while a pack is in hand (hold), the rest is the shop

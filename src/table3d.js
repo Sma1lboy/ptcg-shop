@@ -3,10 +3,13 @@
 // Pure presentation: it renders exactly the cards it is handed (one pack, or up to ten plus which of their cards to show), and
 // reports progress through callbacks. It never reads the game or src/sim.ts and has no say in what a pack contains.
 // Before the first pack it shows every set's sealed packs on the mat (showShelf); which ones and how many is mat.ts's call.
+// What each series adds to the show (the figure its big hits draw, the order its packs tear and cards leave them, how its torn strip
+// flies, how a held hit sways and how hard the table shakes) is src/series.ts's data; this file only plays it.
 // Plain JS (tsconfig allowJs, not type-checked). Interface, used by src/ui/mat.ts:
-//   mountTable(el, { onTear, onFlip(i, card, quiet), onDone, onPick?(k), onLost?, onHold?, reducedMotion })
-//     → { showShelf(items), hover(k), showPack(set, cards), showBatch(set, packs, picks), flip(i), flipAll(), resize(), dispose() } | null
+//   mountTable(el, { onTear, onFlip(i, card, quiet), onDone, onPick?(k), onLost?, onHold?, onLook?(k), reducedMotion })
+//     → { showShelf(items), hover(k), showPack(set, cards), showBatch(set, packs, picks), lookAt(k), putBack(), flip(i), flipAll(), resize(), dispose() } | null
 //   (quiet: turned in a sweep with others, no caption or flip sound of its own; onHold: a batch's best card is being lifted face down, the caption of the previous one should go;
+//    onLook(k): in a finished batch pick k is held up to the eye (a tap on it, or lookAt) — fired once it's up; k = -1 the moment it is let go (a tap, putBack, another card taking its place: -1, then that card's k);
 //    onPick(k): shelf item k's pack was tapped. showShelf items: [{ set, n (packs in the stack), off (can't be opened) }])
 // three.js: node_modules in dev, the import map vite.config.ts injects in builds (CDN, same pinned version). mountTable returns
 // null while three is still loading, if it failed to load, or without WebGL; mat.ts then keeps the 2D mat.
@@ -15,6 +18,7 @@ import * as ASSETS from './assets.ts';
 import { SETS, LOOK } from './sets.ts'; // LOOK: each set's pack colours and chase card, shared with the shelf wall (shelf.ts)
 import { FOIL, EMBLEM, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
 import { money } from './ui/common.ts';
+import { themeOf, strokes, figureInk, figureLife, life as figLife, dealShares } from './series.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
 const FX = () => fx;
 let T, M;
@@ -45,7 +49,7 @@ let V3, renderer, scene, camera, probe, composer, bloom, canvas, host = null, ra
 // after it, while the mat keeps breathing; then the idle-sway fades out and the loop stops. The shop runs for hours.
 let awake = 0, breath = 0, aliveUntil = 0;
 const IDLE = 2500, QUICK = .7; // QUICK: a 连开 round's tweens run at this share of their time
-let hand, grip, L, parts, rays, veil, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
+let hand, grip, L, parts, rays, veil, fig, figFx = null, playmat, counter, shared, io, ro, drag = null, opts = null, speed = 1;
 let R = null; // the pack on the mat right now
 let lean = 0;
 const ptr = { x: 0, y: 0, in: false }, tilt = { x: 0, y: 0 }, shake = { t0: 0, ms: 1, amp: 0 };
@@ -462,6 +466,62 @@ function embers(run, card, color, ms) {
   };
 }
 
+// ---------- the series' figure, and its deal ----------
+// A hit of UR and up draws its series' figure behind the card in hand (src/series.ts strokes, baked into one texture: r = brightness,
+// g = when the stroke is drawn, b = which of the pack's two inks), drawn in over the series' `draw` seconds by FIG_FS, moved by
+// series.life, held, faded. Additive light in the pack's own colours; the card (opaque) hides what is behind it.
+const FIG_S = .85; // the figure's ±1.3 card heights, as a share of what they would be at card scale
+const FIG_FS = `uniform sampler2D uTex; uniform vec3 uC0, uC1; uniform float uAmt, uProg, uTime, uRain, uFlick, uWave; varying vec2 vUv;
+  vec3 hue(float h) { return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }
+  void main() {
+    vec4 s = texture2D(uTex, vUv); if (s.a < 0.004) discard;
+    vec3 d = s.rgb / s.a;
+    float on = smoothstep(d.g - 0.01, d.g + 0.05, uProg), head = exp(-abs(uProg - d.g) * 12.0);
+    vec3 col = uRain > 0.5 ? mix(vec3(1.0), hue(d.b), 0.8) : mix(uC0, uC1, d.b);
+    float f = 1.0;
+    if (uFlick > 0.5) f = mix(0.3, 1.0, step(0.4, fract(sin(floor(uTime * 24.0) * 12.9898 + d.g * 91.7) * 43758.5453)));
+    if (uWave > 0.5) f = 0.4 + 0.6 * (0.5 + 0.5 * sin(uTime * 3.0 - (vUv.x + vUv.y) * 10.0));
+    gl_FragColor = vec4(col * (s.a * on * (0.35 + 0.65 * d.r) * (1.0 + head * 1.2) * f * uAmt), 1.0);
+  }`;
+const figTexs = {};
+let figScratch;
+const FIG_STILL = { rot: 0, s: 1, dx: 0, dy: 0 };
+function figureTex(motif) {
+  if (figTexs[motif]) return figTexs[motif];
+  const S = 1024, c = canvasOf(S, S), x = c.getContext('2d'), p = v => (v + 1.3) / 2.6 * S;
+  x.lineCap = x.lineJoin = 'round';
+  for (const s of strokes(motif)) {
+    x.strokeStyle = `rgb(${Math.round(s.w * 255)},${Math.round(clamp(s.t, 0, 1) * 255)},${Math.round(s.pal * 255)})`; x.lineWidth = (s.w >= .7 ? .034 : .018) / 2.6 * S;
+    x.beginPath(); s.pts.forEach(([a, b], k) => (k ? x.lineTo(p(a), p(-b)) : x.moveTo(p(a), p(-b)))); x.stroke();
+  }
+  const t = canvasTex(c, false); t.premultiplyAlpha = true; return (figTexs[motif] = t); // premultiplied: an edge pixel keeps the stroke's code, only its alpha falls
+}
+function figureOn(run, card, amt) {
+  const th = run.theme, look = LOOK[run.set]; if (!th || !look || !fig) return;
+  const [i0, i1] = figureInk(look.c), U = fig.material.uniforms, still = speed === 0;
+  figScratch ||= { r: new V3(), u: new V3(), f: new V3(), p: new V3(), z: new V3(0, 0, 1), q: new T.Quaternion() };
+  U.uTex.value = figureTex(th.motif); U.uC0.value.set(i0); U.uC1.value.set(i1);
+  U.uRain.value = th.motif === 'prism' ? 1 : 0;
+  U.uWave.value = !still && th.motif === 'prism' ? 1 : 0;
+  U.uFlick.value = !still && (th.motif === 'bolt' || th.motif === 'rift') ? 1 : 0;
+  wake(); figFx = { run, card, th, amt, still, t0: now }; fig.visible = true;
+}
+const hideFigure = () => { figFx = null; if (fig) fig.visible = false; };
+function tickFigure() {
+  const f = figFx, U = fig.material.uniforms, a = (now - f.t0) / 1000 / (speed || 1), dur = f.still ? 1.8 : figureLife(f.th);
+  if (R !== f.run || a > dur) { hideFigure(); return; }
+  const l = f.still ? FIG_STILL : figLife(f.th, a), { r, u, f: fw, p, z, q } = figScratch, unit = CH * FIG_S;
+  r.setFromMatrixColumn(camera.matrixWorld, 0); u.setFromMatrixColumn(camera.matrixWorld, 1); fw.setFromMatrixColumn(camera.matrixWorld, 2);
+  U.uProg.value = f.still ? 1 : a / f.th.draw; U.uTime.value = (f.still ? f.t0 : now) / 1000;
+  U.uAmt.value = f.amt * (f.still ? .55 : smooth(0, .08, a) * (1 - smooth(dur - .6, dur, a)));
+  fig.position.copy(f.card.getWorldPosition(p)).addScaledVector(fw, -1.1).addScaledVector(r, l.dx * unit).addScaledVector(u, l.dy * unit);
+  fig.quaternion.copy(camera.quaternion).multiply(q.setFromAxisAngle(z, l.rot));
+  fig.scale.setScalar(2.6 * unit * l.s);
+}
+// The place of slot k in this run's deal, 0 … n−1: a series changes who goes first and who goes together; the last slot still comes
+// at (n−1) × the step, so no series takes longer than another. Without a theme (an id series.ts doesn't know): slot k.
+const dealAt = (run, n) => { const sh = run.theme ? dealShares(run.theme.deal, n) : null; return k => (sh ? sh[k] * (n - 1) : k); };
+
 // ---------- lights and mood ----------
 const MOODS = {
   base: { hemi: .5, key: 1.6, cone: .5, glow: 0, bloom: .12, rays: 0, col: '--fx-silver' },
@@ -561,7 +621,7 @@ function flyTo(obj, pos, quat, ms, lift = 4, spin = 0) {
 
 // ---------- the run: one pack from drop-in to spread ----------
 function build(set, cards) {
-  const run = { data: cards, tiers: cards.map(tierOf), n: cards.length, stage: 'enter', cur: 0, busy: false, tear: 0, slide: 0, pile: 0 };
+  const run = { set, theme: themeOf(set), data: cards, tiers: cards.map(tierOf), n: cards.length, stage: 'enter', cur: 0, busy: false, tear: 0, slide: 0, pile: 0 };
   run.pack = buildPack(set); grip.add(run.pack);
   run.stack = new T.Group(); run.stack.position.set(0, -.4, -.14); grip.add(run.stack);
   run.cards = cards.map((c, k) => { const m = cardMesh(c); m.position.z = -k * CT * 1.06; run.stack.add(m); return m; });
@@ -605,7 +665,7 @@ function spots() {
 function rip(run) {
   run.stage = 'extract';
   const s = run.pack.userData.strip;
-  flyTo(s, spots().strip, flatQ(Math.random() * 2 - 1), 950, 7, Math.PI * 4);
+  const sf = run.theme?.strip; flyTo(s, spots().strip, flatQ(sf?.yaw ?? Math.random() * 2 - 1), 950, sf?.lift ?? 7, sf?.spin ?? Math.PI * 4); // how the strip flies and lands is the series'
   opts.onTear();
   extract(run);
 }
@@ -675,17 +735,19 @@ function celebrate(run, i, t) {
   const card = run.cards[i], at = card.getWorldPosition(tmpV()), silver = css('--fx-silver'), gold = css('--fx-gold');
   const push = (k, ms) => { if (!run.look) camD((run.batch ? run.shot.d : stages().reveal.d) * k, ms); }; // a card held to the eye stays put
   if (run.batch) L.glow.position.copy(at).addScaledVector(camBasis().f, 6);
+  const q = run.theme ? run.theme.quake : 1; // this series' share of the plain show's shake
   if (t === 0) { mood('base', 300); push(1, 400); return 40; }
-  run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1) };
+  run.show = { t0: now, amp: [0, .12, .16, .22, .3, .36][t] * (run.batch && !run.look ? .4 : 1), sw: run.theme?.sway };
   if (t === 1) { mood('base', 300); push(1, 400); return 160; }
   // RR / ACE: full-card foil. The hand tilts it into the lamp and back, so the brushed sheen runs across the whole face (a reverse
   // only wobbles): the one move a player makes with a new ex. The fan's small cards get the same tilt on their own axis (tiltCard).
   if (t === 2) { mood('lift', 300); burst(at, 70, silver, 15); push(.94, 500); run.show.tilt = true; if (run.batch && !run.look) tiltCard(card); return 560; }
-  if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
+  if (t >= 3 && run.theme && (!run.batch || run.look)) figureOn(run, card, [0, 0, 0, .5, .8, 1][t]); // behind a held card (one on the far fan has the mat in the way)
+  if (t === 3) { mood('silver', 400); halo(card, silver, .45); burst(at, 110, silver, 18); quake(.18 * q, 380); push(.88, 700); embers(run, card, silver, 1400); return 900; }
   // IR and up: the room lights down to the pull. SIR / gold goes further: the room goes dark behind it and a light sweeps across its foil.
   mood(t === 5 ? 'solo' : 'gold', 450).then(() => wait(t === 5 ? 2600 : 1400)).then(() => { if (R === run && run.cur === i && run.stage === 'cards') mood('glow', 1600); });
   if (t === 5) { const g0 = L.glow.position.clone(), r = camBasis().r.clone(); wait(350).then(() => tween(2400, e => { if (R === run) L.glow.position.copy(g0).addScaledVector(r, Math.sin(e * Math.PI * 2) * 9); }, E.lin)); } // right, back across, home
-  halo(card, gold, .6); burst(at, 170, gold, 22); quake(.32, 520); push(.84, 800);
+  halo(card, gold, .6); burst(at, 170, gold, 22); quake(.32 * q, 520); push(.84, 800);
   embers(run, card, gold, t === 5 ? 4200 : 2600);
   if (t === 5) setTimeout(() => { if (R === run) burst(card.getWorldPosition(tmpV()), 140, gold, 26); }, 420);
   return t === 5 ? 1700 : 1300;
@@ -795,12 +857,14 @@ function placeHaulTags(run) {
   const c = run.cards[run.haul.rest[0]], [x, y] = px(c.localToWorld(new V3(-CW / 2, -CH / 2 - .15, 0)));
   s.style.opacity = run.look ? 0 : 1; s.style.transform = `translate(${Math.max(4, x).toFixed(1)}px, ${y.toFixed(1)}px)`;
 }
-// In the spread, tap a card to hold it up to the camera; tap again to put it back.
+// In the spread, tap a card to hold it up to the camera; tap again to put it back. onLook tells mat.ts which pick is held, so its
+// caption, 放回 key and hint follow the hold itself, whoever started it (a tap, lookAt) and however it ends. Only for the run the
+// table is still showing: one it has moved on from (a new pack, a dispose) has nobody to tell.
 async function look(run, card) {
   if (run.busy) return;
   const L0 = run.look; run.busy = true;
   if (L0) {
-    run.look = null; mood('base', 400);
+    run.look = null; mood('base', 400); if (R === run) opts?.onLook?.(-1);
     await flyTo(L0.card, L0.p, L0.q, 420, 1);
     if (card === L0.card || !card) { run.busy = false; return; }
   }
@@ -810,7 +874,7 @@ async function look(run, card) {
   mood('look', 400);
   const to = camera.position.clone().addScaledVector(f, -d);
   await flyTo(card, to, camera.quaternion.clone(), 460, 0);
-  if (run.look && run.look.card === card) { run.look.up = true; run.look.base = camera.quaternion.clone(); }
+  if (run.look && run.look.card === card) { run.look.up = true; run.look.base = camera.quaternion.clone(); if (R === run) opts?.onLook?.(run.cards.indexOf(card)); }
   run.busy = false;
 }
 
@@ -863,7 +927,7 @@ function fanOf(n, np) {
 }
 function buildBatch(set, packs, picks, news) {
   const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]);
-  const run = { batch: true, data, news, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
+  const run = { set, theme: themeOf(set), batch: true, data, news, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
   run.shot = run.grid.cam;
   run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; Object.assign(p.userData, { col: grid.col[k], yaw: (Math.random() - .5) * .2, wy: (Math.random() - .5) * .12 }); scene.add(p); return p; });
   const inPack = {};
@@ -878,7 +942,8 @@ function buildBatch(set, packs, picks, news) {
 // froms: world poses ({ p, q }) of shelf packs of this set; the first packs of the batch are dealt from there, the rest drop in.
 async function enterBatch(run, froms = []) {
   camTo(run.grid.cam, 700);
-  await Promise.all(run.packs.map((p, k) => wait(k * 60).then(() => {
+  const slot = dealAt(run, run.packs.length);
+  await Promise.all(run.packs.map((p, k) => wait(slot(k) * 60).then(() => {
     if (R !== run) return;
     const home = run.grid.pos[k], q = flatQ(p.userData.yaw), f = froms[k], from = f ? f.p : home.clone().add(new V3((Math.random() - .5) * 4, 15, 7));
     const q0 = f ? f.q : q.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(.5, -.35, .6)));
@@ -895,13 +960,14 @@ function zipTear(run, g) { run.tear = g; for (const p of run.packs) tearPack(p, 
 async function tearAll(run) {
   if (run.stage !== 'pack') { if (run.stage === 'enter') run.wantTear = true; return; }
   run.stage = 'tearing'; opts.onTear();
-  await Promise.all(run.packs.map(p => wait(p.userData.col * 75).then(async () => {
+  const colAt = dealAt(run, run.grid.cols);
+  await Promise.all(run.packs.map(p => wait(colAt(p.userData.col) * 75).then(async () => {
     if (R !== run) return;
     const t0 = p.userData.tear || 0; if (t0 < .9) FX().crinkle();
     await tween(300 * (1 - t0) + 40, e => tearPack(p, t0 + (1 - t0) * e), E.in); if (R !== run) return;
     const s = p.userData.strip, at = s.getWorldPosition(tmpV()), side = at.x < 0 ? -1 : 1; // off the side it tore on: back at z −34 was through the showcase glass
     const to = at.clone().add(new V3(side * (46 + Math.random() * 10), 7, 4 + Math.random() * 6));
-    flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, 3, Math.PI * 3).then(() => { s.visible = false; });
+    const sf = run.theme?.strip; flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, sf ? sf.lift * .45 : 3, sf ? sf.spin * .75 : Math.PI * 3).then(() => { s.visible = false; });
   })));
   if (R === run) extractBatch(run);
 }
@@ -911,10 +977,11 @@ async function extractBatch(run) {
   run.shot = run.fan.cam; camTo(run.shot, 1000);
   // the packs are pushed back into the row behind the fan; one flattens once nothing is left in it
   const empty = p => !p.children.some(c => run.cards.includes(c)), flatten = p => { if (!p.userData.flat) { p.userData.flat = true; tween(380, e => { p.scale.z = 1 - .62 * e; }, E.out); } };
-  run.packs.forEach((p, k) => wait(k * 35).then(() => { if (R === run) flyTo(p, run.fan.wrap[k], flatQ(p.userData.wy), 620, 1).then(() => { if (R === run && empty(p)) flatten(p); }); }));
+  const packAt = dealAt(run, run.packs.length), cardAt = dealAt(run, run.n);
+  run.packs.forEach((p, k) => wait(packAt(k) * 35).then(() => { if (R === run) flyTo(p, run.fan.wrap[k], flatQ(p.userData.wy), 620, 1).then(() => { if (R === run && empty(p)) flatten(p); }); }));
   await wait(480); if (R !== run) return;
   const step = Math.min(160, 1100 / Math.max(1, run.n));
-  await Promise.all(run.cards.map((m, i) => wait(200 + i * step).then(async () => {
+  await Promise.all(run.cards.map((m, i) => wait(200 + cardAt(i) * step).then(async () => {
     if (R !== run) return;
     FX().slide();
     const y0 = m.position.y, pack = m.parent;
@@ -948,8 +1015,10 @@ function flipNext(run) {
 }
 // Picks from…to turn over in one wave, about a second whatever the count; only the last gets a caption and a flip sound.
 function sweep(run, from, to) {
-  const step = Math.min(70, 1100 / (to - from + 1));
-  for (let k = from; k <= to; k++) wait((k - from) * step).then(() => { if (R === run) turnOver(run, k, 380, () => opts.onFlip(k, run.data[k], k < to)); });
+  const step = Math.min(70, 1100 / (to - from + 1)), at = dealAt(run, to - from + 1);
+  let voiced = from;
+  for (let k = from + 1; k <= to; k++) if (at(k - from) >= at(voiced - from)) voiced = k;
+  for (let k = from; k <= to; k++) wait(at(k - from) * step).then(() => { if (R === run) turnOver(run, k, 380, () => opts.onFlip(k, run.data[k], k !== voiced)); });
   run.cur = to;
   return wait((to - from) * step + 420);
 }
@@ -1249,7 +1318,7 @@ function tick(t) {
   const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
   tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
   const s = t / 1000; let sway = 0;
-  if (run && run.show) { const a = (t - run.show.t0) / 1000; sway = run.show.tilt ? -TILT * Math.sin(a * 5.2) * Math.exp(-a * 1.8) : Math.sin(a * 3.4) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
+  if (run && run.show) { const a = (t - run.show.t0) / 1000, w = run.show.sw || [3.4, 0, 1]; sway = run.show.tilt ? -TILT * Math.sin(a * 5.2) * Math.exp(-a * 1.8) : (Math.sin(a * w[0]) + w[1] * Math.sin(a * w[0] * w[2])) / (1 + w[1]) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
   lean += (leanTo - lean) * k; // a sealed pack is held at a slight angle so its pillow shows
   const sh = shake.amp * Math.max(0, 1 - (t - shake.t0) / shake.ms);
   const shelfMoving = run?.shelf ? tickShelf(run, dt) : false;
@@ -1261,7 +1330,7 @@ function tick(t) {
       if (Math.abs(to - u.value) > .003) { u.value += (to - u.value) * Math.min(1, dt * 7); litMoving = true; } else u.value = to;
     }
   }
-  const busy = tws.length > 0 || !!drag || sh > 0 || now < aliveUntil || !!(run && (run.show || run.embers)) || shelfMoving || litMoving || !!relay ||
+  const busy = tws.length > 0 || !!drag || sh > 0 || now < aliveUntil || !!(run && (run.show || run.embers)) || !!figFx || shelfMoving || litMoving || !!relay ||
     Math.abs(tx - tilt.x) + Math.abs(ty - tilt.y) + Math.abs(leanTo - lean) > 1e-4;
   if (busy) awake = Math.max(awake, now + IDLE);
   breath += ((now < awake ? 1 : 0) - breath) * Math.min(1, dt * 3); // the idle sway fades in on wake and out before the loop parks
@@ -1274,6 +1343,7 @@ function tick(t) {
     Lk.card.quaternion.copy(camera.quaternion).multiply(new T.Quaternion().setFromEuler(new T.Euler(-tilt.y * .35, tilt.x * .45, 0)));
   }
   if (run && run.embers) run.embers();
+  if (figFx) tickFigure();
   parts.update(dt);
   if (run && run.stage === 'cards' && run.cur >= 0 && moodNow.rays > .01) { // god rays stay behind the card being shown
     const c = run.cards[run.cur], f = camBasis().f; rays.position.copy(c.getWorldPosition(tmpV())).addScaledVector(f, -1.2); rays.quaternion.copy(camera.quaternion);
@@ -1556,6 +1626,10 @@ function init() {
   rays.renderOrder = -1; scene.add(rays);
   veil = new T.Mesh(new T.PlaneGeometry(1, 1), new T.MeshBasicMaterial({ transparent: true, opacity: 0, fog: false, toneMapped: false })); // writes depth: the glow of cards behind it (additive, drawn later) stays hidden
   veil.renderOrder = -2; veil.visible = false; scene.add(veil); // drawn before the rays and sparks; those in front of it stay lit
+  fig = new T.Mesh(new T.PlaneGeometry(1, 1), new T.ShaderMaterial({ transparent: true, depthWrite: false, blending: T.AdditiveBlending,
+    uniforms: { uTex: { value: null }, uC0: { value: new T.Color() }, uC1: { value: new T.Color() }, uAmt: { value: 0 }, uProg: { value: 0 }, uTime: { value: 0 }, uRain: { value: 0 }, uFlick: { value: 0 }, uWave: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }', fragmentShader: FIG_FS }));
+  fig.renderOrder = -1; fig.visible = false; scene.add(fig); // behind the held card, with the rays
 
   composer = new M.EffectComposer(renderer, new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: 4 }));
   composer.addPass(new M.RenderPass(scene, camera));
@@ -1575,7 +1649,8 @@ function init() {
     const o = opts; close?.(); o?.onLost?.();
   });
   ro = new ResizeObserver(resize);
-  if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; }, look: k => look(R, R.cards[k]) }; // dev probe: frame count, renderer.info, hold spread card k up
+  if (import.meta.env?.DEV) window.__t3 = { renderer, get frames() { return frames; }, get run() { return R; }, get fig() { return figFx; }, look: k => look(R, R.cards[k]), // dev probe: frame count, renderer.info, hold spread card k up
+    playFigure: (id, k = R.cards.length - 1) => { R.set = id; R.theme = themeOf(id); figureOn(R, R.cards[k], 1); } }; // …and play series id's figure behind card k
   io = new IntersectionObserver(es => { seen = es[es.length - 1].isIntersecting; if (seen && R) wake(IDLE); });
 }
 
@@ -1625,13 +1700,13 @@ function mountTable(el, o) {
   const fresh = (quick = false) => {
     speed = o.reducedMotion ? 0 : quick ? QUICK : 1;
     resize(); // mat.ts has just rewritten the header / dropped the summary: lay the new run out for the canvas as it is now, not as the ResizeObserver last saw it
-    tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0()); canvas.style.cursor = '';
+    tws = []; parts.clear(); drag = null; L.glow.position.copy(GLOW0()); canvas.style.cursor = ''; hideFigure();
     mood('base', 400); // tws = [] also dropped a show's fade back to base (a new pack started right after a gold pull kept its rays)
     if (R) clearRun(R, true);
   };
   const shut = () => {
     if (opts !== o) return;
-    park(); tws = []; drag = null; parts.clear();
+    park(); tws = []; drag = null; parts.clear(); hideFigure();
     if (R) { clearRun(R, false); R = null; }
     canvas.remove(); host = null; opts = null; close = null; ro.disconnect(); io.disconnect();
   };
@@ -1668,6 +1743,12 @@ function mountTable(el, o) {
       const run = R; if (opts !== o || !run?.batch) return;
       while (R === run && (run.stage !== 'spread' || run.busy)) await wait(100);
       if (R === run && !run.look) await look(run, run.cards[k]);
+    },
+    // Lets go of the card held up in the spread, as a tap on it would (one still rising lands first). Resolves once it is back on the mat.
+    async putBack() {
+      const run = R; if (opts !== o || !run?.batch || run.stage !== 'spread') return;
+      while (R === run && run.look && run.busy) await wait(60);
+      if (R === run && run.look) await look(run, null);
     },
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {

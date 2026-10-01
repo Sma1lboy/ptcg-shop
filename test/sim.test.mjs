@@ -940,7 +940,7 @@ console.log('ok luck percentile');
     near(d.cash, now.cash - b.cash, `${m}: cash is the till's real change`);
     near(now.earned - b.earned, o.revenue + d.bulk, `${m}: takings plus bulk are what the books earned`); near(now.intake - b.intake, d.intake, `${m}: intake is what 收卡 paid`);
     assert.ok(o.bills > 0 && !o.borrowed && g.state.loan === 0, `${m}: a bill was paid from the till, nothing borrowed or repaid`);
-    near(d.cash, o.revenue - d.intake - d.restock + d.bulk - o.bills, `${m}: cash = takings − intake − restock + bulk − bills`);
+    near(d.cash, o.revenue - d.intake - d.restock + d.bulk - o.bills + (o.tickets ?? 0) + (o.bonus ?? 0), `${m}: cash = takings − intake − restock + bulk − bills + gallery tickets + 看店 bonus`);
   };
   // A shop with every channel: a level-2 clerk (buys stock, sells bulk), 收卡 at the top price, packs bought and opened for real (bulk
   // and hits for the binder), 3 big cards in the case; the shelves hold 40 packs of two sets and the back room none, so the clerk has to buy.
@@ -1188,6 +1188,265 @@ console.log('ok luck percentile');
   assert.ok(st().cust.visits > visits && st().away === null && st().offline === null, 'walk-ins are back and the paused time is no absence');
   const dueAt = G.dueIn(); run(G.WEEK); assert.equal(G.dueIn() > dueAt - G.WEEK - 1 && evs.includes('bill_due'), true, 'and the bill comes a week of shop time after, not before');
   console.log(`ok 开张期: no 倒爷 in the first ${G.OPENING / 60} min, ≤ half a shelf until ${G.OPENING_CAP / 60} min (${sweeps.cap.length} sweeps, max ${Math.max(...sweeps.cap)}), then up to ${Math.max(...sweeps.after)}; 暂停 freezes the shop and hands the gap back`);
+}
+
+// ---------- 展厅 (state.gallery), its tickets and the 挂机 / 离线 bonus (src/game.ts) ----------
+// The gallery holds physical copies the player shows: no sale, no customer and no auto-fill ever touches it, and no move, branch or
+// bankruptcy makes or loses a copy. Ticket money and both bonuses go into the till and state.extra, never into earned, so they unlock no
+// set, earn no 名气 and lift no credit line; no random draw is added anywhere (same seed ⇒ same customers, with or without them).
+{
+  const KEY = 'ptcg-shop-v1', near = (a, b, m, e = 1e-6) => assert.ok(Math.abs(a - b) < e, `${m}: ${a} vs ${b}`);
+  const pull = (n, price, kind = 'SIR') => ({ set: 'sv08', n: String(n), name: `卡${n}`, r: kind, kind, price }), keyOf = c => `${c.set}|${c.n}|${c.kind}`;
+  // A shop on a fake clock with its own seeded dice and storage (a reload is a second createGame over the same store).
+  const shop = seed => {
+    const w = { T: 1_700_000_000_000, store: {} };
+    w.env = { now: () => w.T, random: S.rng(seed), storage: { getItem: k => w.store[k] ?? null, setItem: (k, v) => { w.store[k] = v; } } };
+    w.G = createGame(w.env); w.st = () => w.G.state;
+    w.run = (secs, step = 1) => { for (let s = 0; s < secs; s += step) { w.T += step * 1e3; w.G.tick(); } };
+    w.give = (card, count = 1) => { w.st().singles[keyOf(card)] = { ...card, count }; return keyOf(card); };
+    w.noDebt = () => { w.st().owe = 0; w.st().debt = 0; return w; };
+    return w;
+  };
+  const copies = g => { const m = {}, add = (k, n = 1) => { m[k] = (m[k] || 0) + n; }; for (const [k, c] of Object.entries(g.state.singles)) add(k, c.count); for (const c of g.state.shown) add(c.key); if (g.state.trophy) add(g.state.trophy.key); for (const c of g.state.gallery) if (c) add(c.key); return m; };
+  const earned = g => g.state.earned.sealed + g.state.earned.singles;
+  // A trading shop: level-2 clerk, 10 packs opened (bulk for the clerk to sell), a stocked shelf and 3 big cards in the case; the cash never runs short.
+  const busy = (seed, skills = {}) => {
+    const w = shop(seed), G = w.G, st = w.st; st().cash = 1e6; Object.assign(st().skills, skills);
+    G.upgrade('clerk'); G.upgrade('clerk'); G.buy('sv08', 210); G.open('sv08', 10); G.place(0, 'sv08');
+    for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
+    return w;
+  };
+  const withRoom = w => { assert.ok(w.G.collectToGallery(w.give(pull('room', 100)), 0)); return w; }; // a $100 card: ticket $2, one visitor per 30 s
+
+  // 1. Moves. Every copy stays accounted for through any sequence of moves, valid or not, in or out of a reveal.
+  {
+    const w = shop(1), G = w.G, st = w.st, A1 = pull('a', 100), B1 = pull('b', 50), C1 = pull('c', 0.1, 'C');
+    const kA = w.give(A1, 2), kB = w.give(B1), kC = w.give(C1, 3), total = copies(G);
+    assert.deepEqual(st().gallery, Array(5).fill(null)); assert.equal(G.GALLERY_SLOTS, 5);
+    assert.ok(G.collectToGallery(kA, 0)); assert.equal(st().singles[kA].count, 1); assert.equal(st().gallery[0].key, kA);
+    assert.equal(G.collectToGallery(kA, 0), false, 'an occupied slot takes nothing');
+    assert.ok(G.collectToGallery(kA, 1)); assert.equal(st().singles[kA], undefined, 'the last copy leaves its pocket, not a pocket of 0');
+    assert.equal(G.collectToGallery(kA, 2), false, 'no copy left to place');
+    assert.ok(G.collectToGallery(kC, 4), 'any card the player owns can be shown, not only hits');
+    assert.ok(G.setTrophy(kB)); assert.ok(G.trophyBonus() > 0);
+    assert.ok(G.collectTrophy(3)); assert.equal(st().trophy, null); assert.equal(G.trophyBonus(), 0, 'the trophy itself moved: its collectors stop coming'); assert.equal(st().gallery[3].key, kB);
+    assert.equal(G.collectTrophy(2), false, 'no trophy left'); assert.deepEqual(copies(G), total);
+    assert.ok(G.moveCollect(1, 2)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [kA, null, kA, kB, kC], 'an occupied slot moves into an empty one');
+    assert.ok(G.moveCollect(0, 3)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [kB, null, kA, kA, kC], 'two cards swap');
+    assert.ok(G.uncollect(3)); assert.equal(st().singles[kA].count, 1); assert.equal(G.uncollect(3), false, 'the slot is empty now');
+    assert.equal(G.moveCollect(1, 3), false, 'two empty slots'); assert.equal(G.moveCollect(2, 2), false, 'a slot onto itself'); assert.deepEqual(copies(G), total);
+    st().singles.pile = { ...pull('pile', 5), count: G.BINDER + 5 }; const full = copies(G);
+    assert.ok(G.uncollect(0), 'a full binder only stops 收卡, never a card coming home'); assert.deepEqual(copies(G), full); delete st().singles.pile;
+    // a reveal: the cards just pulled are already in singles, so nothing may leave singles for the room until they are flipped
+    st().cash = 1e6; G.buy('sv08', 1); const [pack] = G.open('sv08', 1), k0 = keyOf(pack[0]); G.tick(true);
+    assert.equal(G.revealing(), true); const before = JSON.stringify(st());
+    assert.equal(G.collectToGallery(k0, 1), false, 'refused while packs are being revealed'); assert.equal(JSON.stringify(st()), before);
+    assert.ok(G.moveCollect(2, 4), 'moves inside the room are safe mid-reveal'); assert.ok(G.uncollect(4), 'and so is taking a card out of it'); G.tick(false);
+    assert.equal(G.revealing(), false); assert.ok(G.collectToGallery(k0, 1), 'and the card goes once the reveal is over');
+    // any sequence: valid and invalid slots and keys, trophy and case moves, ticks in and out of a reveal
+    const v = shop(2), V = v.G, vk = [v.give(A1, 2), v.give(B1, 2), v.give(C1, 2), 'nope'], vt = copies(V), rnd = S.rng(1234), pick = n => Math.floor(rnd() * n), slot = () => pick(8) - 1;
+    let put = 0;
+    for (let i = 0; i < 800; i++) {
+      const op = pick(9), key = vk[pick(4)];
+      if (op <= 1) put += +V.collectToGallery(key, slot()); else if (op === 2) put += +V.collectTrophy(slot()); else if (op === 3) V.uncollect(slot()); else if (op === 4) V.moveCollect(slot(), slot());
+      else if (op === 5) V.setTrophy(key); else if (op === 6) V.clearTrophy(); else if (op === 7) V.list(key); else V.tick(pick(2) === 0);
+      assert.deepEqual(copies(V), vt, `copy count after step ${i} (op ${op})`);
+    }
+    assert.ok(put > 10, `the sequence did put cards on show (${put})`); assert.deepEqual(copies(createGame({ ...v.env, random: S.rng(3) })), vt, 'and the save has the same copies');
+  }
+
+  // 2. The room is never sold, listed, filled or bought: not by 卖同行, 卖散卡, the clerk's bulk sale, 带徒弟, seekers or collectors.
+  {
+    const w = shop(3), G = w.G, st = w.st; st().cash = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); assert.ok(G.learn('apprentice'));
+    G.buy('sv08', 120); G.place(0, 'sv08');
+    const K = w.give(pull('s1', 60), 2), Z = w.give(pull('s2', 2, 'C'), 40);
+    assert.ok(G.collectToGallery(K, 0)); assert.ok(G.collectToGallery(Z, 1)); const room = JSON.stringify(st().gallery);
+    const cash0 = st().cash; assert.ok(G.sellBulk() > 0); near(st().cash - cash0, 39 * 2 * G.BUYLIST, 'only the 39 bulk cards in the binder sold');
+    assert.equal(G.sell(Z), 0, 'no copy in singles: nothing to sell, whatever is on show');
+    for (let i = 0; i < 2160 && (st().singles[K] || st().shown.some(c => c.key === K)); i++) w.run(10, 10);
+    assert.ok(!st().singles[K] && !st().shown.some(c => c.key === K), 'the copy in the binder sold to a customer'); assert.equal(copies(G)[K], 1);
+    assert.equal(JSON.stringify(st().gallery), room, 'and the one on show is still there');
+    assert.equal(G.sell(K), 0); assert.equal(G.list(K), false); assert.equal(G.setTrophy(K), false); G.fillCase(); w.run(600, 10);
+    assert.equal(JSON.stringify(st().gallery), room, 'selling, listing, trophy, 补满柜位 and ten more minutes of trade leave it alone');
+  }
+
+  // 3. Invalid input changes nothing: not the state, not the save, not a single listener call.
+  {
+    const w = shop(4), G = w.G, st = w.st, kA = w.give(pull('a', 100)), kB = w.give(pull('b', 50)), kT = w.give(pull('t', 70));
+    assert.ok(G.collectToGallery(kA, 0)); assert.ok(G.setTrophy(kT)); w.give(pull('z', 5), 0);
+    let heard = 0; G.on(() => heard++); const snap = () => JSON.stringify([st(), w.store]), before = snap();
+    for (const bad of [-1, 5, 1.5, NaN, Infinity, '1', null, undefined, {}, [1]]) {
+      assert.equal(G.collectToGallery(kB, bad), false, `slot ${String(bad)}`); assert.equal(G.collectTrophy(bad), false); assert.equal(G.uncollect(bad), false);
+      assert.equal(G.moveCollect(bad, 0), false); assert.equal(G.moveCollect(0, bad), false);
+    }
+    for (const key of ['nope', '', '__proto__', 'constructor', 'toString', 'hasOwnProperty', 42, null, undefined, {}, keyOf(pull('z', 5))]) assert.equal(G.collectToGallery(key, 1), false, `key ${String(key)}`);
+    assert.equal(G.collectToGallery(kB, 0), false, 'occupied'); assert.equal(G.collectTrophy(0), false, 'occupied'); assert.equal(G.uncollect(1), false, 'empty slot');
+    assert.equal(G.moveCollect(1, 2), false, 'two empty slots'); assert.equal(G.moveCollect(0, 0), false, 'same slot');
+    assert.equal(snap(), before); assert.equal(heard, 0);
+  }
+
+  // 4. Ticket price: nothing for an empty room, $1 at least and $20 at most for a room with a card in it, from the prices the cards are shown at.
+  {
+    const w = shop(5).noDebt(), G = w.G, st = w.st, room = (...prices) => { st().gallery = [...prices.map((p, i) => ({ key: `k${i}`, ...pull(`t${i}`, p) })), ...Array(5 - prices.length).fill(null)]; return G.ticketPrice(); };
+    assert.deepEqual([G.ticketPrice(), G.galleryValue(), G.TICKET_MIN, G.TICKET_MAX], [0, 0, 1, 20]);
+    w.run(3600, 10); assert.deepEqual(st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(st().galleryAcc, 0); assert.equal(st().cash, 1000, 'an empty room earns nothing, and nobody queues for it');
+    G.leave(); w.T += 3600e3; G.tick(); G.back(); assert.equal(st().cash, 1000); assert.ok(st().offline.secs > 0 && st().offline.tickets === undefined && st().offline.bonus === undefined, 'no tickets or bonus on the receipt of an empty room');
+    const table = [[[0.1], 1], [[0], 1], [[24.99], 1], [[99.99], 1], [[100], 2], [[400], 4], [[2500], 10], [[1000, 1500], 10], [[9999], 19], [[10000], 20], [[1e6], 20], [[2000, 2000, 2000, 2000, 2000], 20]];
+    for (const [ps, want] of table) assert.equal(room(...ps), want, `a room worth ${ps.join(' + ')}`);
+    room(0.1, 0.2); near(G.galleryValue(), 0.3, 'the value is the sum of the shown prices'); st().gallery.fill(null); assert.equal(G.ticketPrice(), 0, 'emptied again: back to nothing');
+  }
+
+  // 5. The clock is credited once, to the second the shop traded: visitors come at GALLERY_RATE, whole visitors pay, the rest carries over.
+  {
+    const mk = seed => withRoom(shop(seed).noDebt());
+    const w = mk(6), G = w.G, st = w.st, cash0 = st().cash; assert.equal(G.ticketPrice(), 2);
+    w.run(3600, 1); assert.equal(st().extra.tickets, 240, 'an hour of one-second ticks: 120 visitors at $2'); near(st().cash - cash0, 240, 'the till has exactly that');
+    for (let i = 0; i < 5; i++) G.tick(); assert.equal(st().extra.tickets, 240, 'ticking again at the same moment credits nothing');
+    const a = mk(6), b = mk(6); a.run(100, 1); b.run(100, 100); assert.deepEqual([a.st().extra.tickets, b.st().extra.tickets], [6, 6], 'one long tick = many short ones');
+    const c = mk(6); c.run(45, 45); assert.equal(c.st().extra.tickets, 2, 'a visitor every 30 s: one in 45 s'); near(c.st().galleryAcc, 0.5, 'half a visitor carried');
+    const d = createGame({ ...c.env, random: S.rng(1) }); near(d.state.galleryAcc, 0.5, 'saved with the carry'); c.T += 15e3; d.tick();
+    assert.equal(d.state.extra.tickets, 4, 'a reload in the middle of a visitor loses none of it');
+    // nobody queues for an empty room: the half visitor waiting when the last card leaves is gone with it
+    const e = mk(6), room = keyOf(pull('room', 100)); e.run(45, 45); assert.ok(e.G.uncollect(0)); e.run(600, 10); assert.equal(e.st().galleryAcc, 0); assert.ok(e.G.collectToGallery(room, 0)); e.run(20, 20);
+    assert.equal(e.st().extra.tickets, 2, 'the card put back starts with an empty queue: still only the first visitor');
+    // a tick that pays a ticket tells the page (the cash on screen), even when no customer came in that second
+    const f = mk(6); let seen = null, stale = 0; f.G.on(() => { seen = f.st().cash; }); for (let i = 0; i < 600; i++) { f.T += 1e3; f.G.tick(); if (f.st().extra.tickets && seen !== f.st().cash) stale++; }
+    assert.equal(stale, 0, 'no tick left the page behind the till');
+  }
+
+  // 6. Away: a closed shop is credited its offline cap and no more, tickets and bonus alike; a paused shop is credited nothing.
+  {
+    const mk = (clerk, watch = 0) => { const w = shop(7).noDebt(), K = w.give(pull('big', 2500)); w.st().cash = 1e6; w.st().skills.watch = watch; if (clerk) w.G.upgrade('clerk'); assert.ok(w.G.collectToGallery(K, 0)); return w; };
+    const visitors = secs => Math.floor(secs * 2 / 60 + 1e-9);
+    const w = mk(true), G = w.G, st = w.st, cash0 = st().cash; assert.equal(G.ticketPrice(), 10);
+    G.leave(); w.T += 10 * 3600e3; G.tick(); G.tick(); assert.equal(st().away.secs, G.OFFLINE_CAP, 'ten hours away with a clerk: six traded'); G.back();
+    assert.equal(st().offline.secs, G.OFFLINE_CAP); assert.equal(st().offline.tickets, 10 * visitors(G.OFFLINE_CAP)); assert.equal(st().extra.tickets, 7200, '720 visitors at $10, once');
+    near(st().cash - cash0, 7200, 'and the till has exactly that'); G.ackOffline();
+    G.leave(); w.T += 3600e3; G.tick(); G.back(); assert.equal(st().offline.tickets, 1200, 'the next absence brings its own hour'); assert.equal(st().extra.tickets, 8400);
+    const g = mk(true); g.T += 10 * 3600e3; g.G.tick(); g.G.tick(); assert.equal(g.st().offline.tickets, 7200, 'nobody said they left: the gap is the same absence');
+    const n = mk(false); n.G.leave(); n.T += 10 * 3600e3; n.G.tick(); n.G.back(); assert.equal(n.st().offline.tickets, 10 * visitors(n.G.NOCLERK_CAP), 'no clerk: one hour');
+    const x = mk(true, 3); x.G.leave(); x.T += 20 * 3600e3; x.G.tick(); x.G.back(); assert.equal(x.G.offlineCap(), G.OFFLINE_CAP + 6 * 3600); assert.equal(x.st().offline.tickets, 10 * visitors(x.G.offlineCap()), '看店 3 stretches the cap and the tickets with it');
+    const p = mk(false); p.G.pause(true); p.T += 3600e3; p.G.tick(); p.T += 3600e3; p.G.tick(); assert.equal(p.st().extra.tickets, 0, 'a paused hour earns no tickets');
+    p.G.pause(false); p.T += 60e3; p.G.tick(); assert.equal(p.st().extra.tickets, 2 * 10, 'and after the pause only the minute since: 2 visitors'); assert.equal(p.st().offline, null, 'and the pause was no absence');
+  }
+
+  // 7. 挂机 and 离线 bonus. Same seed, same customers, same sales: the bonus is extra money in the till and in extra, nowhere else.
+  {
+    const go = (seed, { idle = false, room = false } = {}) => { const w = busy(seed); if (room) withRoom(w); if (idle) w.G.setIdle(true); w.run(1800, 1); return w; };
+    const plain = go(8), idle = go(8, { idle: true }), shown = go(8, { room: true }), both = go(8, { idle: true, room: true });
+    const sold = w => JSON.stringify([w.st().cust, w.st().earned, w.st().recent]);
+    for (const w of [idle, shown, both]) assert.equal(sold(w), sold(plain), 'same customers, same sales');
+    assert.ok(earned(plain.G) > 500, `a shop that sold (${earned(plain.G)})`); assert.deepEqual(plain.st().extra, { tickets: 0, idle: 0, offline: 0 });
+    assert.ok(Math.abs(idle.st().extra.idle / (0.25 * earned(idle.G)) - 1) < 0.01, `+25% of what customers paid and the clerk's bulk sale brought: ${idle.st().extra.idle} of ${earned(idle.G)}`);
+    near(idle.st().cash - plain.st().cash, idle.st().extra.idle, 'the bonus is in the till and nothing else moved'); assert.equal(idle.st().extra.offline, 0);
+    assert.deepEqual([idle.G.revenue(), idle.st().best, idle.G.creditLimit(), idle.G.fameFor()], [plain.G.revenue(), plain.st().best, plain.G.creditLimit(), plain.G.fameFor()], 'not product revenue: credit line, 名气 and unlocks read the same');
+    assert.ok(shown.st().extra.tickets > 0 && shown.st().extra.tickets === both.st().extra.tickets, 'idle does not multiply the tickets'); near(shown.st().cash - plain.st().cash, shown.st().extra.tickets, 'tickets are in the till');
+    near(both.st().extra.idle, idle.st().extra.idle, 'and the room does not change the bonus');
+    // the base is the customers' purchases and the clerk's bulk sale; hand sales, 成就奖金 and tickets get nothing
+    const h = shop(9), H = h.G; h.st().cash = 1e6; H.upgrade('clerk'); H.upgrade('clerk'); H.setIdle(true);
+    h.give(pull('bulk', 2, 'C'), 50); h.T += 1e3; H.tick(); near(h.st().earned.singles, 50 * 2 * H.BUYLIST, 'the clerk sold the bulk'); near(h.st().extra.idle, 0.25 * 50 * 2 * H.BUYLIST, 'and it counts', 1e-9);
+    const k = h.give(pull('hand', 80), 2), i0 = h.st().extra.idle, c0 = h.st().cash; H.sell(k); near(h.st().cash - c0, 2 * 80 * H.BUYLIST, 'a sale by hand pays the buy-list price'); H.bonus(100, '奖'); near(h.st().cash - c0, 2 * 80 * H.BUYLIST + 100, '成就奖金 pays what it says');
+    assert.equal(h.st().extra.idle, i0, 'no bonus on either');
+    // eligibility: the flag alone is not enough
+    const e = busy(10), E = e.G; assert.equal(E.idling(), false); E.setIdle(true); assert.equal(E.idling(), true); E.pause(true); assert.equal(E.idling(), false, 'paused'); E.pause(false); assert.equal(E.idling(), true);
+    E.leave(); assert.equal(E.idling(), false, 'away'); E.back(); assert.equal(E.idling(), true);
+    const away = (watch, told) => {
+      const w = busy(11, { watch }), G = w.G; G.setIdle(true); w.run(60, 1); const idle0 = w.st().extra.idle; assert.ok(idle0 > 0);
+      if (told) G.leave(); w.T += 3600e3; G.tick(); G.back(); return { w, o: w.st().offline, idle0 };
+    };
+    for (const told of [true, false]) {
+      const none = away(0, told); assert.ok(none.o.sales > 0); assert.equal(none.w.st().extra.idle, none.idle0, 'away: no idle bonus, though the flag is still on'); assert.deepEqual([none.w.st().extra.offline, none.o.bonus], [0, undefined], 'and no 看店 bonus without 看店');
+      const lv = away(3, told), base = lv.o.revenue + lv.o.detail.bulk; assert.equal(lv.w.st().extra.idle, lv.idle0, 'never both');
+      assert.ok(Math.abs(lv.o.bonus / (lv.w.G.OFFLINE_BONUS * 3 * base) - 1) < 0.01, `看店 3 = +15% of the absence's sales (${lv.o.bonus} of ${base})`); near(lv.o.bonus, lv.w.st().extra.offline, 'the receipt and the ledger agree');
+    }
+    // a flip settles the elapsed time under the mode it was spent in, never the new one
+    const run2 = how => { const w = busy(12); w.G.setIdle(true); w.T += 100e3; how(w); w.T += 100e3; w.G.tick(); return w; };
+    const X = run2(w => w.G.setIdle(false)), Y = run2(w => { w.G.tick(); w.G.setIdle(false); });
+    assert.ok(X.st().extra.idle > 0 && X.st().extra.idle === Y.st().extra.idle && X.st().cash === Y.st().cash, 'the 100 s before the flip were idle, the 100 s after not');
+    const Z = busy(12); Z.T += 100e3; Z.G.setIdle(true); assert.equal(Z.st().extra.idle, 0, 'time spent elsewhere is not paid the new bonus'); Z.T += 100e3; Z.G.tick(); assert.ok(Z.st().extra.idle > 0);
+    // a flip mid-reveal keeps the reveal: the cards still to be flipped stay out of reach
+    const r = busy(13), R = r.G; R.tick(true); R.setIdle(true); assert.equal(R.revealing(), true); R.setIdle(false); assert.equal(R.revealing(), true); R.tick(false); R.setIdle(true); assert.equal(R.revealing(), false);
+    const p = busy(14), P = p.G; P.pause(true); P.setIdle(true); p.T += 3600e3; P.tick(); assert.equal(p.st().extra.idle, 0); P.pause(false); p.run(30, 1); assert.ok(p.st().extra.idle > 0, 'a flag set while paused counts from the resume');
+  }
+
+  // 8. Not product revenue: six hours of $20 tickets (14,400, past the 1,600 that unlocks a set and the 12,500 of the first 名气) change none of the revenue-driven numbers.
+  {
+    const w = shop(15).noDebt(), G = w.G, st = w.st; for (let i = 0; i < 5; i++) assert.ok(G.collectToGallery(w.give(pull(`v${i}`, 2000)), i)); assert.equal(G.ticketPrice(), 20);
+    w.run(6 * 3600, 10); assert.equal(st().extra.tickets, 14400); near(st().cash, 1000 + 14400, 'the till has it');
+    assert.deepEqual([G.revenue(), st().best, G.fameFor(), G.unlocked('sv08.5'), G.creditLimit()], [0, 0, 0, false, G.LOAN_FLOOR]); assert.ok(st().week > 15, 'weeks went by (the credit line is judged each one)');
+  }
+
+  // 9. Prestige and bankruptcy: the room stays, the shop's own cards go as before, and the books of that shop start again.
+  {
+    const mk = seed => {
+      const w = shop(seed), G = w.G; w.st().cash = 1e6; w.st().extra = { tickets: 5, idle: 3, offline: 2 };
+      const gal = w.give(pull('p1', 200)), troph = w.give(pull('p2', 300)), both = w.give(pull('p3', 400), 3); w.give(pull('p4', 100));
+      assert.ok(G.collectToGallery(gal, 0)); assert.ok(G.setTrophy(troph)); assert.ok(G.collectToGallery(both, 2)); assert.ok(G.list(both)); return w; // room: p1 + p3; case: p3; trophy: p2; binder: p3, p4
+    };
+    const w = mk(16), G = w.G, st = w.st, room = structuredClone(st().gallery), total = copies(G); st().owe = st().debt = 0;
+    assert.ok(G.branch()); assert.deepEqual(st().gallery, room, 'the room opens in the new shop'); assert.deepEqual(copies(G), total, 'and the case and the trophy came back to the binder: every copy is still there');
+    assert.deepEqual(st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(st().galleryAcc, 0); assert.equal(G.ticketPrice(), 4, 'a room worth 600');
+    const b = mk(17), B = b.G, held = 400 + 100 + 400 + 300, rm = structuredClone(b.st().gallery), value = B.galleryValue();
+    assert.ok(B.bankrupt()); assert.deepEqual(b.st().gallery, rm, '九姐 takes the shop, not the room');
+    near(b.st().wreck.cards, held, 'the statement counts the shop’s cards only'); assert.deepEqual(b.st().wreck.gallery, { n: 2, value }, 'and says what she left');
+    assert.deepEqual([b.st().singles, b.st().shown, b.st().trophy], [{}, [], null]); assert.deepEqual(b.st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(B.galleryValue(), 600);
+    assert.deepEqual(createGame({ ...b.env, random: S.rng(1) }).state.gallery, rm, 'and it is saved so');
+    const clean = shop(18); clean.st().cash = 1e6; clean.G.bankrupt(); assert.equal(clean.st().wreck.gallery, undefined, 'no room, nothing to say');
+    const r = mk(19); r.G.reset(); assert.deepEqual(r.st().gallery, Array(5).fill(null), '清空存档 is the one thing that clears it');
+  }
+
+  // 10. Save, reload and damaged saves.
+  {
+    const w = shop(20), G = w.G, st = w.st, kA = w.give(pull('r1', 300), 2), kB = w.give(pull('r2', 20)); assert.ok(G.collectToGallery(kA, 4)); assert.ok(G.collectToGallery(kB, 0));
+    st().extra = { tickets: 12, idle: 3.5, offline: 1.25 }; st().galleryAcc = 0.25; assert.ok(G.moveCollect(0, 2));
+    const H = createGame({ ...w.env, random: S.rng(1) });
+    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue()], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320], 'the room, its ledger and its carry come back as saved');
+    const store = {}, env = { now: () => 1_700_000_000_000, random: S.rng(2), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+    store[KEY] = JSON.stringify({ cash: 10, singles: {} }); const O = createGame(env); // a save from before the room
+    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice()], [Array(5).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0]);
+    const real = PTCG_DATA.sv08.cards[0], good = { key: keyOf(pull(real.n, 12, real.r)), ...pull(real.n, 12, real.r), name: 'old English name' };
+    store[KEY] = JSON.stringify({ cash: 10, gallery: [null, {}, good, { ...good, price: null }, 'x', { ...good, key: 3 }, good], extra: { tickets: 'a', idle: -1, offline: 7 }, galleryAcc: 5 });
+    const D = createGame(env);
+    assert.deepEqual(D.state.gallery.map(c => c?.key ?? null), [null, null, good.key, null, null], 'five slots; a damaged card is an empty slot, never half a card'); assert.equal(D.state.gallery[2].name, real.name, 'the loader refreshes names like it does for the binder');
+    assert.deepEqual([D.state.extra, D.state.galleryAcc], [{ tickets: 0, idle: 0, offline: 7 }, 0]);
+    // a card without its kind, or under another card's key, is no card of the room: back in the binder it would read as bulk and the clerk would sell it
+    const { kind: _k, ...noKind } = good, { r: _r, ...noR } = good;
+    store[KEY] = JSON.stringify({ cash: 10, gallery: [noKind, noR, { ...good, key: 'sv08|other|SIR' }, { ...good, price: -1 }, good] });
+    assert.deepEqual(createGame(env).state.gallery.map(c => c?.key ?? null), [null, null, null, null, good.key], 'a card is whole and under its own key, or it is not there');
+    // an amount on a saved receipt that is not a finite number from zero up counts as none: the sums and the 离开 line stay whole
+    const rc = { secs: 600, sales: 3, revenue: 30, lost: 0 }, damaged = (x, y) => JSON.stringify({ cash: 10, offline: { ...rc, tickets: x, bonus: y }, away: { ...rc, at: 1_700_000_000_000 - 600e3, tickets: y, bonus: x } });
+    store[KEY] = damaged('1', 'x'); const Q = createGame(env);
+    assert.ok(['offline', 'away'].every(k => !('tickets' in Q.state[k]) && !('bonus' in Q.state[k])), 'strings are dropped from both receipts');
+    store[KEY] = damaged(-5, 2.5); const U = createGame(env);
+    assert.deepEqual([U.state.offline.tickets, U.state.offline.bonus, U.state.away.tickets, U.state.away.bonus], [undefined, 2.5, 2.5, undefined], 'a negative amount is none, a good one stays');
+    U.back(); // ten minutes away: the away receipt joins the one on screen, sums of numbers only
+    assert.deepEqual([U.state.offline.tickets, U.state.offline.bonus, U.state.offline.secs], [2.5, 2.5, 1200], 'and the merge adds numbers, never a string or a NaN');
+  }
+
+  // 11. Receipts: tickets and bonus add up across absences and match the ledger, and the till's change is accounted for to the cent.
+  {
+    const w = shop(21), G = w.G, st = w.st; st().cash = 1e6; st().earned.sealed = 1e6; st().skills.watch = 2;
+    G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX); G.buy('sv08', 15); G.open('sv08', 15);
+    for (const [id, i] of [['sv08', 0], ['sv10', 1]]) { G.buy(id, G.depth()); G.place(i, id); }
+    for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
+    assert.ok(G.collectToGallery(w.give(pull('r', 2500)), 0)); const c0 = st().cash, e0 = earned(G);
+    w.T += 1800e3; G.tick(); const o1 = structuredClone(st().offline); assert.equal(o1.tickets, 600); assert.ok(o1.bonus > 0);
+    G.leave(); w.T += 1800e3; G.tick(); G.back(); const o2 = st().offline, d = o2.detail;
+    assert.equal(o2.tickets, 1200); assert.ok(o2.bonus > o1.bonus, 'both absences paid 看店'); near(o2.tickets, st().extra.tickets, 'tickets: receipt = ledger'); near(o2.bonus, st().extra.offline, 'bonus: receipt = ledger'); assert.equal(st().extra.idle, 0);
+    near(d.cash, st().cash - c0, 'detail.cash is the till’s real change'); near(d.cash, o2.revenue - d.intake - d.restock + d.bulk - o2.bills + o2.tickets + o2.bonus, 'cash = takings − intake − restock + bulk − bills + tickets + bonus');
+    near(earned(G) - e0, o2.revenue + d.bulk, 'the books earned only the sales: tickets and bonus are not in them');
+    assert.ok(Math.abs(o2.bonus / (G.OFFLINE_BONUS * 2 * (o2.revenue + d.bulk)) - 1) < 0.01, '+10% of the absence’s sales');
+    assert.deepEqual(createGame({ ...w.env, random: S.rng(5) }).state.offline, o2, 'the receipt saves and loads whole');
+    // an old receipt (no tickets, no bonus, no breakdown) takes a new absence: the new fields start, the old ones stay, the breakdown stays absent
+    const raw = JSON.parse(w.store[KEY]); delete raw.offline.detail; delete raw.offline.tickets; delete raw.offline.bonus; w.store[KEY] = JSON.stringify(raw);
+    const H = createGame({ ...w.env, random: S.rng(6) }), L = { ...H.state.offline }; assert.ok(!('tickets' in L) && !('bonus' in L));
+    H.leave(); w.T += 1800e3; H.tick(); H.back(); const o3 = H.state.offline; assert.equal(o3.tickets, 600); assert.ok(o3.bonus > 0 && !('detail' in o3)); assert.ok(o3.sales > L.sales && o3.revenue > L.revenue);
+    // 看店: three levels at 2,400 / 6,000 / 15,000, +5% each, the cap rule untouched
+    const s = shop(22); s.st().cash = 1e6; const costs = []; for (let i = 0; i < 3; i++) { const c = s.st().cash; assert.ok(s.G.learn('watch')); costs.push(c - s.st().cash); }
+    assert.deepEqual(costs, [2400, 6000, 15000]); assert.equal(s.G.learn('watch'), false); assert.equal(s.G.skillMax('watch'), 3); near(s.G.OFFLINE_BONUS * s.G.skillMax('watch'), 0.15, 'at most 15%');
+    assert.equal(s.G.offlineCap(), s.G.NOCLERK_CAP); s.G.upgrade('clerk'); assert.equal(s.G.offlineCap(), s.G.OFFLINE_CAP + 3 * 2 * 3600);
+  }
+  console.log('ok 展厅: moves keep every copy, the room is never sold, tickets and 挂机/离线 bonus are credited once and are not revenue, receipts add up, branch/bankruptcy keep the room');
 }
 
 // Follow the visible guide and shop notes through the third bill: growth must not need a loan.

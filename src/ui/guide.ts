@@ -50,19 +50,19 @@ const STEPS: Step[] = [
     at: () => { const x = toStock(); return x ? inRow(x.id, '.primary[data-act="buy"]') ?? inRow(x.id, '[data-act="buy"][data-n="10"]:not(:disabled)') : null; },
     p: el => { const b = el as HTMLElement | null, id = b?.dataset.id, first = !sum(G.state.stock) && !G.shelves().some(r => r.id), key = `「${b?.textContent?.trim() || '进 10'}」`;
       if (!id) return '进货价比市价低，差价就是卖一包的毛利。';
-      return first ? html`点${key}从批发商进货：${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，差价就是卖一包的毛利。一个货架放 ${G.depth()} 包；只进 10 包，半分钟就卖光，剩下的时间货架空着。`
+      return first ? html`点${key}从批发商进货：${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，差价就是卖一包的毛利。一个货架放 ${G.depth()} 包；只进 10 包很快就卖光，货架空着就没有进账。`
         : html`${G.setById(id).name}也进一架（点${key}）。来的顾客想买的系列不一样，货架上没有他要的那个，一半人直接走。`; } },
   { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id) && !toRack(),
     at: () => { const x = toRack(); return x ? inRow(x.id, '[data-act="shelve"]:not(:disabled)') : pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'); },
     // quote the button as it reads right now (「摆上空货架 9 包」the first time, 「上架 1 包」once the set has a shelf): a new player looks for those words
-    p: el => { const b = `「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '摆上空货架'}」`; return sum(G.state.stock) ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包，待会儿你自己拆。` : `仓库空了：先进货，再点${b}。只有货架上的包才卖得出去。`; } },
+    p: el => { const b = `「${el?.matches('[data-act="shelve"]') ? el.textContent!.trim() : '摆上空货架'}」`; return sum(G.state.stock) ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包给你自己拆。` : `仓库空了：先进货，再点${b}。只有货架上的包才卖得出去。`; } },
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
     // the 倒爷 line quotes their own ceiling (game.ts TYPES.flipper.tol): 「市价附近」 read like the default 95%, and at 95% they walked out
-    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}：虚线框里 − / + 调，不想调就点「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚；标到市价 ${flip}% 上下或更低，开张 10 分钟后倒爷会成批扫货。`; } },
+    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}：虚线框里 − / + 调，不想调就点「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚；倒爷肯出的上限平均约市价的 ${flip}%（每人不同），标价在它以下，开张 10 分钟后他们会一次买走一批。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
-    p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和开包概率都是真实统计。` },
+    p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和基础开包概率来自 TCGplayer 市价及实开统计，手气是另算的游戏加成。` },
   // on a phone the chip is only the countdown: nothing else says it is 九姐's clock
   { page: 'open', h: '账单', done: () => {
       // read for 8 s and a shelf is empty: 补货 comes first (a shelf stood empty ~50 s behind 知道了) — and that counts as read, for good:
@@ -71,7 +71,7 @@ const STEPS: Step[] = [
       return !!rec.bill || G.state.billsPaid > 0 || !!G.state.overdue || !G.nextBill(); },
     at: () => shown(document.getElementById('due')),
     p: () => { const b = G.nextBill(); if (!b) return null;
-      return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息）。所以货架别空着。`; } },
+      return html`顶栏这个倒计时是九姐来收账的时间：第 ${b.week} 周 ${money(b.amount)}，还有约 ${mins(G.dueIn())} 分钟。到点时收银机里够就自动付；不够有 ${G.GRACE / 60} 分钟宽限凑钱，再不够，额度够就记成借款（每周 ${Math.round(G.loanRate() * 100)}% 利息），额度不够就破产。所以货架别空着。`; } },
   // the shelf sells out in about a minute at the start, usually before the first pack is flipped: the loop, not a one-off. Not a
   // numbered step (it comes and goes with the shelves); the key and the text are one: the sold-out set's own row — 上架 N 包 when
   // the back room holds more than the one pack kept to open, else its 进一架
@@ -79,11 +79,11 @@ const STEPS: Step[] = [
     at: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
       return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
     p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;
-      return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货柜」页签上的数字）。点${key}再进一架、摆上去，这就是每天的活。`; } },
+      return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货柜」页签上的数字）。点${key}进一架，再摆上货架。`; } },
   { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
     alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
     p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'
-      : '看看这包的运气在几千个模拟玩家里排第几，还能生成分享图。') },
+      : '看看你累计开的包在几千个模拟玩家里排第几，还能生成分享图。') },
 ];
 
 const TAB: Record<string, string> = { open: '开包', shelf: '货柜', luck: '欧气', grow: '成长' };
@@ -179,7 +179,7 @@ export function renderGuide() {
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
         : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>`
-        : step.h === '账单' && here ? html`<button type="button" class="ghost" data-coach="bill">知道了</button>` : nothing}</div>`, pop);
+        : step.h === '账单' && here ? html`<button type="button" class="ghost" data-coach="bill">下一步</button>` : nothing}</div>`, pop);
   if (!pop.matches(':popover-open')) pop.showPopover();
   // a new step, or the same step on another button (进货 walks one set's 进一架, then the next set's): bring it into view once
   const at = here ? `${(here as HTMLElement).dataset.act ?? ''}:${(here as HTMLElement).dataset.id ?? ''}` : '';

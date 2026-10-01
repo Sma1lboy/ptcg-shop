@@ -72,7 +72,7 @@ export function renderLuck() {
         <div><dt>期望市值</dt><dd>${money(L.expected)}<small class="dd-note">整包标价的 ${Math.round(L.expected / L.listEV * 100)}%</small></dd></div>
         <div><dt>进货成本</dt><dd>${money(L.cost)}</dd></div></dl>
       <p class="muted basis-note">开出市值按 TCGplayer <b>现在</b>的单卡市价重算，和模拟玩家同一口径${L.live ? '' : '（旧存档：早期开的包只能按开包当时的价格）'}。期望只有整包标价的 ${Math.round(L.expected / L.listEV * 100)}%，是因为标价里有密封溢价，见页脚「价格口径」。</p>
-      <table class="tally"><thead><tr><th>稀有度</th><th>开出</th><th>期望</th><th title="按你开每一包时的概率（官方概率，有手气时是加成后的），开到这么多或更多（更少）的概率">开成这样的概率</th></tr></thead><tbody>
+      <table class="tally"><thead><tr><th>稀有度</th><th>开出</th><th>期望</th><th title="按每包实际使用的概率（TCGplayer 实测基础概率，包含当时的手气加成），计算开到这么多或更多（更少）的概率">开成这样的概率</th></tr></thead><tbody>
         ${rows.map(k => html`<tr class="${(t[k] || 0) >= (e[k] || 0) ? 'up' : ''}"><td>${mark({ kind: k, r: k }, false)}${rarLabel(k)}</td><td>${t[k] || 0}</td><td>${(e[k] || 0).toFixed(1)}</td><td>${tailLabel(k, t[k] || 0, e[k] || 0)}</td></tr>`)}
       </tbody></table></div>` : ''}`, $('luck'));
 }

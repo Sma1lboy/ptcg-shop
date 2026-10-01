@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Five pages, all in the DOM; src/ui/layout.ts shows one per URL hash (#open #shelf #case #luck #grow #ach; #case is 货柜's second view) so switching never loses state (DESIGN.md「布局」).
+<!-- Six pages stay in the DOM; layout.ts selects #open #shelf #case #luck #grow #ach #collection. #case is the second shelf view.
      The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
   <h1 class="brand">欧气卡铺</h1>
@@ -18,6 +18,7 @@
     <a href="#luck">欧气<b class="tab-n tab-dot" id="luck-n" hidden></b></a>
     <a href="#grow">成长<b class="tab-n" id="grow-n" hidden></b></a>
     <a href="#ach">成就<b class="tab-n tab-dot" id="ach-n" hidden></b></a>
+    <a href="#collection">收藏室</a>
   </nav>
   <a class="due" id="due" href="#grow" hidden></a>
   <div class="stats" id="stats"></div>
@@ -28,6 +29,7 @@
     <section class="mat" id="mat" aria-live="polite"></section>
     <aside class="rail">
       <section id="rail"></section>
+      <section id="playmode" aria-label="挂机与离线收益"></section>
     </aside>
   </section>
   <!-- 货柜 has two views by product line, each with its own half of the customers next to the controls they call for:
@@ -75,6 +77,9 @@
   </section>
   <section class="page page-ach" id="page-ach" aria-label="成就" hidden>
     <section id="achs"></section>
+  </section>
+  <section class="page page-collection" id="page-collection" aria-label="收藏室" hidden>
+    <section id="gallery"></section>
   </section>
 </main>
 <dialog class="story" id="story" aria-label="剧情"></dialog>

@@ -434,7 +434,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const shownAt = new Map(); let lastPress = -1e9;
   const level = () => Object.keys(G.UPGRADES).reduce((a, k) => a + G.lvl(k), 0) + Object.keys(G.SKILLS).reduce((a, k) => a + G.skill(k), 0);
   const shelfGap = () => Math.round(G.shelves().reduce((a, r) => a + (r.id ? Math.max(0, G.depth() - r.qty) * G.wholesale(r.id) : 0), 0)); // what filling every labelled shelf to the top costs now
-  const spent = () => ({ refill: Math.round(sp.refill), growth: Math.round(sp.growth), bill: Math.round(sp.bill), intake: Math.round(st().intake?.cost ?? 0), bonus: sp.bonus });
+  const spent = () => ({ refill: Math.round(sp.refill), growth: Math.round(sp.growth), bill: Math.round(sp.bill), intake: Math.round(st().intake?.cost ?? 0), bonus: sp.bonus,
+    idle: Math.round(st().extra.idle), offline: Math.round(st().extra.offline), tickets: Math.round(st().extra.tickets) });
   const snap = () => { const g = nextStep(), b = G.nextBill(), c = st().cust;
     return { t, cash: Math.round(st().cash), level: level(), racks: G.racks(), rate: +(G.rate() * 60).toFixed(2),
       spare: Math.round(G.spare()), bill: b ? b.amount : 0, next: g ? `${g.name} Lv${g.lv + 1} $${Math.round(g.cost)}` : null, nextCost: g ? Math.round(g.cost) : null, gap: shelfGap(),
@@ -443,7 +444,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const rows = [], init0 = new Set(unlockedIds());
   watchShop(); seen.sets = init0.size; play('opening');
   for (t = 1; t <= N; t++) {
-    advance(1); G.tick(hold); cashPrev = st().cash;
+    G.setIdle(page === 'open'); advance(1); G.tick(hold); cashPrev = st().cash;
     if (storyLeft > 0) { if (--storyLeft === 0) { cur = null; G.pause(false); storyFlush(); } if (t % snapEvery === 0) rows.push(snap()); continue; }
     for (const id of unlockedIds()) if (!init0.has(id)) ev('unlock', id, G.setById(id).name);
     const all = buyables().sort((a, b) => a.cost - b.cost), pool = live(all);
@@ -488,7 +489,7 @@ export function droughtWhy(r) {
   const clock = x => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
   return { seed: r.seed, window: `${clock(from)}–${clock(to)}`, mins: +mins.toFixed(1), gate: `${a.gateName} $${a.gate}`, 'spare start→peak(@t)': `${a.spare}→${peak.spare}(@${clock(peak.t)})`, 'closest gate−spare': near.p ? `${near.gap}@${clock(near.p.t)} (gate $${near.p.gate}, spare ${near.p.spare}, cash ${near.p.cash})` : '-',
     'rev/min': Math.round(d('rev') / mins), 'refill/min': Math.round(d('refill') / mins), 'growth/min': Math.round(d('growth') / mins), 'bill': d('bill'), 'intake': d('intake'), 'cash Δ': d('cash'),
-    'lost visits': d('none'), 'bare s': d('bareAny'), other: Math.round(d('cash') - (d('rev') + d('bonus') - d('refill') - d('growth') - d('bill') - d('intake'))), 'bought in window': buys.join(' ') || '-',
+    'lost visits': d('none'), 'bare s': d('bareAny'), other: Math.round(d('cash') - (d('rev') + d('bonus') + d('idle') + d('offline') + d('tickets') - d('refill') - d('growth') - d('bill') - d('intake'))), 'bought in window': buys.join(' ') || '-',
     'buy waits min': Object.values(r.boughtAt).sort((x, y) => x - y).map((x, i, a) => Math.round((x - (a[i - 1] ?? 0)) / 60)).join(' ') };
 }
 

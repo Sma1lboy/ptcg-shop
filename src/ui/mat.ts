@@ -5,13 +5,15 @@ import type { Pull } from '../sim.ts';
 import * as S from '../sim.ts';
 import * as FX from '../fx.ts';
 import { html, render } from 'lit-html';
-import { SETS } from '../sets.ts';
+import { SETS, LOOK } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel, batchBtn } from './common.ts';
 import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
 import { mountTable, packFront, ready as threeReady } from '../table3d.js';
 import { bill } from '../debt.ts';
 import { toBook } from './binder.ts';
+import { inspectCard } from './inspect.ts';
+import { themeOf, dealShares, figureSVG, figureInk, figureLife } from '../series.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -81,7 +83,7 @@ function packSummary(cards: Pull[], set: { id: string }) {
 }
 
 export function renderMat() {
-  const el = $('mat');
+  const el = $('mat'); held = -1; // a redraw starts the table over (a new run, the idle shelf, the 2D mat): nothing is held up
   if (mat.mode === 'idle' ? !reduced() : mat.m3d && (mat.mode === 'pack' || mat.mode === 'batch')) {
     if (mat3D(el)) return;
     if (mat.mode === 'idle') waitFor3D(); else mat.m3d = false;
@@ -113,7 +115,7 @@ export function renderMat() {
   // batch
   const cards = mat.packs.flat();
   const v = S.packValue(cards), cost = G.wholesale(set.id) * mat.packs.length, d = v - cost;
-  el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span id="mat-prog">${run ? runProg() : `开出 ${money(v)} · 进货 ${money(cost)} ·
+  el.innerHTML = `<div class="mat-head"><h2>${set.name} × ${mat.packs.length}</h2><span id="mat-prog">${run ? runProg() : `卡牌市值 ${money(v)} · 进货 ${money(cost)} · 市值差
       <b class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '+' : '−'}${money(Math.abs(d))}</b>`}</span>${sndBtn()}${run && !run.end ? stopBtn() : ''}</div>
       ${haulHTML()}
       ${mat.finished ? batchSummary() : ''}`;
@@ -143,6 +145,9 @@ export const refreshIdle = () => { if (mat.mode === 'idle') { if (table) shelf3D
 // ---------- 3D table (src/table3d.js) ----------
 // The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
 let table: ReturnType<typeof mountTable> = null;
+// The pick held up to the eye in a finished batch (-1: none), as the table reports it (onLook). The caption plate, the 放回 key and the
+// hint are that hold's: they come with it and go with it, however it is let go (a tap, 放回, Esc, Space, the next pack).
+let held = -1;
 const touch = () => matchMedia('(pointer: coarse)').matches;
 // The idle table only lays out sets that can be opened; the locked ones are this one line (the next unlock and how far off it is).
 const nextUnlock = () => {
@@ -153,6 +158,7 @@ const HINT = { shelf: nextUnlock, pack: () => touch() ? '按住封口往右拖�
   cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看',
   batch: () => touch() ? '点一下全部撕开，或按住从左往右划过这排包' : '点一下或按空格全部撕开，也可以按住从左往右划过这排包',
   batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张',
+  held: () => touch() ? '点一下，把卡放回桌上' : '点一下、按空格或 Esc，把卡放回桌上',
   run: () => `${runProg()} · 出新卡就停` }; // the header line is cut short on phones: the run's progress is repeated here
 const batch = () => mat.mode === 'batch';
 const picked = () => mat.picks.map(([p, i]) => mat.packs[p][i]);
@@ -160,7 +166,7 @@ const head3D = () => {
   if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span id="m3-line">${idleLine()}</span>${sndBtn()}`; return; }
   const live = batch() ? mat.torn : mat.mode === 'cards';
   $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${run ? runProg() : live ? prog() : ''}</span>${sndBtn()}
-      ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}`;
+      ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}${held >= 0 ? '<button type="button" class="ghost" data-act="putback">放回</button>' : ''}`;
 };
 // An empty warehouse (a new shop): the head says the guide's first step too; the pack on the table is the other way in.
 // A phone's head row has room for about ten characters beside 今天拆哪包？ and 音效: the short form, so the step isn't cut to 「先去…」.
@@ -178,11 +184,17 @@ const on3D = {
     const pg = document.getElementById('mat-prog'); if (pg && !run) pg.textContent = prog();
     const none = batch() && !mat.picks.some(([p, k]) => S.HITS.includes(mat.packs[p][k].kind)); // a batch without a single hit flies its best card instead
     if (quiet) return; // turned in a sweep with others (table3d.js): the last of the sweep speaks for them
-    if (!run) caption(c, none ? `${mat.packs.length} 包一张好卡都没有 · ` : '', batch() && mat.news.includes(i)); // 连开 turns them all at once: the new card gets its caption when it's held up (showNew)
+    if (!run) caption(c, none ? `${mat.packs.length} 包中的最高价 · ` : '', batch() && mat.news.includes(i)); // 连开 names its new card when held (onLook)
     if (!mat.quiet) FX.flip(rar(c).t);
   },
   onPick(k: number) { document.querySelectorAll<HTMLButtonElement>('#s3-shelf button')[k]?.click(); }, // through events.ts, like the label itself
   onHold() { const cap = document.getElementById('s3-cap'); if (cap) cap.innerHTML = ''; },
+  // a card in the finished batch is held up to the eye (k) or let go (-1). The plate is for the cards a 连开 stopped on, new to 亲手开出
+  onLook(k: number) {
+    held = k;
+    if (k >= 0 && run?.end === 'new' && mat.news.includes(k)) caption(picked()[k], '', true); else on3D.onHold();
+    head3D(); hint3D(k >= 0 ? 'held' : 'done');
+  },
   onDone() { on3D.onHold(); hint3D('done'); finish(); },
   onLost() {
     table = null; mat.m3d = false; renderMat();
@@ -266,10 +278,20 @@ function haulHTML() {
 }
 const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
 const prog = () => {
-  const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : mat.news.length ? '翻开' : S.HITS.includes(cs[0].kind) ? '好卡' : '没出好卡，最值钱的';
+  const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : mat.news.length ? '翻开' : S.HITS.includes(cs[0].kind) ? '闪卡' : '最高价卡';
   return `${label} ${mat.up.size}/${cs.length} · ${money(cs.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
 };
 const ready = (img: HTMLImageElement | null) => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));
+
+function seriesFigure(host: HTMLElement, strength = .7) {
+  const theme = themeOf(mat.set), look = LOOK[mat.set]; if (!theme || !look) return;
+  host.querySelector('.series-figure')?.remove();
+  const figure = document.createElement('div'); figure.className = 'series-figure';
+  figure.dataset.motif = theme.motif; figure.setAttribute('aria-hidden', 'true');
+  figure.innerHTML = figureSVG(theme, figureInk(look.c), strength, reduced());
+  host.classList.add('series-stage'); host.append(figure);
+  setTimeout(() => figure.remove(), figureLife(theme) * 1000 + 100);
+}
 const armThumb = (btn: HTMLElement, c: Pull, peek?: boolean) => { btn.classList.add('up'); btn.setAttribute('aria-label', c.name); if (peek) { btn.dataset.act = 'peek'; btn.removeAttribute('tabindex'); } };
 
 // main.ts re-renders every panel on this event (then goals.ts, which listens after it).
@@ -309,7 +331,7 @@ function reveal(tok: Mat, i: number, btn: HTMLElement) {
   const pg = document.getElementById('mat-prog'); if (pg) pg.textContent = prog();
   if (last) FX.swell(ms);
   if (t >= 4 && !reduced()) spotlight(ms + 1800);
-  setTimeout(() => { FX.flip(t); FX.burst($('stage'), t); }, ms / 2); // the face turns toward the player halfway through
+  setTimeout(() => { if (mat !== tok) return; FX.flip(t); FX.burst($('stage'), t); if (t >= 3) seriesFigure($('stage')); }, ms / 2);
   setTimeout(() => { tok.busy = false; if (mat === tok && tok.up.size === tok.cards.length) finish(); }, ms + 80);
 }
 
@@ -394,12 +416,15 @@ export function stopRun() {
   const r = run; if (!r || r.end) return; r.stop = true;
   document.querySelectorAll<HTMLButtonElement>('#mat [data-act="runstop"]').forEach(b => { b.disabled = true; b.textContent = '这轮开完就停'; });
 }
-// The run stopped on a new card: the dearest new one is picked up and held to the camera (3D), with its caption.
+// The run stopped on a new card: the dearest new one is picked up and held to the camera (3D); its caption plate comes with the hold
+// (onLook). The table is brought back under the top bar first: a run is usually started from the summary's button, and the head with
+// 放回 and the hint line at the canvas's top would be scrolled away from the card being held.
 function showNew() {
   const k = mat.news.reduce((a, b) => (picked()[b].price > picked()[a].price ? b : a)), c = picked()[k];
   FX.flip(rar(c).t);
   if (!table) return Promise.resolve();
-  return table.lookAt(k).then(() => { if (run?.end === 'new') caption(c, '', true); return new Promise(r => setTimeout(r, 1800)); });
+  frameMat();
+  return table.lookAt(k).then(() => new Promise(r => setTimeout(r, 1800)));
 }
 function caption(c: Pull, pre: string, fresh: boolean) {
   const cap = document.getElementById('s3-cap'); if (!cap) return;
@@ -411,17 +436,24 @@ function caption(c: Pull, pre: string, fresh: boolean) {
 function revealBatch(tok: Mat) {
   const cs = picked(), { top } = haulOf(), el = (k: number) => document.querySelector<HTMLElement>(`#mat .haul .card[data-i="${k}"]`)!;
   const rest = [...document.querySelectorAll<HTMLElement>('#mat .haul-rest .card')], front = [...top].reverse(), none = rar(cs[top[0]]).t < 2;
-  const at = reduced() ? () => 0 : (k: number) => 350 + (rest.length ? 450 : 0) + k * Math.min(420, 2000 / front.length) + (k === front.length - 1 ? 400 : 0);
+  const deal = themeOf(tok.set)?.deal ?? 'ltr', shares = dealShares(deal, Math.max(0, front.length - 1)), step = Math.min(420, 2000 / front.length);
+  const at = reduced() ? () => 0 : (k: number) => 350 + (rest.length ? 450 : 0) + (k === front.length - 1 ? k * step + 400 : shares[k] * Math.max(0, front.length - 2) * step);
+  const end = at(front.length - 1), rear = dealShares(deal, rest.length);
+  seriesFigure($('mat').querySelector<HTMLElement>('.haul')!, .35);
   if (none) FX.miss();
-  if (rest.length) setTimeout(() => { if (mat !== tok) return; rest.forEach(b => armThumb(b, cs[+b.dataset.i!], true)); FX.flip(0); }, reduced() ? 0 : 350);
+  rest.forEach((b, k) => setTimeout(() => {
+    if (mat !== tok) return; armThumb(b, cs[+b.dataset.i!], true);
+    if (rear[k] === 0) FX.flip(0);
+  }, reduced() ? 0 : 350 + rear[k] * 300));
   front.forEach((k, j) => setTimeout(() => {
     if (mat !== tok) return;
     const t = rar(cs[k]).t, b = el(k); armThumb(b, cs[k], true);
     if (none) return;
     if (t >= 4 && j === front.length - 1 && !reduced()) spotlight(2200);
     FX.flip(t); FX.burst(b.closest('.slot'), t);
+    if (t >= 3) seriesFigure(b.closest<HTMLElement>('.slot')!);
   }, at(j)));
-  setTimeout(() => { if (mat === tok) finish(); }, at(front.length - 1) + (reduced() ? 0 : 1200));
+  setTimeout(() => { if (mat === tok) finish(); }, end + (reduced() ? 0 : 1200));
 }
 
 // ---------- actions (called from events.ts) ----------
@@ -435,7 +467,7 @@ function frameMat() {
 }
 export function startPack(id: string) {
   if (hold) return; // one pack in hand at a time: a second open (a key not yet disabled, e.g. the binder's) failing on an empty back room would drop hold mid-reveal and let the story in
-  run = null; hold = true;
+  run = null; hold = true; closePeek();
   const [cards] = G.open(id, 1); if (!cards) { hold = false; return; }
   warm(cards);
   mat = { mode: 'pack', set: id, cards, up: new Set(), cur: 0, m3d: true } as Mat;
@@ -460,6 +492,7 @@ function handNew(packs: Pull[][], have: Set<string>) {
 export function openBatch(id: string, keep = false) {
   if (hold && !keep) return; // as startPack; a 连开 run's next round (keep) opens while the run still holds the table
   if (!keep) run = null;
+  closePeek();
   hold = true; const have = handHave(id), packs = G.open(id, 10); if (!packs.length) { run = null; release(); return; }
   const fresh = handNew(packs, have), picks = pickOrder(packs, fresh);
   mat = { mode: 'batch', set: id, packs, picks, news: picks.flatMap(([p, i], k) => (fresh.has(packs[p][i]) ? [k] : [])), up: new Set(), cur: 0, m3d: true, quiet: !!run } as Mat;
@@ -467,24 +500,35 @@ export function openBatch(id: string, keep = false) {
   renderMat(); if (!keep) frameMat();
   if (!mat.m3d) revealBatch(mat);
 }
-export function tear(b: HTMLElement) { const tok = mat; FX.tear(); b.classList.add('torn'); setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); }, reduced() ? 0 : 380); }
+export function tear(b: HTMLElement) {
+  const tok = mat, theme = themeOf(tok.set); FX.tear(); b.classList.add('torn');
+  if (theme && !reduced()) b.querySelector('.pack-crimp:not(.bottom)')?.animate([
+    { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
+    { transform: `translate(${40 + theme.strip.lift * 5}px, ${-theme.strip.lift * 12}px) rotate(${theme.strip.spin * 180 / Math.PI}deg)`, opacity: 0 },
+  ], { duration: 380, easing: 'ease-out', fill: 'forwards' });
+  setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); seriesFigure($('stage'), .4); }, reduced() ? 0 : 380);
+}
 export function peek(i: number) {
-  if (batch()) return peekBig(picked()[i]);
+  if (batch()) return peekBig(picked()[i], mat.news.includes(i));
   if (!mat.busy) { mat.cur = i; $('stage').innerHTML = cardHTML(mat.cards[mat.cur], mat.cur, true, true); }
 }
-// A card on the 2D ten-pack mat, picked up to look at (the 3D table lifts it to the eye): a native popover, the card in hand with
-// its caption; a tap anywhere or Esc puts it back.
-function peekBig(c: Pull) {
-  let p = document.getElementById('mat-peek');
-  if (!p) { p = document.body.appendChild(document.createElement('div')); p.id = 'mat-peek'; p.className = 'mat-peek'; p.setAttribute('popover', ''); p.addEventListener('click', () => p!.hidePopover()); }
-  p.innerHTML = `<figure class="slot">${toHTML(face(c, 'big'))}<figcaption class="s3-top best"><b class="s3-name">${esc(c.name)}</b>${toHTML(cap(c, 'big'))}</figcaption></figure>`;
-  p.showPopover();
+// A face-up card on the 2D ten-pack mat, picked up to look at (the 3D table lifts it to the eye): the shared card viewer
+// (inspect.ts: tilt, foil, flip, zoom; Esc, 关闭 or a tap outside closes it). Price and 新 go in its note, as on the 3D plate.
+let peeked: HTMLDialogElement | null = null;
+function peekBig(c: Pull, fresh: boolean) {
+  inspectCard(c, `市价 ${money(c.price)}${fresh ? ' · 这一轮第一次亲手开出' : ''}`);
+  peeked = document.querySelector<HTMLDialogElement>('#card-inspect');
 }
+// A new pack or round starts, or the shop is reset: the viewer this mat opened doesn't stay up over it (one opened from another page is left alone).
+const closePeek = () => { if (peeked?.isConnected) peeked.close(); peeked = null; };
 export function flipAll() { if (mat.m3d) { table!.flipAll(); return; } mat.cards.forEach((_, i) => mat.up.add(i)); mat.cur = mat.cards.length - 1; renderMat(); finish(); }
 export function toggleMute() { FX.setMuted(!FX.muted()); }
 document.addEventListener('ptcg:sound', () => document.querySelectorAll('.snd').forEach(x => { x.textContent = `音效 ${FX.muted() ? '关' : '开'}`; })); // also muted from the 声音 panel
 export function shareMat() { showPack(shareSpec()); }
-export function resetMat() { run = null; hold = false; G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
+export function resetMat() { run = null; hold = false; closePeek(); G.reset(); mat = { mode: 'idle' } as Mat; renderMat(); }
+
+// Lets go of the card held up on the 3D table: the table lowers it and reports it through onLook, which takes the plate and the key away.
+function putBack() { if (held >= 0) table?.putBack(); }
 
 // ---------- input ----------
 export function bindMatInput() {
@@ -517,15 +561,24 @@ export function bindMatInput() {
   let ripGo = false;
   document.addEventListener('click', e => { if (!ripMoved || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
 
+  // 放回 has no case in events.ts: the key is the mat's own, drawn by head3D and answered here.
+  document.addEventListener('click', e => { if ((e.target as Element).closest('[data-act="putback"]')) putBack(); });
+
   document.addEventListener('keydown', e => {
     // Space, and BW's A (Enter / Z) when no control has the focus (a pack just picked with the keys: its button is gone and the
     // focus rests on the table) — tear, flip, flip the next. On a focused control Enter / Z are that control's own (menu.ts)
     const t = e.target as Element, a = (e.key === 'Enter' || e.key === 'z' || e.key === 'Z') && !t.closest('button, a, summary, input, select, textarea, [tabindex="0"], dialog');
+    // Esc / X (BW's B) lets go of a held card. Before the early return below, and before menu.ts (the same key would take its cursor
+    // to the page tab): the held card is first, unless a modal dialog or light-dismiss popover is on top (the story, the share sheet,
+    // a 2D peek): those keep their own Esc.
+    if ((e.key === 'Escape' || e.key === 'x' || e.key === 'X') && held >= 0 && !e.repeat && !e.defaultPrevented && !e.altKey && !e.ctrlKey && !e.metaKey
+      && !t.closest('input, textarea, select, [contenteditable]') && !document.querySelector('dialog:modal, [popover]:not([popover="manual"]):popover-open') && !$('mat').closest('[hidden]')) { e.preventDefault(); putBack(); return; }
     if ((e.code !== 'Space' && !a) || t.closest('input, textarea') || $('mat').closest('[hidden]')) return; // not while another page is showing
     FX.unlock();
     if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
     else if (batch() && mat.m3d && !mat.finished) { e.preventDefault(); if (!run) table!.flip(mat.up.size); }
-    else if (table && !(e.target as Element).closest('button, a')) e.preventDefault(); // a finished or idle 3D table: Space doesn't scroll the page away
+    else if (held >= 0 && mat.m3d && !t.closest('button, a')) { e.preventDefault(); putBack(); } // a held card: Space / Enter / Z are a tap on the table
+    else if (table && !t.closest('button, a')) e.preventDefault(); // a finished or idle 3D table: Space doesn't scroll the page away
   });
 }

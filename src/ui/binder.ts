@@ -15,10 +15,11 @@ import { logo } from '../assets.ts';
 import { G, $, money, rarLabel, RAR } from './common.ts';
 import { face, cap, mark } from './card.ts';
 import { hold, huntable } from './mat.ts';
+import { inspectCard } from './inspect.ts';
 
 const PER = 9, HITS = 'hits';
 type Pocket = { set: string; n: string; name: string; r: string; kind: string; price: number };
-let at = { tab: '', page: 0, shut: false }, zoom: Pocket | null = null;
+let at = { tab: '', page: 0, shut: false };
 const wide = matchMedia('(min-width: 780px)'); // two pages open side by side
 const span = () => (wide.matches ? 2 : 1);
 
@@ -118,7 +119,7 @@ export function closing(id: string, kind: 'silver' | 'gold') {
 
 function spread(tab: string) {
   if (at.shut) return html`<div class="bk-book shut"><button type="button" class="bk-lid" data-bk-open aria-label="翻开${G.setById(tab).name}的卡册">${cover(tab, sealOf(tab))}</button>
-      <p class="muted bk-lid-say">${sealOf(tab) === 'gold' ? `${G.dexTotal(tab)} 张全是开包开出来的，一张没买` : `${G.dexTotal(tab)} 张收齐，其中补的 ${G.dexTotal(tab) - G.handCount(tab)} 张`} · 点封面翻开</p></div>`;
+      <p class="muted bk-lid-say">${sealOf(tab) === 'gold' ? `${G.dexTotal(tab)} 张都亲手开出过` : `${G.dexTotal(tab)} 张收齐，其中 ${G.dexTotal(tab) - G.handCount(tab)} 张尚未亲手开出`} · 点封面翻开</p></div>`;
   const all = pocketsOf(tab), h = tab === HITS ? new Map() : hand(tab), pages = Math.max(1, Math.ceil(all.length / PER)), w = span();
   const nu = fresh(), isNew = (c: Pocket) => tab !== HITS && nu.has(`${c.set}|${c.n}`);
   // a page with every pocket filled gets a 满页 stamp; it's pressed on (animated) when one of those went in on this visit
@@ -147,7 +148,7 @@ function head(id: string) {
   const c = G.dexCount(id), tot = G.dexTotal(id), { next, need } = tierOf(id), h = G.handCount(id), stock = G.state.stock[id] || 0;
   return html`<div class="bk-head">
       <p class="bk-count"><span><b>${c}</b>/${tot}</span> 张入册 <span class="bk-hand">亲手开出 <b>${h}</b>/${tot}</span></p>
-      <p class="muted">${next ? `再收 ${need} 张到 ${next[0] * 100}%：回头客 +${next[1] * 100}%` : '已收齐'} · 现有加成 +${Math.round(G.dexBonusOf(id) * 100)}%
+      <p class="muted">${next ? `再收 ${need} 张达到 ${next[0] * 100}%：基础客流加成再加 ${next[1] * 100} 个百分点` : '已收齐'} · 本系列当前加成 +${Math.round(G.dexBonusOf(id) * 100)}%
         <span class="bk-key"><i class="got"></i>开包开出 <i class="bought"></i>补的 <i class="none"></i>还没有</span></p>
       ${stock || (sealOf(id) && !at.shut) ? html`<div class="btns">${stock ? html`<button type="button" class="primary" data-act="open1" data-id=${id}>开一包${G.setById(id).name}（仓库 ${stock}）</button>` : nothing}
         ${sealOf(id) && !at.shut ? html`<button type="button" data-bk-shut>合上看封面</button>` : nothing}</div>` : nothing}
@@ -157,7 +158,7 @@ function head(id: string) {
 
 // 图鉴补卡: buy the missing hits at market into the binder (never resellable); C/U/R only come from packs. 100% = 大师套.
 function collect(id: string) {
-  if (G.master(id)) return html`<small class="master">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100}%，专程来买的人 ×${G.MASTER.w}</small>`;
+  if (G.master(id)) return html`<small class="master">大师套：这个系列的拆包玩家肯多付 ${G.MASTER.tol * 100} 个百分点，专程来买的人 ×${G.MASTER.w}</small>`;
   const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
   const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
   if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
@@ -171,7 +172,7 @@ function collect(id: string) {
 const packsFmt = (n: number) => (n >= 100 ? Math.round(n / 10) * 10 : Math.round(n)).toLocaleString('en-US');
 function handLine(id: string) {
   const h = G.handCount(id);
-  if (G.handDone(id)) return html`<small class="master">一张没买，全是自己开的 · 名气 +${G.HAND_FAME}（开分店时拿）</small>`;
+  if (G.handDone(id)) return html`<small class="master">整个系列都亲手开出过 · 下次开分店得 ${G.HAND_FAME} 名气</small>`;
   if (!h && !G.master(id)) return nothing;
   const miss = G.handMissing(id), by: Record<string, number> = {};
   for (const c of miss) by[c.r] = (by[c.r] || 0) + 1;
@@ -187,15 +188,11 @@ function handSum() {
   return html`<p class="dx-sum muted">亲手开出 <b>${h.toLocaleString('en-US')}/${tot.toLocaleString('en-US')}</b> 张（只数开包开出来的，补的不算）· 亲手开齐 ${done}/${SETS.length} 个系列，每套下次开分店名气 +${G.HAND_FAME} · 开分店、破产都不清零</p>`;
 }
 
-// the card up close: a native popover (Esc / tapping outside closes it)
-function zoomed() {
-  const c = zoom; if (!c) return nothing;
+function inspect(c: Pocket) {
+  if (hold) return;
   const hits = at.tab === HITS, st = hits ? 'got' : has(c, hand(c.set)), copies = hand(c.set).get(c.n) || 0, odds = G.cardOdds(c.set, c.n);
-  const how = st === 'got' ? `亲手开出 ${copies} 张` : st === 'bought' ? '补的：从同行按市价买的，只收进卡册，不能再卖' : '还没有';
-  return html`${st === 'none' ? html`<span class="cf cf-big pk-ghost"><b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}</span>` : face(c, 'big')}
-    <div class="bk-zoom-t"><p class="bk-zoom-n">${c.name}</p>${cap(c, 'big')}
-      <p class="muted">${G.setById(c.set).name} · ${c.n} 号${hits ? '' : ` · ${how}`}</p>
-      ${odds > 0 ? html`<p class="muted">平均 ${packsFmt(1 / odds)} 包出一张（${rarLabel(c.kind)}）</p>` : nothing}</div>`;
+  const how = st === 'got' ? `亲手开出 ${copies} 张` : st === 'bought' ? '已补入图鉴，不是可出售的库存卡' : '尚未收录';
+  inspectCard(c, `${how}${st !== 'none' ? ` · 市价 ${money(c.price)}` : ''}${odds > 0 ? `。按当前手气，平均 ${packsFmt(1 / odds)} 包出一张，不保证在这个包数内开出。` : ''}`, st !== 'none');
 }
 
 export function renderBinder() {
@@ -206,16 +203,15 @@ export function renderBinder() {
     const first = ss.find(s => !G.master(s.id)) || ss[0]; if (first) open(first.id); else if (hits) open(HITS);
   }
   const capped = G.crowdRaw() > G.CROWD_KNEE, tab = at.tab;
-  render(html`<h2>卡册 · 图鉴 <span class="dx-total">回头客 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="口碑客流（图鉴 × 新系列）叠加 ×${G.crowdRaw().toFixed(2)}，过 ×${G.CROWD_KNEE} 以后递减，上限 ×${+G.crowdCap().toFixed(2)}；成长页的店面扩建能抬上限，人气另算">（口碑客流实际 ×${G.crowdMult().toFixed(2)}，过 ×${G.CROWD_KNEE} 递减）</small>` : ''}</span></h2>
+  render(html`<h2>卡册 · 图鉴 <span class="dx-total">图鉴基础加成 +${Math.round(G.dexBonus() * 100)}%${capped ? html`<small class="muted" title="图鉴和新系列原本合计 ×${G.crowdRaw().toFixed(2)}，店面限制后为 ×${G.crowdMult().toFixed(2)}；成长页可查看扩建条件">（实际增客受店面大小限制）</small>` : ''}</span></h2>
     <div class="bk-tabs" role="tablist" aria-label="卡册的系列">
       ${hits ? html`<button type="button" role="tab" class="bk-tab" aria-selected=${tab === HITS} data-bk-tab=${HITS}><span>战利品</span><small>最贵的 ${G.state.hits.length} 张</small></button>` : nothing}
       ${ss.map(s => html`<button type="button" role="tab" class="bk-tab ${sealOf(s.id)}" aria-selected=${tab === s.id} data-bk-tab=${s.id}>
         <img src=${logo(s.id)} alt="" loading="lazy"><span>${s.name}</span><small>${G.dexCount(s.id)}/${G.dexTotal(s.id)}${sealOf(s.id) ? ` · ${sealOf(s.id) === 'gold' ? '亲手开齐' : '大师套'}` : ''}${newTag(s.id)}</small></button>`)}
     </div>
     ${tab ? html`${spread(tab)}
-      ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张${RAR.RR.zh}以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的每一张都会插进这本卡册。</p>`}
-    ${handSum()}
-    <div class="bk-zoom" id="bk-zoom" popover>${zoomed()}</div>`, $('dex'));
+      ${tab === HITS ? html`<div class="bk-head"><p class="muted">开出过最贵的 ${G.state.hits.length} 张${RAR.RR.zh}以上，按开出时的市价从高到低。</p></div>` : head(tab)}` : html`<p class="muted">还没开过包。开出的卡会记进图鉴。</p>`}
+    ${handSum()}`, $('dex'));
 }
 
 const newTag = (id: string) => { const n = freshOf(id).length; return n ? html` <i class="hand-new" aria-label="${n} 张新卡">新 ${n}</i>` : nothing; };
@@ -230,7 +226,7 @@ export function initBinder() {
     if (b.matches('[data-bk-open], [data-bk-shut]')) { at.shut = b.matches('[data-bk-shut]'); renderBinder(); }
     else if (b.dataset.bkTab) { open(b.dataset.bkTab); renderBinder(); root.querySelector('.bk-tab[aria-selected="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
     else if (b.dataset.bkPg) go(+b.dataset.bkPg);
-    else { zoom = pocketsOf(at.tab)[+b.dataset.bkZoom!]; renderBinder(); $('bk-zoom').showPopover(); }
+    else inspect(pocketsOf(at.tab)[+b.dataset.bkZoom!]);
   });
   root.addEventListener('keydown', e => {
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || (e.target as Element).closest('.bk-tabs, input')) return;

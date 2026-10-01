@@ -41,13 +41,16 @@
 |---|---|
 | `src/sets.ts` | 系列配置（实测概率、置信区间、整包市价、来源链接），并载入 `data/cards-*.json` 导出为 `DATA` |
 | `src/sim.ts` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
-| `src/game.ts` | `createGame()`：存档、经济、店铺动作（进货/开包/卖卡/客流）。不碰 DOM |
+| `src/game.ts` | `createGame()`：存档、经济、店铺动作、收藏室实体卡转移及门票、挂机／离线奖励。不碰 DOM；`setIdle()` 由入口按页面与可见性切换，额外收入记 `state.extra`，不计商品营业额 |
 | `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度名字 |
 | `src/ui/card.ts` | 卡面：全站唯一的 2D 卡（`face` 卡图 + 闪面 + 加载失败的白卡纸、`cap` 卡下的记号和价、`mark` 印刷的稀有度记号 SVG、`back` / `energy` 卡背和能量卡的 SVG 图，分享图也用）。规格在 DESIGN.md「卡面」；开包台拼字符串的地方用 `toHTML()` |
+| `src/ui/inspect.ts` | 共用卡片欣赏：原生 dialog，放大、翻面、指针／触控闪面；复用 `card.ts`，明确关闭键。图鉴未收录的卡不展示原图，翻牌期间卡册入口不得泄露新卡 |
+| `src/ui/collection.ts` | 独立收藏室 `#collection`：五个固定展位、纯展示与布置模式、实体卡移入／换位／取回、门票与展品总值；不进入售卖展示柜或店员补柜逻辑 |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/店员（货柜页），`binder` 是欧气页的卡册（战利品 + 各系列图鉴、补卡、亲手开出），`upgrades` + `skills` 是成长页（店铺等级、开分店和名气加成、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径，`guide` 是新手引导：一个原生 popover（`#coach`）贴在当前步要按的按钮旁，步骤从存档状态推出，页脚「新手引导」重放 |
-| `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽/滑动/空格输入，以及 3D 场景的适配层（`mountTable` 的回调；3D 跑不了就走 2D）。命令式 DOM。`mat.up` / `mat.cur` 是翻牌进度的唯一来源 |
-| `src/table3d.js` | 开包台的 three.js 3D 场景：柜台（层压台面、铝包边、胶垫印刷、后面的玻璃展示柜/卡册/硬卡膜）、铝箔包、撕封口、卡叠滑出、闪卡着色器、按稀有度分级的演出。纯演出，只呈现 mat.ts 递给它的包和卡，不读游戏状态。接口 `mountTable(el, { onTear, onFlip, onDone, onPick, onLost, onHold, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, lookAt, flip, flipAll, resize, dispose }`；`showShelf(items)` 是闲置时的「今天拆哪包？」（每个系列一叠仓库里的包，`{ set, n, off }` 由 mat.ts 的 `shelfItems()` 算，标签按钮也是 mat.ts 的），点包回调 `onPick(k)`，从这里开的包从那叠上拿起来进手里；`ready` 是 three 加载完的 promise；`showBatch(set, packs, picks)` 的 picks（飞到前面的卡：好卡按价格从低到高，没有好卡就是最值钱的一张）由 mat.ts 决定，第四个参数 `{ news, quick }`：news 是价签标「新」（第一次亲手开出）的 pick 下标，quick 是连开的一轮（动作 0.7 倍时长）；`lookAt(k)` 等摊开后把第 k 张举到眼前（连开出新卡时用）。画面静止时不渲染，开发模式下 `window.__t3` 能读帧数和 `renderer.info` |
+| `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽／滑动／空格输入及 3D 适配。命令式 DOM；`mat.up` / `mat.cur` 管翻牌进度，`held` 镜像 3D 举牌状态，说明牌和「放回」键跟它走。举牌可用放回键、桌面点击、Esc／X、空格／回车／Z 结束，对话框优先处理自己的键 |
+| `src/table3d.js` | 开包台 three.js 场景，纯演出，不读游戏状态。`mountTable(el, { onTear, onFlip, onDone, onPick, onLost, onHold, onLook, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, lookAt, putBack, flip, flipAll, resize, dispose }`。`showShelf(items)` 读 mat.ts 提供的 `{ set, n, off }`；`showBatch(set,packs,picks,{news,quick})` 的重点卡与新卡下标由 mat.ts 决定。`onLook(k)` 在第 k 张举到眼前时触发，放下时为 -1；`putBack()` 放回举着的卡。`ready` 等待 three 加载；静止不渲染，开发时 `window.__t3` 读帧数和 renderer.info |
+| `src/series.ts` | 十个系列的演出数据与纯函数：原创图形、出牌顺序、撕口轨迹、晃动幅度；3D 与 2D 共用笔画和节奏，不读取游戏状态，不消耗开包随机数 |
 | `src/achievements.ts` | 成就：45 个成就的定义、奖金（游戏设定）和判定。`note(G, packs)` 在每次开包事件记计数（`state.feat`），`check(G)` 按状态判定、记进 `state.ach`、用 `G.bonus` 一次性发奖金。不改任何概率和数值 |
 | `src/ui/ach.ts` | 成就页 `#ach`（每个成就一张评级标签）和解锁提示；翻牌没翻完（`hold`）不判成就 |
 | `src/story.ts` / `src/ui/story.ts` / `src/debt.ts` | 剧情：台词和触发规则（纯数据，node 能测）/ 过场播放器（全屏 `<dialog>`，排队、开包演出中不插、引导让路）/ 读经济状态和事件的唯一适配层（`bill()` `inDebt()` `debtBeat()`；经济接口改名只改这个文件，字段不存在时返回 null，剧情只放开场）。插画在 `public/gen/story/`，提示词在 `public/gen/PROMPTS.md` |
@@ -59,9 +62,9 @@
 | `src/ui/walk.ts` | 货柜页顶上的店面地板：店主、店员、每位进店顾客（按 `state.recent`）和收账的九姐阿豆是像素小人，走进来、头顶冒 ♪ … ? 气泡、走出去。纯演出，只读状态。规矩见 DESIGN.md「店里的人」 |
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
-| `index.html` | 外壳，Vite 入口：顶栏（含四页导航）、四页（开包 / 货柜 / 欧气 / 成长）、页脚。面板容器的 id 就是各面板 `render()` 的目标 |
-| `src/ui/layout.ts` | 各页的 hash 路由（`#open #shelf #case #luck #grow #ach`，`#case` 是货柜页的展示柜视图；只隐藏不重渲染，翻牌进度不丢）、从别页开包先切到开包页、导航上成长的可买数、货柜的提示点（离开货柜后有人没买到/嫌贵走了，数字是 `G.missed()` 之和） |
-| `src/ui/rail.ts` | 开包页右边的窄栏：仓库里的包（换系列开）、欧气结论 |
+| `index.html` | Vite 外壳：六页导航（开包／货柜／欧气／成长／成就／收藏室）与页脚。面板容器 id 是各自 render 的目标 |
+| `src/ui/layout.ts` | hash 路由 `#open #shelf #case #luck #grow #ach #collection`；`currentPage()` 是规范化页面值，未知 hash 回退开包，挂机判定共用它。只隐藏不重建页面；`#case` 是货柜的展示柜视图；处理开包前切页和成长／货柜提示点 |
+| `src/ui/rail.ts` | 开包页右栏：仓库里的包、手气等级与官方／游戏加成后概率、升级回执、欧气结论。`skills.ts` 提供手气展示数据，`stats.ts` 渲染独立挂机／离线收益面板 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `ROADMAP.md` | 产品化 loop 的状态：当前里程碑、候选里程碑、待办池（标里程碑、文件、验收）、竞品拆解、完成记录。每轮开始读、结束写 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |

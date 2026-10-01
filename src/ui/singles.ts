@@ -12,6 +12,8 @@ import * as S from '../sim.ts';
 import { G, $, money } from './common.ts';
 import { face, cap } from './card.ts';
 import { spotted } from './case.ts';
+import { canCollect } from './collection.ts';
+import { inspectCard } from './inspect.ts';
 
 const LIVE = 2400;
 let had: Record<string, { c: Single; n: number }> | null = null, lastAt = 0, soldN = 0;
@@ -37,16 +39,16 @@ export function renderSingles() {
   const bulk = G.bulkValue(), n = G.binderN(), full = s.shown.length >= G.slots();
   const chip = (k: string) => { const t = sold[k]; return t ? keyed(t.k, html`<span class="v-gone" aria-hidden="true">${face(t.c, 'show')}</span>
       <span class="r-beat v-beat">售出${t.n > 1 ? ` ${t.n} 张` : ''} <em>+${money(t.gain)}</em></span>`) : nothing; };
-  render(html`<h2>卡本 · 闪卡 ${n}/${G.BINDER} <small class="muted">找卡的直接翻，按单卡标价 ${Math.round(G.casePct() * 100)}%；卖同行 ${Math.round(G.BUYLIST * 100)}%</small></h2>
-      <div class="bulk"><span>散卡 ${bulk.n} 张 · 可卖 ${money(bulk.v)}</span>
+  render(html`<h2>卡本 · 闪卡 ${n}/${G.BINDER} <small class="muted">找卡的按单卡标价（市价 ${Math.round(G.casePct() * 100)}%）买；卖同行得市价 ${Math.round(G.BUYLIST * 100)}%</small></h2>
+      <div class="bulk"><span>散卡 ${bulk.n} 张 · 卖同行可得 ${money(bulk.v)}</span>
         <button type="button" data-act="bulk" ?disabled=${!bulk.n}>一键卖散卡</button></div>
       ${pockets.length ? html`<div class="bk-book sb-book"><ol class="bk-page sb-page">${repeat(pockets, ([k]) => k, ([k, c]) => { // keyed: a pocket stays its card's while others sell around it (a lit or flashed pocket too)
         const gone = !s.singles[k];
         return html`<li class="pk sb-pk ${gone ? 'gone' : ''} ${!gone && spotted(c) ? 'spot' : ''}" data-spot="card:${c.name}">
-          <div class="sb-card">${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${chip(k)}</div>
+          <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${chip(k)}</button>
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
-          <span class="sb-btns">${gone ? nothing : html`<button type="button" data-act="list" data-key="${k}" ?disabled=${full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
-            <button type="button" data-act="trophy" data-key="${k}" title="当镇店之宝，吸引客流，但不再出售">镇店</button>
+          <span class="sb-btns">${gone ? nothing : html`${canCollect() ? html`<button type="button" data-act="col-take" data-key="${k}" title="放进收藏室：只看不卖，不标价">收藏</button>` : nothing}<button type="button" data-act="list" data-key="${k}" ?disabled=${full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
+            <button type="button" data-act="trophy" data-key="${k}" title="当镇店之宝，吸引收藏党，但不再出售">镇店</button>
             <button type="button" data-act="sell" data-key="${k}" title="立刻卖给同行">卖 ${money(c.price * G.BUYLIST)}</button>`}</span></li>`;
-      })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡按收卡价卖给你，自己开出的也放这里。</p>`}`, $('singles'));
+      })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡可能按收卡价卖给你，自己开出的闪卡也放这里。</p>`}`, $('singles'));
 }

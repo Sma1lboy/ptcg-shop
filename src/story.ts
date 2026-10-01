@@ -21,7 +21,7 @@ export const NAMES: Record<Who, string> = { jiu: '九姐', adou: '阿豆', you: 
 
 const L = (who: Who, t: Line['t']): Line => ({ who, t });
 // the terms line: exact numbers when the economy gives a bill, else the rule in words (the numbers are the economy's, not ours)
-const terms = (c: Ctx) => (c.bill ? `第 ${c.week} 周的账是 ${c.bill}。往后每周多一点——多多少，看账本，不看心情。` : '往后每周多一点——多多少，看账本，不看心情。');
+const terms = (c: Ctx) => (c.bill ? `第 ${c.week} 周的账是 ${c.bill}。往后每周多一点。多多少，看账本，不看心情。` : '往后每周多一点。多多少，看账本，不看心情。');
 
 export const SCENES: Record<string, Scene[]> = {
   opening: [
@@ -44,7 +44,7 @@ export const SCENES: Record<string, Scene[]> = {
       L('jiu', '付不上也行，阿豆会帮你把店里值钱的东西搬走。包括你。'),
       L('adou', '……九姐开玩笑的。'),
       L('adou', '（小声）上次没开玩笑。'),
-      L('jiu', '柜台里那点零钱，算开张红包——也记账上。开张吧，老板。'),
+      L('jiu', '柜台里那点零钱，算开张红包，也记账上。开张吧，老板。'),
     ] },
   ],
   // an old save meeting the debt for the first time: the shop was running before 九姐 showed up
@@ -73,7 +73,7 @@ export const SCENES: Record<string, Scene[]> = {
     L('adou', '九姐让我带句话。……还让我带了把锤子。'),
     L('jiu', '锤子是用来钉新价签的。这次是。'),
     L('jiu', '我在门口等一会儿。凑齐了，我就当没来过。'),
-    L('', c => `顶栏的红牌子在倒数：到点前卖货凑齐，账自动付掉；到点还差的，九姐记成借款${c.rate ? `（每周 ${c.rate} 利息）` : '（每周计息）'}；借不到，店就收走。能卖的、能借的、各要付出什么，就摆在红牌子下面。`),
+    L('', c => `顶栏的红牌子在倒数：到点前卖货凑齐，账自动付掉；到点还差的，额度够，九姐就记成借款${c.rate ? `（每周 ${c.rate} 利息）` : '（每周计息）'}；额度不够，店就收走。能卖的、能借的、各要付出什么，就摆在红牌子下面。`),
   ] }],
   loan: [{ bg: 'shop', lines: [
     L('jiu', '又借？好说。'),
@@ -112,8 +112,8 @@ export const SCENES: Record<string, Scene[]> = {
     { bg: 'street', lines: [
       L('', '九姐走到门口，又停下来。'),
       L('jiu', c => `${c.street ?? '城东'}有个铺面，比这间大。上一个老板……也说去进货了。`),
-      L('jiu', c => `本钱我出${c.debt ? `，${c.debt}` : ''}，照旧记账上。你在这攒的名气带得走${c.fame ? `——现在是 ${c.fame}` : ''}。`),
-      L('jiu', '不急。这店多开一天，你带走的就多一点。'),
+      L('jiu', c => `本钱我出${c.debt ? `，${c.debt}` : ''}，照旧记账上。你在这攒的名气带得走${c.fame ? `，现在有 ${c.fame} 点` : ''}。`),
+      L('jiu', '不急。这店生意越大，你带走的就越多。'),
       L('', '债还清了：这家店不再有账单。「成长」页的「开分店」随时能去，这家店的营业额越高，带走的名气越多。'),
     ] },
   ],
@@ -134,7 +134,7 @@ export const SCENES: Record<string, Scene[]> = {
     L('adou', c => (c.total ? `${c.total} 张，一格都不空。……我能拍张照吗？` : '一格都不空。……我能拍张照吗？')),
     L('jiu', '拍吧。收齐的卡册，同行路过都要多看两眼。'),
     L('jiu', c => (c.bought ? `补的那 ${c.bought} 张也算数。钱花在哪，章就烫在哪。` : '钱花在哪，章就烫在哪。')),
-    L('', c => `大师套：这个系列的拆包玩家肯多付${c.tol ? ` ${c.tol}` : '一点'}，专程来买的人更多。卡册封面在「欧气」页，点一下翻开。`),
+    L('', c => `大师套：这个系列的拆包玩家肯多付${c.tol ? ` ${c.tol}` : '一点'}，专程来买这个系列整包的人更多。卡册封面在「欧气」页，点一下翻开。`),
   ] }],
   // 亲手开齐 (game.ts emits it once per set): every card of a set pulled from packs, none bought
   hand: [{ bg: 'shop', seal: 'gold', lines: [

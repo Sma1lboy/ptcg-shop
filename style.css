@@ -119,7 +119,7 @@ a { color: inherit; }
 .muted { color: var(--muted); }
 small { font-size: var(--fs-cap); }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach) h2 { font: 400 var(--fs-h)/1.3 var(--font-pixel); margin: 0 0 8px; color: var(--ink); text-shadow: 1px 1px 0 var(--ink-shadow); text-wrap: balance; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection) h2 { font: 400 var(--fs-h)/1.3 var(--font-pixel); margin: 0 0 8px; color: var(--ink); text-shadow: 1px 1px 0 var(--ink-shadow); text-wrap: balance; }
 /* BW text: every pixel line casts a hard shadow one pixel right and down (two at 2x size) */
 :where(.px) { font-family: var(--font-pixel); font-weight: 400; text-shadow: 1px 1px 0 var(--ink-shadow); }
 
@@ -159,6 +159,7 @@ small { font-size: var(--fs-cap); }
 :is(.nav, .subnav) a::before { content: ""; width: 24px; height: 24px; margin-right: 6px; flex: none; background: var(--i) center / contain no-repeat; image-rendering: pixelated; opacity: .6; transition: opacity .15s; }
 .nav a[href="#open"] { --i: url(gen/i-pack.webp); } .nav a[href="#shelf"] { --i: url(gen/i-shelf.webp); } .nav a[href="#luck"] { --i: url(gen/i-card.webp); }
 .nav a[href="#grow"] { --i: url(gen/i-rank.webp); } .nav a[href="#ach"] { --i: url(gen/i-trophy.webp); }
+.nav a[href="#collection"] { --i: url(gen/i-card.webp); }
 .subnav a[href="#shelf"] { --i: url(gen/i-shelf.webp); } .subnav a[href="#case"] { --i: url(gen/i-card.webp); } /* the same badges as the 货架 / 单卡市值 readouts */
 :is(.nav, .subnav) a:is(:hover, [aria-current="page"])::before { opacity: 1; }
 :is(.nav, .subnav) a:hover { color: var(--hud-ink); background-color: #454C58; }
@@ -181,10 +182,10 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 :is(.col, .rail) > section:not([hidden]) ~ section:not([hidden]) { margin-top: 20px; }
 /* panels (DESIGN.md「面板」): each group is a BW menu window — the rounded double frame (--frame rim, a gap of the fill, a
    --frame-in rule) around a --panel face; its h2 is the window's title bar, the dark plate of the BW Bag / PC screens */
-:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
+:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
   position: relative; min-width: 0; padding: 14px 18px 18px; border: 3px solid var(--frame); border-radius: var(--r-frame);
   background: var(--panel); box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--frame-in), 0 4px 0 rgba(0, 0, 0, .08); }
-:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child {
+:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child {
   --ink: var(--hud-ink); --muted: var(--hud-muted); --ink-shadow: #0B0D10;
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -14px -18px 14px; padding: 9px 18px 9px; color: var(--ink);
   font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow);
@@ -274,25 +275,25 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* game buttons (DESIGN.md「按钮」): BW command buttons — a rounded face with a darker lip underneath, a dark rim, pixel print.
    Secondary is the pale command, primary the card-border yellow (one per group), danger deep red (清空存档 only). Hover lifts
    the face under the blue cursor ring, pressed drops onto the lip, disabled is a flat grey face. All CSS: no images to miss */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) { /* :is so it outranks the bare `button { color: inherit }` */
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) {
   --lip: color-mix(in oklab, var(--btn-face) 72%, var(--frame));
   min-height: 34px; padding: 6px 16px 8px; border: 2px solid var(--frame); border-radius: 8px;
   background: var(--btn-face); color: var(--btn-ink); box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5);
   font: 400 var(--fs-cap)/1.5 var(--font-pixel); text-decoration: none; text-shadow: 1px 1px 0 color-mix(in oklab, var(--btn-ink) 16%, var(--btn-face));
   transition: box-shadow .12s, transform .08s, background-color .12s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 0 2px var(--sel); }
 /* pressed: the face drops onto its lip */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   box-shadow: inset 0 -1px 0 var(--lip), inset 0 2px 0 rgba(0, 0, 0, .12); transform: translateY(2px); padding-bottom: 6px; }
 /* primary = the card-border yellow command: dark print, dark rim */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
   --lip: #C9A018; background-color: var(--sticker); color: var(--sticker-ink); border-color: var(--sticker-ink); text-shadow: 1px 1px 0 #FCE68A; }
 /* danger: the one irreversible button, a deep red command so it can't pass for a normal one */
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
@@ -773,6 +774,27 @@ button:disabled { cursor: not-allowed; }
   .v-trophy .v-cube > .cf { width: 96px; }
 }
 .s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.page-collection { grid-template-columns: minmax(0, 1fr); }
+.col-slots { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.col-slots .v-cube { height: 224px; }
+.col-slots .v-cube > .cf { width: min(132px, 90%); }
+.col-no { color: var(--hud-ink); font: 400 var(--fs-cap)/1.4 var(--font-body); }
+.col-cube { width: 100%; cursor: pointer; }
+.col-slot.picked .v-cube, .col-src.picked { outline: 3px solid var(--sel); outline-offset: 2px; }
+.col-arrange { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line-strong); }
+.col-hint { min-height: 2.8em; max-width: 65ch; }
+.col-msg { min-height: 1.5em; margin: 12px 0 0; }
+.col-msg.bad { color: var(--ink); font-weight: 600; }
+.case-link { color: var(--ink); text-underline-offset: 4px; }
+.col-rar { color: var(--muted); font-size: var(--fs-cap); }
+#playmode { font-size: var(--fs-cap); }
+#playmode p { margin: 8px 0; }
+#playmode summary { cursor: pointer; }
+@media (max-width: 779px) {
+  .col-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .col-slots .v-cube { height: 204px; }
+  .page-collection button, .inspect button { min-height: 44px; }
+}
 
 /* footer: sources and game settings folded away; the reset lives here, far from the shop's buttons */
 .foot { max-width: 1680px; margin: 0 auto; padding: 32px var(--gap) 48px; border-top: 2px solid var(--frame-in);
@@ -813,12 +835,11 @@ button:disabled { cursor: not-allowed; }
 .haul-top .slot.best { flex-basis: 178px; translate: 0 -12px; }
 .haul-top .card.up { cursor: pointer; }
 .haul figcaption.s3-top { position: relative; }
-/* the card picked up from the 2D ten-pack (mat.ts peekBig): in hand, with its plate; a tap puts it back */
-.mat-peek { width: min(300px, 78vw, 52vh); padding: 0; border: 0; background: none; overflow: visible; color: var(--mat-ink); --mk-ink: var(--mat-ink); --mk-silver: var(--fx-silver); --mk-gold: var(--mat-gold); --mk-ace: var(--mat-ace); --mk-gap: #0A1226; }
-.mat-peek::backdrop { background: rgba(4, 8, 14, .72); }
-.mat-peek .slot { margin: 0; display: grid; gap: 10px; }
-.mat-peek .cf { box-shadow: 0 0 0 1px var(--stock-edge), 0 18px 40px rgba(0, 0, 0, .5); }
-.mat-peek .cf-cap { color: var(--mat-muted); } .mat-peek .cf-price { color: var(--mat-ink); }
+.series-stage { position: relative; isolation: isolate; }
+.series-stage > :is(.slot, .card, .haul-rest, .haul-top, figcaption) { position: relative; z-index: 1; }
+.series-figure { position: absolute; inset: -30%; z-index: 0; display: grid; place-items: center; pointer-events: none; }
+.series-figure svg { max-width: 640px; }
+.haul > .series-figure { inset: 0; }
 .snd { margin-left: auto; }
 .snd + .ghost { margin-left: 0; }
 @keyframes deal { from { transform: translateX(70px) rotate(4deg); opacity: 0; } }
@@ -845,7 +866,7 @@ button:disabled { cursor: not-allowed; }
    the button it points at gets a dashed ring, and the popover itself has no yellow: the yellow is the button you should press. */
 /* every floating window (guide, sound, share, card zoom, story text box, 凑钱, 破产) is the same BW window as the panels.
    :where keeps it at zero specificity, so each window's own rule still sets its size and padding */
-:where(.coach, .sound, #share-pop, .bk-zoom, .st-box, .raise, .wreck) { border: 3px solid var(--frame); border-radius: var(--r-frame); background: var(--panel);
+:where(.coach, .sound, #share-pop, .inspect, .st-box, .raise, .wreck) { border: 3px solid var(--frame); border-radius: var(--r-frame); background: var(--panel);
   box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--frame-in), 0 12px 32px rgba(0, 0, 0, .28); }
 .coach { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); padding: 12px 14px;
   color: var(--ink); font-size: var(--fs-body); line-height: 1.6; overflow: visible; }
@@ -1121,13 +1142,32 @@ button:disabled { cursor: not-allowed; }
 .bk-key i:not(:first-child) { margin-left: 8px; }
 .bk-head .master { display: block; } /* 大师套 and 亲手开齐 are two lines, not one run-on */
 .bk-head .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
-/* the card up close: a popover in the BW window, the card at hand size beside its line */
-.bk-zoom { width: min(600px, calc(100vw - 32px)); padding: 18px; color: var(--ink); }
-.bk-zoom:popover-open { display: grid; grid-template-columns: minmax(0, 260px) minmax(0, 1fr); gap: 18px; align-items: start; }
-.bk-zoom::backdrop { background: rgba(4, 8, 14, .55); }
-.bk-zoom p { margin: 0 0 6px; }
-.bk-zoom-n { font: 600 var(--fs-lg)/1.25 var(--font-body); } /* a card name comes from data, and the pixel face only holds the game's own text: system face */
-.bk-zoom .cf-cap { margin-bottom: 8px; }
+/* Card appreciation stays in one BW window; the art itself keeps its original colours. */
+.inspect { width: min(720px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; padding: 18px; color: var(--ink); }
+.inspect::backdrop { background: color-mix(in oklab, var(--mat) 70%, transparent); }
+.inspect p { margin: 0 0 6px; }
+.inspect-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.inspect-head h2 { flex: 1; min-width: 0; margin: 0; font: 600 var(--fs-h)/1.3 var(--font-body); overflow-wrap: anywhere; }
+.inspect-stage { max-height: 58dvh; overflow: auto; padding: 24px; perspective: 1000px; background: var(--mat); border-radius: 8px; }
+.inspect-size { width: calc(min(60vw, 300px, (58dvh - 48px) * 63 / 88) * var(--magnify, 1)); aspect-ratio: 63 / 88; margin: auto; }
+.inspect-tilt, .inspect-turn { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; }
+.inspect-tilt { touch-action: none; }
+.inspect-turn { transition: transform .4s ease-out; }
+.inspect-turn.flipped { transform: rotateY(180deg); }
+.inspect-front, .inspect-back { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; }
+.inspect-back { transform: rotateY(180deg); border-radius: 5.08% / 3.64%; }
+.inspect.no-foil .cf-foil { display: none; }
+.inspect-meta { margin-top: 12px !important; }
+.inspect-note, .inspect-help { color: var(--muted); font-size: var(--fs-cap); }
+.inspect-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 12px 0; }
+.inspect-controls label { display: flex; flex: 1; min-width: 160px; align-items: center; gap: 8px; white-space: nowrap; }
+.inspect-controls input { flex: 1; width: 80px; min-width: 60px; accent-color: var(--sel); }
+.inspect-controls output { min-width: 4ch; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .inspect-turn { transition: none; } }
+.v-cube.inspect-trigger { width: 100%; }
+.page button.sb-card.inspect-trigger { padding: 0; border: 0; background: none; box-shadow: none; }
+.page .inspect-trigger:focus-visible { outline: 3px solid var(--sel); outline-offset: 3px; }
+.mat.m3d .mat-head [data-act="putback"] { flex: none; white-space: nowrap; }
 .pk-ghost { display: grid; align-content: center; justify-items: center; gap: 8px; background: none; box-shadow: none; border: 1px dashed var(--line-strong); color: var(--muted); }
 .pk-ghost b { font: 600 56px/1 var(--font-tag); } .pk-ghost .mk { font-size: 22px; }
 @media (max-width: 779px) {
@@ -1140,8 +1180,6 @@ button:disabled { cursor: not-allowed; }
   .pk { padding: 5px 4px 3px; }
   .pk-slot b { font-size: 18px; }
   .pk .cf-price { font-size: 14px; }
-  .bk-zoom:popover-open { grid-template-columns: minmax(0, 1fr); justify-items: center; }
-  .bk-zoom > .cf { max-width: 240px; }
   .bk-key { display: flex; margin: 4px 0 0; }
 }
 
@@ -1233,7 +1271,7 @@ button:disabled { cursor: not-allowed; }
 .slot figcaption:has(> .hand-new) { display: flex; align-items: baseline; }
 /* the finished batch's front row (table3d.js haulOf): under each of the best few, a plate as wide as the card with its name,
    rarity and market price (the same as the caption of the card in hand); the dearest one's price a size up. Never gold or yellow. */
-:is(.s3-tag, .haul figcaption, .mat-peek figcaption).s3-top { box-sizing: border-box; padding: 4px 6px 5px; white-space: normal; text-align: center; }
+:is(.s3-tag, .haul figcaption).s3-top { box-sizing: border-box; padding: 4px 6px 5px; white-space: normal; text-align: center; }
 .s3-top .s3-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 600; line-height: 18px; color: var(--mat-ink); }
 .s3-top .hand-new { float: none; margin: 0 4px 0 0; }
 .s3-top .cf-cap { flex-wrap: wrap; justify-content: center; }
@@ -1261,7 +1299,7 @@ button:disabled { cursor: not-allowed; }
 .s3-shelf button.in { opacity: 1; }
 /* everything the scene lays over the canvas is a BW status plate — the dark box a battle prints a name and HP in: --hud face,
    a near-black rim, a thin light inner rule, a hard drop. The pointed one gets the menu cursor's blue ring */
-:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .ip-next, .s3-tag, .haul figcaption.s3-top, .mat-peek figcaption.s3-top, .haul-sum, .deck .card.up + figcaption) { border-radius: 6px; background: var(--hud);
+:is(.s3-shelf button, .s3-cap, .s3-hint, .ip-tag, .ip-next, .s3-tag, .haul figcaption.s3-top, .haul-sum, .deck .card.up + figcaption) { border-radius: 6px; background: var(--hud);
   box-shadow: 0 0 0 2px #101318, inset 0 0 0 1px rgba(255, 255, 255, .14), 0 4px 0 2px rgba(0, 0, 0, .3); }
 /* the 2D single pack: a flipped card's caption is the same plate as the 3D table's tag under it */
 .deck .card.up + figcaption { align-self: center; padding: 1px 6px; }
@@ -1437,6 +1475,7 @@ button:disabled { cursor: not-allowed; }
 /* a level landing: the badge is pressed in like a stamp and the lamp flashes on it; the Lv number jumps */
 .tn.up .tn-badge { animation: tn-stamp .55s cubic-bezier(.2, 1.5, .4, 1); }
 .tn.up .gt-lv { animation: tn-lv .6s ease-out; }
+.luck-got { display: block; margin: 0; padding: 4px 8px; border: 2px solid var(--frame); border-radius: 6px; background: var(--hud); color: var(--hud-ink); font-size: var(--fs-cap); font-weight: 600; text-shadow: none; animation: tn-lv .6s ease-out; }
 @keyframes tn-stamp { 0% { transform: scale(1.3); box-shadow: 0 0 0 1px var(--hud), 0 0 0 10px var(--sel), 0 0 40px 16px var(--sel-glow); } 55% { transform: scale(.94); } 100% { transform: none; } }
 @keyframes tn-lv { 0% { transform: translateY(-6px) scale(1.4); } 100% { transform: none; } }
 @media (max-width: 1399px) { .tree { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

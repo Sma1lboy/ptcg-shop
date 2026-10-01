@@ -4,18 +4,18 @@
 import { html, render } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, logoUrl, bar } from './common.ts';
-import { odds } from './skills.ts';
+import { odds, luckUp, luckUpText } from './skills.ts';
 
 const moneyOf = money;
 
 // What each upgrade level does, in the same words as the skills' fx (display only; the numbers are game.ts's).
 const UFX: Record<string, (lv: number) => string> = {
-  signage: lv => `肯多付 +${Math.round(G.SIGN_STEP * 100 * lv)}%`,
+  signage: lv => `肯多付 +${Math.round(G.SIGN_STEP * 100 * lv)} 个百分点`,
   racks: lv => `${G.RACK_BASE + lv} 个货架`,
   depth: lv => `每架 ${G.DEPTH_BASE + G.DEPTH_STEP * lv} 包`,
   case: lv => `${G.CASE_BASE + G.CASE_STEP * lv} 个柜位`,
   supplier: lv => `进货打 ${+((G.WHOLESALE - G.WHOLESALE_STEP * lv) * 10).toFixed(1)} 折`,
-  expand: lv => `口碑上限 ×${+(G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv).toFixed(2)}`, // the tile shows walk-ins instead (fxOf); this is the 目标 line's words when blocked
+  expand: lv => `图鉴和系列带来的客流上限 ×${+(G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv).toFixed(2)}`,
   clerk: lv => ['没有店员', '巡货架，补到半满', '补满，卖散卡'][lv],
 };
 
@@ -39,7 +39,7 @@ export function billNote(cost: number) {
 
 // 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.
 export const refundBtn = (k: string, name: string, lv: number, cost: number, note = true) =>
-  html`<p class="gt-back"><button type="button" data-act="refund" data-k="${k}">退回 ${name} Lv ${lv} · 拿回 ${moneyOf(cost * G.REFUND)}</button>${note ? html`<small>这周买的，账不够付时可以退，扣一成</small>` : ''}</p>`;
+  html`<p class="gt-back"><button type="button" data-act="refund" data-k="${k}">退回 ${name} Lv ${lv} · 拿回 ${moneyOf(cost * G.REFUND)}</button>${note ? html`<small>这周买的最高一级，账不够付时可以退，退回九成</small>` : ''}</p>`;
 
 // Everything cash can level, as one list: the goal the header points at is the cheapest of these.
 function buyables() {
@@ -55,7 +55,7 @@ function buyables() {
 const MIN_TRAFFIC = 0.02;
 export function nextStep() { // 成长's 下一步 — also what notice.ts's 「钱够升级了」 names
   const all = buyables().sort((a, b) => a.cost - b.cost);
-  if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return { ...r, why: '有解锁的系列还没有货架摆' }; }
+  if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return { ...r, why: '解锁的系列比货架多，先加一个货架' }; }
   const gain = (k: string) => G.peek(k, G.rate) / G.rate() - 1;
   const live = all.filter(b => b.k !== 'watch' && b.k !== 'luck' && !((b.k === 'crowd' || b.k === 'expand') && gain(b.k) < MIN_TRAFFIC));
   return { ...(live[0] || all[0]), why: '' };
@@ -75,8 +75,8 @@ function branchGoal() {
   return html`<div class="gh-goal">
     <p class="gg-k">下一步：这家店还清了</p>
     <button type="button" class="gg-what" @click=${() => seek('branch')}><b>开第 ${G.state.branch.n + 2} 家店 · ${st.name}</b><span>带走 <b>${take} 名气</b></span><i aria-hidden="true">↓</i></button>
-    <button type="button" class="primary" data-act="branch">${armedNow() ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${take} 名气`}</button>
-    <small>留在这里：再做 ${money(more)} 营业额才多 1 名气${hours != null ? `，按最好一周的生意约 ${hrs(hours)}` : ''}。</small>
+    <button type="button" class="primary" data-act="branch">${armedNow() ? '再点一次：关店并开分店' : `开分店 · 带走 ${take} 名气`}</button>
+    <small>留在本店：再做 ${money(more)} 营业额，开分店时多得 1 名气${hours != null ? `，按最好一周的生意约 ${hrs(hours)}` : ''}。</small>
     ${fameLine()}
   </div>`;
 }
@@ -108,14 +108,14 @@ function fameLine() {
 function spareLine() {
   const b = G.state.overdue ?? G.nextBill(); if (!b) return '';
   const lp = G.state.overdue ? 0 : G.nextBill()?.loanPay || 0; // 顺手还 is set aside too (G.spare)
-  return html`<p class="gg-spare">闲钱 <b>${money(G.spare())}</b><span>现金 ${money(G.state.cash)} − ${G.state.overdue ? '逾期的账' : `第 ${b.week} 周的账`} ${money(b.amount)}${lp ? ` − 顺手还借款 ${money(lp)}` : ''}。升级先用闲钱，账单的钱留着</span></p>`;
+  return html`<p class="gg-spare">留好账款后可花 <b>${money(G.spare())}</b><span>现金 ${money(G.state.cash)} − ${G.state.overdue ? '逾期账款' : `第 ${b.week} 周账款`} ${money(b.amount)}${lp ? ` − 本次自动还款 ${money(lp)}` : ''}。升级建议只花这部分钱。</span></p>`;
 }
 
 export function renderUpgrades() {
   const ups = Object.entries(G.UPGRADES), sks = Object.entries(G.SKILLS), cash = G.state.cash;
   const lv = ups.reduce((a, [k]) => a + G.lvl(k), 0) + sks.reduce((a, [k]) => a + G.skill(k), 0);
   const max = ups.reduce((a, [, u]) => a + u.costs.length, 0) + sks.reduce((a, [k]) => a + G.skillMax(k), 0);
-  const goal = nextStep();
+  const goal = nextStep(), luckNote = luckUp();
   render(html`<header class="grow-head">
       <div class="gh-lv"><p class="gh-shop">第 ${G.state.branch.n + 1} 家店${G.state.branch.got ? html` · 名气 <b>${G.state.branch.fame}</b>` : ''}</p><p><span>店铺等级</span><b>Lv ${lv}</b><small>/ ${max}</small></p>
         ${bar(lv / max, `${lv}/${max}`, { k: 'EXP' })}</div>
@@ -130,11 +130,11 @@ export function renderUpgrades() {
       </div>` : html`<div class="gh-goal"><p class="gg-k">都升满了。</p>${fameLine()}</div>`}
       <dl class="gh-now">
         <div><dt>进店</dt><dd>${(G.rate() * 60).toFixed(1)} 人/分</dd></div>
-        <div><dt>口碑客流</dt><dd>×${G.crowdMult().toFixed(2)}${G.crowdRaw() > G.CROWD_KNEE ? `（叠加 ×${G.crowdRaw().toFixed(2)}，上限 ×${+G.crowdCap().toFixed(2)}）` : ''}</dd></div>
+        <div><dt>图鉴和新系列</dt><dd title="收录图鉴、解锁系列带来的顾客增幅；不含技能人气和名气加成">顾客 +${Math.round((G.crowdMult() - 1) * 100)}%${G.crowdRaw() > G.CROWD_KNEE ? html`<small>受店面大小限制</small>` : ''}</dd></div>
         <div><dt>进货价</dt><dd>市价打 ${+(G.wholesaleRate() * 10).toFixed(1)} 折</dd></div>
         <div><dt>货架</dt><dd>${G.racks()} × ${G.depth()} 包</dd></div>
         <div><dt>展示柜</dt><dd>${G.slots()} 格</dd></div>
-        <div><dt>手气</dt><dd>×${G.luckMult().toFixed(2)}</dd></div>
+        <div><dt>手气（游戏加成）</dt><dd>${luckNote ? `×${luckNote.m0.toFixed(2)} → ` : ''}×${G.luckMult().toFixed(2)} · Lv ${G.skill('luck')}/${G.skillMax('luck')}</dd></div>
         ${G.perk('regulars') ? html`<div><dt>老主顾</dt><dd>基础客流 +${Math.round(G.REG_STEP * 100 * G.perk('regulars'))}%</dd></div>` : ''}
         <div><dt>打烊结算</dt><dd>${G.offlineCap() / 3600} 小时</dd></div>
       </dl>
@@ -143,6 +143,7 @@ export function renderUpgrades() {
   renderBranch();
   render(tree(G.canBranch() ? undefined : goal?.k), $('upgrades'));
 }
+document.addEventListener('ptcg:luck', renderUpgrades); // the 手气 level-up line times out (skills.ts luckUp)
 
 // ---------- 成长树 ----------
 // Four lines by what they change in the shop. A line's rail is the 营业额 track's ink rail: it fills up to the last node with a
@@ -162,7 +163,7 @@ function nodeOf(k: string): Node {
   if (k in G.UPGRADES) {
     const u = G.UPGRADES[k], lv = G.lvl(k), ok = G.canUpgrade(k);
     return { k, id: k, icon: `u-${k}`, act: 'up', name: u.name, desc: u.desc, lv, max: u.costs.length, cost: G.upgradeCost(k), fx: ok ? fxOf(k, lv, UFX[k]) : [UFX[k](lv), UFX[k](lv + 1)], end: UFX[k](u.costs.length),
-      blocked: ok ? '' : `口碑客流（图鉴 × 新系列）到 ×${G.CROWD_KNEE} 才能扩建`, gate: ok ? undefined : [G.crowdRaw(), G.CROWD_KNEE] };
+      blocked: ok ? '' : `图鉴收录和新系列解锁的客流加成超过 ×${G.CROWD_KNEE} 后可扩建`, gate: ok ? undefined : [G.crowdRaw(), G.CROWD_KNEE] };
   }
   const sk = G.SKILLS[k], lv = G.skill(k), max = G.skillMax(k);
   return { k, id: k, icon: `u-${k}`, act: 'learn', name: sk.name, desc: sk.desc, lv, max, cost: G.skillCost(k), fx: fxOf(k, lv, sk.fx), end: sk.fx(max), blocked: G.canLearn(k) ? '' : '先雇店员（店员 Lv 1）才能学' };
@@ -201,12 +202,13 @@ function seek(id: string) {
 
 function node(n: Node, next: string | undefined, lit: boolean) {
   const perk = n.have != null, cash = n.have ?? G.state.cash, money = n.price ?? moneyOf, done = n.cost == null, can = !done && !n.blocked && cash >= n.cost!, free = can && yellow(n);
-  const back = !perk && G.refundable().find(x => x.k === n.k), up = popped(n.id, n.lv);
+  const back = !perk && G.refundable().find(x => x.k === n.k), up = popped(n.id, n.lv), got = n.id === 'luck' ? luckUp() : undefined;
   const st = done ? 'max' : n.blocked ? 'lock' : n.lv ? 'own' : 'new';
   return html`<li class="tn ${st}${free ? ' can' : ''}${n.k === next ? ' next' : ''}${up ? ' up' : ''}${lit ? ' lit' : ''}" id="tn-${n.id}" style="--lv:${n.lv};--max:${n.max}">
     <span class="tn-badge" style="--i:url(gen/${n.icon}.webp)" role="img" aria-label="${n.name} Lv ${n.lv}/${n.max}${done ? '，满级' : n.blocked ? '，锁着' : ''}"></span>
     <p class="tn-top"><b>${n.name}</b><span class="gt-lv">Lv ${n.lv}<small>/${n.max}</small></span>${n.k === next ? html`<small class="tn-next">下一步</small>` : ''}</p>
     <p class="gt-fx">${done ? n.fx[0] : html`${n.fx[0]} <span aria-hidden="true">→</span> <b>${n.fx[1]}</b>`}</p>
+    ${got ? html`<p class="gt-fx luck-got" role="status">${luckUpText(got)}</p>` : ''}
     <p class="gt-desc">${n.desc}</p>
     ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`${bar(n.gate[0] / n.gate[1], `口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}`)}<small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
       : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
@@ -224,7 +226,7 @@ function tree(next?: string) {
         <h3>${l.name}线 <small>${lv}/${max} 级</small></h3>
         <p class="tl-say">${l.say}</p>
         <ol>${ns.map((n, i) => node(n, next, i < reach))}</ol>
-        <p class="tl-end"><b>${lv === max ? '走到头了' : '走到头'}</b>${ns.map(n => n.end).join(' · ')}</p>
+        <p class="tl-end"><b>${lv === max ? '已全部升满' : '满级效果'}</b>${ns.map(n => n.end).join(' · ')}</p>
         ${l.ks.includes('luck') ? odds() : ''}
       </section>`;
     })}</div>`;
@@ -255,14 +257,14 @@ function renderBranch() {
       <div class="br-prog">
         <p><span>这家店的债</span> <b>${can ? '还清了' : `还欠 ${money(G.state.debt)}`}</b> <small>/ ${money(d0)}</small></p>
         ${bar(paid, `已还 ${Math.round(paid * 100)}%`, { k: 'EXP' })}
-        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame + hand)}</b>（本店营业额 ${money(rev)}${hand ? `，加亲手开齐的 ${hand}` : ''}）；多做 ${money(nextAt - rev)} 营业额就是 ${pts(fame + 1)}（名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')})，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。`
+        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame + hand)}</b>（本店营业额 ${money(rev)}${hand ? `，加亲手开齐的 ${hand}` : ''}）；多做 ${money(nextAt - rev)} 营业额，开分店就能带走 ${pts(fame + hand + 1)}（营业额名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 向下取整，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。`
           : html`按现在的营业额（${money(rev)}），还清时能带走至少 ${pts(fame)}。破产的店一点名气都没有。`}${!can && hand ? ` 另有亲手开齐的 ${pts(hand)}等着：开分店时一起拿，破产也不丢。` : ''}</p>
       </div>
     <div class="br-go">
         <p class="br-street"><b>下一家在${there.name}</b>${there.say}${there.sets ? html`<small>${streetSets(there)}</small>` : ''}</p>
         <p class="br-keep"><b>带走</b>卡册和展示柜里的卡、图鉴、成就、欧气检测的全部记录、名气</p>
         <p class="br-keep"><b>留下</b>现金、仓库和货架上的包、店铺升级、技能、营业额（后面的系列要重新解锁）</p>
-        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : armedNow() ? '再点一次：关掉这家店，去开分店' : `开分店 · 带走 ${pts(fame + hand)}`}</button>
+        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : armedNow() ? '再点一次：关店并开分店' : `开分店 · 带走 ${pts(fame + hand)}`}</button>
       </div>
     </div>
     <section class="perks" id="perks" aria-labelledby="perks-h">

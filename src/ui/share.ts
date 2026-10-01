@@ -240,7 +240,7 @@ async function drawPack(d: ShareSpec) {
   // cards in a row under it, each on a plate with name, rarity and price, and the rest as one line 「另 N 张 · 合计 $x」.
   const row = d.n > 1 ? d.front.filter(c => c !== d.best).slice(0, 4) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
   const sub = d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里', what = d.n > 1 ? `${d.n} 包共开出` : '这包开出', diff = d.value - d.cost;
-  const gain = `${d.n > 1 ? '共开出' : '开出'} ${money(d.value)} · 进货 ${money(d.cost)} · ${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, rank = d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank;
+  const gain = `市价 ${money(d.value)} · 进货 ${money(d.cost)} · 按市价${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, rank = d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank;
   await fonts(top + d.set + row.map(c => rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计欧气卡铺 · ');
   const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, X = 48, CW = W - 96, WB = H - 96;
@@ -296,7 +296,7 @@ async function pop(draw: () => Promise<string>, text: string, file: string) {
   $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
   if (canShare) $('pop-share').onclick = () => navigator.share({ files: [png], text }).catch(() => null); // cancelled sheet rejects; nothing to do
 }
-export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}），${d.rank}`, 'ouqi-pack.png');
+export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}）；${d.n > 1 ? '其中最好的一包' : '这包'}${d.rank}`, 'ouqi-pack.png');
 export const showLuck = () => {
   const g = grade(), L = g.L;
   return pop(drawCard, `我在欧气卡铺开了 ${L.packs} 包，开出总值超过 ${pctText(g.pct!)}%（±${g.err}）的模拟玩家：${L.title}。${g.best ? `最贵的一张 ${g.best.name} ${money(g.bestNow)}，占总值 ${g.share}%。` : ''}`, 'ouqi.png');

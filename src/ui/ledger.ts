@@ -43,7 +43,7 @@ export function renderDue() {
 function backs() {
   const r = G.refundable(); if (!r.length) return nothing;
   const name = (k: string) => (G.UPGRADES[k] || G.SKILLS[k]).name, lv = (k: string) => k in G.UPGRADES ? G.lvl(k) : G.skill(k);
-  return html`<div class="lg-back"><p>这周买的升级可以退（扣一成，不像借款会滚利息）：</p>${r.map(x => refundBtn(x.k, name(x.k), lv(x.k), x.cost, false))}</div>`;
+  return html`<div class="lg-back"><p>这周买的升级和技能可以退，退回价格的九成；借款则每周计息：</p>${r.map(x => refundBtn(x.k, name(x.k), lv(x.k), x.cost, false))}</div>`;
 }
 
 export function renderLedger() {
@@ -61,7 +61,7 @@ export function renderLedger() {
   // what a loan of n grows to if left alone for 3 weeks (the number the confirm click shows)
   const grown = (n: number) => money(n * (1 + r) ** 3);
   const loanBtn = (n: number, label: string, primary = false) => html`<button type="button" class=${primary ? 'primary' : ''} data-act="loan" data-n=${n} ?disabled=${n <= 0 || n > credit}>
-    ${isArmed(n) ? `再点一次：借 ${money(n)}，3 周不还是 ${grown(n)}` : label}</button>`;
+    ${isArmed(n) ? `再点一次确认借 ${money(n)}（3 周不还涨到 ${grown(n)}）` : label}</button>`;
   // repaying keeps back the next bill and $1,000 of stock money, so the button never empties the till
   const billLoan = b ? Math.min(credit, Math.ceil(b.amount)) : 0, repayable = Math.floor(Math.min(Math.max(0, s.cash - (b?.amount || 0) - 1000), s.loan > 0 ? s.loan : s.debt));
   render(html`${head}
@@ -71,20 +71,20 @@ export function renderLedger() {
         <dl><div><dt>开店欠款（分期，不计息）</dt><dd>${money(s.owe)} <small>/ ${money(d0)}</small></dd></div>
           <div><dt>借款（每周利滚利 ${pct(r)}）</dt><dd class=${s.loan > 0 ? 'lg-loan' : ''}>${money(s.loan)}</dd></div></dl>
         ${bar(paid, `开店欠款已还 ${pct(paid)}`, { k: 'EXP' })}
-        ${s.loan > 0 ? html`<p class="lg-note">借款每周付完账顺手还：九姐收回 1/${Math.round(1 / G.LOAN_PAY)}（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}），只拿收银机里 ${money(G.loanFloat())} 以上的钱（补满货架的进货钱加下周的分期），不够就少收，不算逾期。照这样约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
+        ${s.loan > 0 ? html`<p class="lg-note">每周付完账后会自动还一部分借款：目标为借款的 1/${Math.round(1 / G.LOAN_PAY)}（最少 ${money(G.LOAN_MIN * (1 + G.DEBT_STEP * s.branch.n))}）。先留 ${money(G.loanFloat())} 用于补货和下周账款，只用剩余现金还款；不足就少还，不算逾期。若每周都够钱按目标还款，约 <b>${weeks(G.loanWeeks())}</b>还清。</p>` : ''}
       </div>
       <div class="lg-bill">
         ${o ? html`<p class="lg-k lg-late">第 ${o.week} 周的账逾期</p><p class="lg-big">${money(o.amount)}</p>
             <p>宽限还剩 <b>${clock(o.until - s.shopT)}</b>。${short ? html`手上 ${money(s.cash)}，还差 <b>${money(short)}</b>。` : '钱够了，付掉吧。'}</p>
             <div class="lg-act">${short ? html`<button type="button" class="primary" @click=${openRaise}>去凑钱</button>` : html`<button type="button" class="primary" data-act="paybill">付账 ${money(o.amount)}</button>`}</div>${backs()}`
         : b ? html`<p class="lg-k">第 ${b.week} 周的账 · ${clock(G.dueIn())} 后来收</p><p class="lg-big">${money(b.amount)}</p>
-            <p>${s.cash >= b.amount ? html`手上 ${money(s.cash)}，到时自动付${take ? `，再顺手还借款 ${money(take)}` : ''}。` : html`手上 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到时付不上有 ${G.GRACE / 60} 分钟宽限。`}</p>${backs()}
+            <p>${s.cash >= b.amount ? html`现金 ${money(s.cash)}，到期自动付账${take ? `，再自动还借款 ${money(take)}` : ''}。` : html`现金 ${money(s.cash)}，<b>还差 ${money(b.amount - s.cash)}</b>。到期不足先给 ${G.GRACE / 60} 分钟筹款；宽限结束仍不足则借款，额度不足则破产。`}</p>${backs()}
             ${upcoming.length ? html`<ol class="lg-next">${upcoming.map(([w, v]) => html`<li><span>第 ${w} 周</span><b>${money(v)}</b></li>`)}</ol>
-              <p class="lg-note">每周 ×${G.BILL_G}，付到欠款为零为止。</p>` : ''}` : ''}
+              <p class="lg-note">分期账单每周 ×${G.BILL_G}，直到开店欠款还清为止。</p>` : ''}` : ''}
       </div>
       <div class="lg-credit">
         <p class="lg-k">借款额度</p><p class="lg-big">${money(credit)} <small>/ ${money(G.creditLimit())}</small></p>
-        <p>额度 = 这家店最好一周的营业额（${money(s.best)}），最少 ${money(G.LOAN_FLOOR * (1 + G.DEBT_STEP * s.branch.n))}。周息 ${pct(r)}${broke ? `（破产 ${broke} 次，加了 ${pct(r - G.LOAN_RATE)}）` : ''}，滚过额度的部分并进下一张账。</p>
+        <p>额度 = 这家店最好一周的营业额（${money(s.best)}），最少 ${money(G.LOAN_FLOOR * (1 + G.DEBT_STEP * s.branch.n))}。周息 ${pct(r)}${broke ? `（破产 ${broke} 次，加了 ${pct(r - G.LOAN_RATE)}）` : ''}；借款加息后超过额度的部分，并进下一张账。</p>
         <div class="lg-act">
           ${o ? '' : loanBtn(billLoan, `借 ${money(billLoan)}`)}
           ${repayable >= 1 ? html`<button type="button" data-act="repay" data-n=${repayable}>${s.loan > 0 ? `还借款 ${money(repayable)}` : `提前还 ${money(repayable)}`}</button>` : ''}
@@ -145,11 +145,11 @@ export function renderRaise() {
     <b class="rs-get ${lent ? 'lent' : ''}">${get == null ? '' : `+${money(get)}`}</b>${btn}</li>`;
   // the cheapest route that covers it all comes first (on a phone the sheet shows three rows before it scrolls)
   const rows: [string, unknown][] = [
-    ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡本来就只能卖给同行', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
+    ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡只能卖给同行，按这个收购价', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
     // 退回 (game.ts refundable): this week's levels back at REFUND — the same tenth a loan costs in a week, but it stops there
     ['refund', backL.length ? row(backL.length > 1 ? `退回这周买的 ${backL.length} 样` : '退回这周买的', backL.map(x => `${bname(x.k)} Lv ${blv(x.k)}`).join('、'), `扣一成（${money(backL.reduce((a, x) => a + x.cost * (1 - G.REFUND), 0))}），和借一周的利息一样多，但不会再滚`, backGet,
         html`${backL.map(x => html`<button type="button" data-act="refund" data-k="${x.k}">退回${bname(x.k)}</button>`)}`) : nothing], // events.ts routes data-act=refund
-    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起，比留在卡本里卖给找卡的（标 ${Math.round(G.casePct() * 100)}%）少卖 ${money(lose.hits)}`, hits.got,
+    ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起；按单卡标价（市价的 ${Math.round(G.casePct() * 100)}%）卖给找卡的，能多收 ${money(lose.hits)}`, hits.got,
         html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],
     ['case', caseP.pick.length ? row(`撤下展示柜 ${caseP.pick.length} 张卖给同行`, cardsNote(caseP.pick), `柜台标价合计 ${money(caseP.pick.reduce((a, p) => a + p.c.ask, 0))}，少卖 ${money(lose.case)}`, caseP.got,
         html`<button type="button" class=${cls('case')} @click=${act(() => sellCase(caseP.pick.map(p => p.c.i)))}>撤下卖掉</button>`) : nothing],
@@ -163,7 +163,7 @@ export function renderRaise() {
         html`<button type="button" @click=${() => { location.hash = 'open'; }}>去开包</button>`) : nothing],
     ['loan', part >= 1 ? row(canLoan ? `借 ${money(loanN)}` : `借满额度 ${money(part)}`, `每周利息 ${money(lose.loan)}${canLoan ? '' : `，差的 ${money(loanN - part)} 还得卖`}`,
         `周息 ${Math.round(r * 100)}%，3 周不还滚到 ${money(part * (1 + r) ** 3)}${canLoan ? ` · 额度 ${money(credit)}` : ''}`, part,
-        html`<button type="button" class=${cls('loan')} @click=${act(raiseLoan)}>${armedL ? `再点一次：借 ${money(Math.min(loanN, part))}` : canLoan ? `借 ${money(loanN)}` : '借满'}</button>`, true)
+        html`<button type="button" class=${cls('loan')} @click=${act(raiseLoan)}>${armedL ? `再点一次确认借 ${money(Math.min(loanN, part))}` : canLoan ? `借 ${money(loanN)}` : '借满'}</button>`, true)
       : row('借', html`额度用完了`, '先还掉一些借款，额度才回来', null, nothing)],
   ];
   rows.sort((x, y) => +(y[0] === best) - +(x[0] === best));
@@ -172,7 +172,7 @@ export function renderRaise() {
       <p class="rs-short">${short ? html`还差 <b>${money(short)}</b>` : html`<b>钱够了</b>`}</p>
       <p class="rs-clock"><span class="rs-k">宽限</span><b>${clock(left)}</b></p>
       ${bar(cash / o.amount, `手上 ${money(cash)}，账 ${money(o.amount)}`, { hp: true, k: 'HP' })}
-      <p class="rs-note">手上 ${money(cash)} / 账 ${money(o.amount)} · 钱一够就自动付掉 · 开包、离开时宽限不走</p>
+      <p class="rs-note">手上 ${money(cash)} / 账 ${money(o.amount)} · 现金够就自动付 · 翻牌和离店时宽限倒计时暂停</p>
     </div>
     ${short ? html`<ul class="rs-list">
       ${rows.map(x => x[1])}
@@ -199,7 +199,7 @@ export function renderWreck() {
       <div><dt>这家店的营业额</dt><dd>${money(w.revenue)}，不算名气</dd></div>
       <div><dt>升级、技能</dt><dd>清零</dd></div>
     </dl>
-    <p class="wr-keep"><b>留下</b>图鉴 ${dex} 张、成就 ${ach} 个、欧气检测记录、名气 ${s.branch.fame}${s.branch.got ? ' 和名气加成' : ''}。</p>
+    <p class="wr-keep"><b>留下</b>图鉴 ${dex} 张、成就 ${ach} 个、欧气检测记录、名气 ${s.branch.fame}${s.branch.got ? ' 和名气加成' : ''}${w.gallery ? `；收藏室 ${w.gallery.n} 张展品（总市价 ${money(w.gallery.value)}）保留` : ''}。</p>
     <p class="wr-keep"><b>往后</b>同一家店从第 1 周重来，欠 ${money(s.debt)}；借款周息 ${pct(G.loanRate())}（每破产一次 +${pct(G.LOAN_MARK)}）。</p>
     <button type="button" class="primary" data-act="ackwreck">重新开张</button>`, dlg);
   if (!dlg.open) dlg.showModal();
