@@ -9,9 +9,13 @@
 import { createGame } from '../src/game.ts';
 import * as S from '../src/sim.ts';
 import { SETS } from '../src/sets.ts';
+import { note, check, watch } from '../src/achievements.ts';
+import { debtBeat } from '../src/debt.ts';
+import { SCENES, sceneFor, BIG_PULL } from '../src/story.ts';
+// node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json]: the deterministic first hour of a new player who does what the guide (ui/guide.ts) and the shop's message box (ui/notice.ts) say; see firstHour() below.
 
-export function boot(seed = 1) {
-  let T = 1_700_000_000_000, s = seed >>> 0;
+export function boot(seed = 1, t0 = 1_700_000_000_000) {
+  let T = t0, s = seed >>> 0;
   const rnd = () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   const G = createGame({ now: () => T, random: rnd, storage: null });
   return { G, S, SETS, rnd, advance: sec => { T += sec * 1000; }, now: () => T };
@@ -208,10 +212,250 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
   }
   return out;
 }
+// ---------- 第一小时 (firstHour): a new player who presses what the guide and the shop's message box tell them to ----------
+// The decision rules are PORTED from src/ui/guide.ts (STEPS, current(), toStock/toRack, GRAD), src/ui/notice.ts (watchShop, pick, holds, fix,
+// the box's printed counts), src/ui/upgrades.ts (nextStep, growCount), src/ui/common.ts (toShelf, shelfFill, restock) and the event wiring of
+// src/ui/story.ts / ach.ts (debtBeat, sceneFor, note/watch/check come from the real modules). Nothing in src/ui is imported (it needs a DOM), so
+// a rule changed there must be changed here: this is a model of the UI, NOT exact UI parity. Deliberate assumptions and divergences:
+//  - time is the fake wall clock, one second a step. The shop clock is paused while a scene is read (G.pause, as the story player does): a scene
+//    costs lines × `read` seconds (default 3) and is not counted in shop time, so the third bill falls just past the hour.
+//  - the player presses ONE prompt every `react` seconds (default 6), only after it has been on screen `react` seconds; priority: a sold-out box,
+//    then the guide step, then other box kinds. A step whose button is on another page costs a tab press first. No presses during a reveal.
+//  - a pack opened by hand holds the table (hold = true) for `reveal` seconds (default 15; mat.ts' real flip times depend on the cards). While
+//    held: no achievement check, no scene, the box shows only 'out' (as ui does). On release both flush the same second (the UI's 400/600 ms
+//    delays are dropped).
+//  - the guide's 定价 step is answered with 「先按这个价卖」 (default price); 账单 with 「知道了」; no price is ever changed, so 倒爷 sweeps are only the default-price ones.
+//  - the 「钱够升级了」 box: the player goes to 成长 and buys nextStep() when its price is within 闲钱; else, when `others` (default true), the cheapest
+//    level 闲钱 covers (the box says 「够买 N 项」); if nothing is bought the box is waved off (ui would repeat it). Then back to 货柜.
+//  - the opening scene plays at t = 0 and is kept OUT of the event metric by default (`countOpening`): it would hide a leading drought.
+//  - start time is local noon, so 夜猫子 can't fire from the time zone of whoever runs this.
+//  - NOT modelled (so no events from them): receipts (SLIP), card selling, the case/binder, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
+//    phone layout, the sound/animation timings, 先不管 (the player never waves a box off).
+// Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
+// the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene. Refills never count.
+export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare' } = {}) {
+  const { G, SETS, advance } = boot(seed, new Date(2023, 10, 14, 12, 0, 0).getTime()), N = minutes * 60;
+  const sum = o => Object.values(o).reduce((a, b) => a + b, 0), st = () => G.state;
+  let t = 0, page = 'open', hold = false, holdLeft = 0, storyLeft = 0, cashPrev = st().cash;
+  const rec = {}, events = [], seenEv = new Set(), acts = [];
+  const stamp = () => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  const ev = (kind, key, label, count = true) => { const k = kind + ':' + key; if (seenEv.has(k)) return; seenEv.add(k); events.push({ t, at: stamp(), kind, key, label, count }); };
+  const did = s => acts.push(`${stamp()} ${s}`);
+  // ----- common.ts -----
+  const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0; return Math.min(room, n > 1 ? n - 1 : n); };
+  const shelfFill = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), s = st().stock[id] || 0, want = Math.max(0, Math.min(room + 1 - s, G.WAREHOUSE - s)), n = Math.min(want, Math.floor(st().cash / G.wholesale(id))); return { n, full: n === want }; };
+  const restockN = id => Math.max(0, Math.min(G.WAREHOUSE - (st().stock[id] || 0), Math.floor(st().cash / G.wholesale(id))));
+  // shelf.ts: the n of the row's primary buy button (no stock): 进满 / 进一架 / 进 10 / 进 1
+  const primaryBuyN = id => { const w = G.wholesale(id), s = st().stock[id] || 0, room = G.WAREHOUSE - s, full = restockN(id), can = n => room > 0 && st().cash >= w * Math.min(n, room), sf = shelfFill(id);
+    const fill = full === room && full > 10 && full * w * 4 <= st().cash, rack = !fill && sf.full && sf.n > 10; return !can(1) ? 0 : fill ? full : rack ? sf.n : can(10) ? 10 : 1; };
+  const canShelve = id => { const own = G.shelves().filter(r => r.id === id).length; return !!st().stock[id] && (own ? G.shelfQty(id) < own * G.depth() : G.shelves().some(r => !r.id)); };
+  const unlockedIds = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
+  // ----- guide.ts -----
+  const sellable = () => SETS.filter(x => G.unlocked(x.id) && !G.unlockAt(x.id));
+  const racked = id => G.shelves().some(r => r.id === id);
+  const toStock = () => sellable().find(x => !(st().stock[x.id] || 0) && !racked(x.id) && st().cash >= G.wholesale(x.id) * 10);
+  const toRack = () => sellable().find(x => (st().stock[x.id] || 0) > 1 && !racked(x.id) && G.shelves().some(r => !r.id));
+  const graduated = () => { const s = st(); return s.billsPaid >= 2 || (sum(s.opened) >= 30 && (s.billsPaid > 0 || !G.nextBill())) || s.branch.n > 0 || !!s.branch.broke; };
+  let billAt = 0;
+  const STEPS = [
+    { h: '进货', page: 'shelf', done: () => !toStock() && (sum(st().stock) + sum(st().opened) > 0 || G.shelves().some(r => r.id)),
+      target: () => { const x = toStock(); return x ? { act: 'buy', id: x.id, n: primaryBuyN(x.id) } : null; } },
+    { h: '摆上货架', page: 'shelf', done: () => G.shelves().some(r => r.id) && !toRack(),
+      target: () => { const x = toRack() ?? SETS.find(s => G.unlocked(s.id) && canShelve(s.id)); return x && canShelve(x.id) ? { act: 'shelve', id: x.id, n: toShelf(x.id) } : null; } },
+    { h: '定价', page: 'shelf', done: () => !!rec.price || Object.keys(st().price).length > 0,
+      target: () => (G.shelves().some(r => r.id) ? { act: 'price' } : null) },
+    { h: '开一包', page: 'open', done: () => sum(st().opened) > 0,
+      target: () => { if (page !== 'shelf' && page !== 'open') return null; const s = unlockedIds().find(i => st().stock[i] > 0); if (s) return { act: 'open1', id: s };
+        if (page === 'open') { const b = unlockedIds().find(i => st().cash >= G.wholesale(i)); if (b) return { act: 'buyopen', id: b }; } return null; } },
+    { h: '账单', page: 'open', done: () => {
+        if (!rec.bill && billAt > 0 && t * 1000 - billAt > 8000 && G.shelves().some(r => r.id && !r.qty)) rec.bill = 1;
+        return !!rec.bill || st().billsPaid > 0 || !!st().overdue || !G.nextBill(); },
+      target: () => (G.nextBill() ? { act: 'bill', always: true } : null) },
+    { h: '补货', page: 'shelf', done: () => !G.shelves().some(r => r.id && !r.qty),
+      target: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
+        if ((st().stock[id] || 0) > 1) return canShelve(id) ? { act: 'shelve', id, n: toShelf(id) } : null; const n = primaryBuyN(id); return n ? { act: 'buy', id, n } : null; } },
+    { h: '测欧气', page: 'luck', done: () => !!rec.luck, target: () => null },
+  ];
+  const current = () => (rec.off || rec.done || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
+  const guiding = () => current() >= 0;
+  // ----- upgrades.ts -----
+  const KS = ['racks', 'depth', 'supplier', 'signage', 'talk', 'crowd', 'expand', 'clerk', 'apprentice', 'watch', 'case', 'luck'];
+  const buyables = () => [
+    ...Object.entries(G.UPGRADES).filter(([k]) => G.canUpgrade(k)).map(([k, u]) => ({ k, act: 'up', name: u.name, lv: G.lvl(k), cost: G.upgradeCost(k) })),
+    ...Object.entries(G.SKILLS).filter(([k]) => G.canLearn(k)).map(([k, s]) => ({ k, act: 'learn', name: s.name, lv: G.skill(k), cost: G.skillCost(k) })),
+  ].filter(b => b.cost != null);
+  const live = all => all.filter(b => b.k !== 'watch' && b.k !== 'luck' && !((b.k === 'crowd' || b.k === 'expand') && G.peek(b.k, G.rate) / G.rate() - 1 < 0.02));
+  const nextStep = () => { const all = buyables().sort((a, b) => a.cost - b.cost);
+    if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return r; }
+    return live(all)[0] || all[0]; };
+  const yellow = () => buyables().filter(b => b.cost <= st().cash && b.cost <= G.spare()).sort((a, b) => a.cost - b.cost || KS.indexOf(a.k) - KS.indexOf(b.k));
+  const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || yellow().length > 0) ? `${g.k}:${g.lv}` : ''; };
+  const buy = b => (b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k));
+  // ----- notice.ts -----
+  let memo = null, memoShown = false, printed = null, soldBefore = st().cust.sold, tookBefore = st().intake?.n ?? 0, grew = '';
+  const stocked = {}, out = new Set(), fresh = new Set(), notes = [], known = new Set(unlockedIds());
+  const rackedIds = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id))];
+  const fix = id => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
+  const outIds = () => { const all = [...out], fx = all.map(fix), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
+  const shelfMine = () => hold || !guiding();
+  const holds = m => { switch (m.kind) {
+    case 'first': case 'intake': case 'done': return notes[0] === m;
+    case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
+    case 'new': return !guiding() && fresh.has(m.id);
+    case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
+    default: return false; } };
+  const pickMemo = () => {
+    if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
+    if (notes.length) return notes[0];
+    if (guiding()) return null;
+    const nu = [...fresh][0], k = page === 'grow' ? '' : growKey();
+    return nu ? { kind: 'new', id: nu } : k && k !== grew ? { kind: 'grow', k } : null; };
+  let inWatch = false;
+  function watchShop() {
+    if (inWatch) return; inWatch = true;
+    try {
+      const s = st();
+      if (soldBefore === 0 && s.cust.sold > 0) notes.push({ kind: 'first' });
+      soldBefore = s.cust.sold;
+      if (!tookBefore && s.intake?.n) notes.push({ kind: 'intake' });
+      tookBefore = s.intake?.n ?? 0;
+      const on = rackedIds();
+      for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; }
+      for (const id of out) if (!on.includes(id)) out.delete(id);
+      for (const id of unlockedIds()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
+      const free = G.shelves().some(r => !r.id);
+      for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id);
+      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine();
+      memo = memo && holds(memo) && !cut ? memo : pickMemo();
+      // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
+      const shown = !!memo && !(hold && memo.kind !== 'out');
+      if (shown) {
+        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0), b = G.nextBill(), short = !!(cost && b && s.cash - cost < b.amount);
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind;
+        if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
+      }
+      memoShown = shown;
+    } finally { inWatch = false; }
+  }
+  // ----- achievements (ui/ach.ts) / story (ui/story.ts) -----
+  const achFlush = () => { if (hold) return; for (const a of check(G)) ev('ach', a.id, a.name); };
+  const seen = {}, queue = []; let cur = null, missedWeek = 0;
+  const lines = id => SCENES[id].reduce((a, sc) => a + sc.lines.length, 0);
+  function storyFlush() {
+    while (!cur && !hold && queue.length) {
+      const q = queue.shift();
+      if (q.id === 'missed' && !st().overdue) continue;
+      seen[q.id] = 1; if (q.key) seen[q.key] = 1;
+      cur = q.id; storyLeft = lines(q.id) * read; G.pause(true);
+      ev('story', q.id, q.id, q.id !== 'opening' || countOpening);
+    }
+  }
+  function play(id, key) { if (!SCENES[id] || cur === id || queue.some(q => q.id === id)) return; queue.push({ id, key }); storyFlush(); }
+  const unlockedN = () => unlockedIds().length;
+  function storyEmit(e) {
+    const b = debtBeat(e, G), late = b?.kind === 'paid' && !!b.week && b.week === missedWeek, id = sceneFor(b, seen, late);
+    if (b?.kind === 'missed') missedWeek = b.week ?? 0;
+    if (id === 'branch') seen.sets = unlockedN();
+    if (b && id) play(id, b.key || undefined);
+    const big = e?.open?.flat().filter(c => c.price >= BIG_PULL).sort((a, c) => c.price - a.price)[0];
+    if (big && !seen.bigpull) play('bigpull');
+    if (unlockedN() > (seen.sets ?? 0)) { seen.sets = unlockedN(); play('unlock'); }
+  }
+  // ----- bills -----
+  const bills = {};
+  const bill = w => (bills[w] ||= { week: w, amount: G.installment(w), due: null, paid: null, missed: null, loan: null, cashBefore: null });
+  // ----- guide bookkeeping -----
+  function guideSync() {
+    const i = current();
+    if (i >= 0 && STEPS[i].h === '账单' && !billAt) billAt = t * 1000 || 1;
+    if (i < 0 && !rec.off && !rec.done && !graduated() && sum(st().opened) > 0) { rec.done = 1; notes.push({ kind: 'done' }); watchShop(); }
+  }
+  G.on(e => { // listener order of main.ts: message box, story, guide, achievements
+    if (e?.type === 'bill_due' && e.week <= 3) { const b = bill(e.week); b.amount = e.amount; b.due = t; b.cashBefore = Math.round(cashPrev); b.shop = snap(); }
+    if (e?.type === 'bill_paid' && e.week <= 3) { const b = bill(e.week); b.paid = t; b.cashAfter = Math.round(st().cash); }
+    if (e?.type === 'bill_missed' && e.week <= 3) bill(e.week).missed = t;
+    if (e?.type === 'loan_taken' && e.week <= 3) bill(e.week).loan = { t, amount: e.amount, forced: !!e.forced };
+    watchShop(); storyEmit(e); guideSync();
+    if (e?.open) note(G, e.open); watch(G); achFlush();
+  });
+  // ----- the player -----
+  const refill = (x, dataN) => { if ((st().stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
+    const n = dataN ?? shelfFill(x).n; if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
+  const openPack = (id, buyFirst) => { if (hold) return; if (buyFirst && !G.buy(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, 1).length) { hold = false; holdLeft = 0; } };
+  const grow = () => { page = 'grow'; const g = nextStep(), b = g && g.cost <= G.spare() ? g : others ? yellow()[0] : null;
+    if (b && buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); else { grew = growKey(); did('成长: nothing bought'); } page = 'shelf'; };
+  // what is on screen, top priority first: { id, press }
+  function prompts() {
+    const ps = [], m = memoShown ? memo : null;
+    if (m?.kind === 'out') ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) });
+    const i = current();
+    if (i >= 0) { const s = STEPS[i], tg = s.target();
+      if (s.h === '测欧气') ps.push({ id: `g:${i}:${page === 'luck'}`, press: () => { page = 'luck'; if (sum(st().opened)) rec.luck = 1; did('guide 测欧气'); } });
+      else if (tg && (tg.always || page === s.page || tg.act === 'open1' || tg.act === 'buyopen')) ps.push({ id: `g:${i}:${page}:${tg.act}:${tg.id ?? ''}:${tg.n ?? ''}`, press: () => guideKey(s, tg) });
+      else if (page !== s.page) ps.push({ id: `g:${i}:tab`, press: () => { page = s.page; did(`tab ${s.page}`); } }); }
+    if (m && m.kind !== 'out') ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) });
+    return ps; }
+  function guideKey(s, tg) {
+    did(`guide ${s.h} ${tg.act}${tg.id ? ' ' + tg.id : ''}${tg.n ? ' ×' + tg.n : ''}`);
+    if (tg.act === 'buy') G.buy(tg.id, tg.n); else if (tg.act === 'shelve') G.shelve(tg.id, tg.n);
+    else if (tg.act === 'price') rec.price = 1; else if (tg.act === 'bill') rec.bill = 1;
+    else if (tg.act === 'open1') openPack(tg.id, false); else if (tg.act === 'buyopen') openPack(tg.id, true); }
+  function memoKey(m) {
+    did(`box ${m.kind}${m.ids ? ' ' + m.ids.join() : m.id ? ' ' + m.id : ''}`);
+    if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done') { notes.shift(); memo = null; memoShown = false; }
+    else if (m.kind === 'grow') grow();
+    else { const ids = printed.sets, fx = printed.fixes;
+      if (ids.length > 1) for (const x of ids) refill(x);
+      else if (fx[0]?.up) G.shelve(ids[0], fx[0].up);
+      else if (fx[0]) refill(ids[0], fx[0].n);
+      else page = 'shelf'; }
+    watchShop(); }
+  // ----- the clock -----
+  const shownAt = new Map(); let lastPress = -1e9;
+  const level = () => Object.keys(G.UPGRADES).reduce((a, k) => a + G.lvl(k), 0) + Object.keys(G.SKILLS).reduce((a, k) => a + G.skill(k), 0);
+  const snap = () => ({ t, cash: Math.round(st().cash), level: level(), racks: G.racks(), rate: +(G.rate() * 60).toFixed(2) });
+  const rows = [], init0 = new Set(unlockedIds());
+  watchShop(); seen.sets = init0.size; play('opening');
+  for (t = 1; t <= N; t++) {
+    advance(1); G.tick(hold); cashPrev = st().cash;
+    if (storyLeft > 0) { if (--storyLeft === 0) { cur = null; G.pause(false); storyFlush(); } if (t % 300 === 0) rows.push(snap()); continue; }
+    for (const id of unlockedIds()) if (!init0.has(id)) ev('unlock', id, G.setById(id).name);
+    const all = buyables().sort((a, b) => a.cost - b.cost), pool = live(all);
+    if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r && !pool.includes(r)) pool.push(r); }
+    for (const b of pool) if ((basis === 'cash' ? st().cash : G.spare()) >= b.cost) ev('afford', `${b.k}:${b.lv + 1}`, `${b.name} Lv${b.lv + 1} $${Math.round(b.cost)}`);
+    watchShop(); guideSync();
+    if (hold) { if (--holdLeft <= 0) { hold = false; achFlush(); storyFlush(); watchShop(); guideSync(); } }
+    else {
+      achFlush(); storyFlush(); watchShop();
+      if (!cur) {
+        const ps = prompts(), ids = new Set(ps.map(p => p.id));
+        for (const k of [...shownAt.keys()]) if (!ids.has(k)) shownAt.delete(k);
+        for (const p of ps) if (!shownAt.has(p.id)) shownAt.set(p.id, t);
+        const p = ps[0]; if (p && t - shownAt.get(p.id) >= react && t - lastPress >= react) { lastPress = t; shownAt.delete(p.id); p.press(); }
+      }
+    }
+    if (t % 300 === 0) rows.push(snap());
+  }
+  t = N;
+  const counted = events.filter(e => e.count), times = counted.map(e => e.t).sort((a, b) => a - b), edges = [0, ...times, N];
+  let drought = { secs: 0, from: 0, to: 0 }; for (let i = 1; i < edges.length; i++) if (edges[i] - edges[i - 1] > drought.secs) drought = { secs: edges[i] - edges[i - 1], from: edges[i - 1], to: edges[i] };
+  const per5 = Array.from({ length: Math.ceil(N / 300) }, () => 0); for (const e of counted) per5[Math.min(per5.length - 1, Math.floor(Math.max(0, e.t - 1) / 300))]++;
+  const byKind = {}; for (const e of counted) byKind[e.kind] = (byKind[e.kind] || 0) + 1;
+  const firsts = Object.fromEntries(['unlock', 'afford', 'ach', 'story'].map(k => [k, counted.find(e => e.kind === k)?.t ?? null]));
+  for (const w of [1, 2, 3]) bill(w);
+  return { seed, per5, byKind, drought, firsts, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
+    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts };
+}
+
 
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
-  if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (进一架 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
+  if (mode === 'firsthour') { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json]
+    const [seeds = 12, react = 6] = rest.map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react }));
+    if (rest.includes('json')) console.log(JSON.stringify(runs, null, 1));
+    else { console.table(runs.map(r => ({ seed: r.seed, events: r.events, per5: r.per5.join(' '), 'drought s': r.drought.secs, 'from–to': `${r.drought.from}–${r.drought.to}`, 'unlock/afford/ach/story s': [r.firsts.unlock, r.firsts.afford, r.firsts.ach, r.firsts.story].join('/'), cash: r.end.cash, level: r.end.level, racks: r.end.racks, 'walk-ins/min': r.end.rate, billsPaid: r.billsPaid, loan: r.loan })));
+      const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs))); }
+  } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (进一架 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
   else if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
   else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
   else if (mode === 'bills') { // one row per week until the debt is cleared: the bill against what the shop made that week before paying it

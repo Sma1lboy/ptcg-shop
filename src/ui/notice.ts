@@ -31,7 +31,7 @@ export function renderNotice() {
       <b>离店小票</b><span>离开 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
     <div class="paper"><h2>离店小票</h2>
       <dl><dt>离开</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
-        ${o.lost ? html`<dt>货架空了，错过</dt><dd>${o.lost} 位顾客</dd>` : ''}
+        ${o.lost ? html`<dt>没找到要买的包或卡</dt><dd>${o.lost} 位顾客</dd>` : ''}
         ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}
         ${due ? html`<dt>第 ${due.week} 周的账还没付</dt><dd>${money(due.amount)}</dd>${short ? html`<dt>还差</dt><dd>${money(short)}</dd>` : ''}` : ''}</dl>
       ${due ? html`<p class="due-note">不在店里时宽限不走，从现在接着算（离开时才到期的给满 ${G.GRACE / 60} 分钟），看顶栏的红牌子。</p>` : ''}
@@ -176,7 +176,7 @@ function showMemo() {
     // counted as of now, not when the note was queued: the readout under the cash had already shown a bigger 收卡 −$ than it said
     const b = G.state.intake ?? { n: m.n, cost: m.paid };
     render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的闪卡按你的收卡价卖给了你：到现在收了 ${b.n} 张，<b class="loss">−${money(b.cost)}</b>。</p>
-      <p class="mm-say">现金少了，卡进了单卡库存；挂进「货柜」的展示柜，来找卡的顾客会按展示柜的标价买走。收卡价在货柜「顾客」里调，调低就少收。</p>${ok}</div>`), el);
+      <p class="mm-say">现金少了，卡进了卡本；找卡的顾客会按单卡标价直接买走匹配的卡，不用先上柜。收藏党只看展示柜里的大卡。收卡价在货柜「顾客」里调，调低就少收。</p>${ok}</div>`), el);
     return;
   }
   if (m.kind === 'done') {
