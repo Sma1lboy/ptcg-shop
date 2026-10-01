@@ -4,7 +4,7 @@ import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money, shelfFill, toShelf } from './common.ts';
 import { nextStep, growCount } from './upgrades.ts';
-import { go } from './layout.ts';
+import { go, currentPage } from './layout.ts';
 import { guiding } from './guide.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
@@ -128,13 +128,28 @@ export function initSlip() {
 // something else than what the player read. Only a pack left mid-reveal on another page cuts in (after a sold-out shelf). ----------
 type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'intake'; n: number; paid: number } | { kind: 'done' }
   | { kind: 'cards'; buyer: 'seeker' | 'collector'; card: string; n: number; gain: number };
-type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' } | { kind: 'case'; key: string };
+type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' } | { kind: 'case'; key: string } | { kind: 'kept'; id: string };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
 // on a shelf, while one stands empty; notes: 第一笔生意 / 第一次收卡 / 引导走完了, each up until its 知道了 (a 9 s note went by unseen);
 // grew: the 下一步 (k + level) already said, or seen on 成长
 let memo: Memo | null = null, soldBefore = G.state.earned.sealed, tookBefore = G.state.intake?.n ?? 0, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
 const notes: Note[] = [];
-let caseDismissed = false;
+let caseDismissed = false, keptDismissed = false;
+// toShelf keeps one pack for the player. Invite only off the opening table, never over a reveal/result or available growth.
+const keptAvailable = (id: string) => G.state.stock[id] === 1 && G.unlocked(id) && !G.master(id);
+function keptAllowed() {
+  const page = currentPage();
+  return !keptDismissed && !hold && !guiding() && page !== 'open' && (page !== 'grow' || growCount() === 0) && G.shelves().some(s => s.id && s.qty > 0);
+}
+function keptPack(): string | null {
+  if (!keptAllowed()) return null;
+  let id: string | null = null, share = Infinity;
+  for (const s of SETS) if (keptAvailable(s.id)) {
+    const p = G.dexCount(s.id) / G.dexTotal(s.id);
+    if (p < share) { id = s.id; share = p; }
+  }
+  return id;
+}
 // who speaks for a sold-out shelf: the guide's 补货 step while the guide runs — except during a reveal, when the guide's bubble is put
 // away and the shelf would stand empty unsaid until the last card (~a minute of walk-outs)
 const shelfMine = () => hold || !guiding();
@@ -166,6 +181,7 @@ function holds(m: Memo) {
     case 'new': return !guiding() && !away() && fresh.has(m.id);
     case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
     case 'case': return !guiding() && !hold && !caseDismissed && !!collectorCard() && !!G.state.singles[m.key]?.count;
+    case 'kept': return keptAllowed() && keptAvailable(m.id);
   }
 }
 function pick(): Memo | null {
@@ -175,7 +191,10 @@ function pick(): Memo | null {
   if (notes.length) return notes[0];
   if (guiding()) return null;
   const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey(), c = !caseDismissed && collectorCard();
-  return nu ? { kind: 'new', id: nu } : c ? { kind: 'case', key: c[0] } : k && k !== grew ? { kind: 'grow', k } : null;
+  if (nu) return { kind: 'new', id: nu };
+  if (c) return { kind: 'case', key: c[0] };
+  if (k && k !== grew) return { kind: 'grow', k };
+  const id = keptPack(); return id ? { kind: 'kept', id } : null;
 }
 function watchShop() {
   const s = G.state;
@@ -206,7 +225,9 @@ function watchShop() {
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
   const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine());
   const receiptReady = notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case');
-  memo = memo && holds(memo) && !cut && !receiptReady ? memo : pick();
+  const keep = memo && holds(memo) && !cut && !receiptReady;
+  const next = !keep || memo?.kind === 'kept' ? pick() : null;
+  memo = keep && (memo!.kind !== 'kept' || next?.kind === 'kept') ? memo : next;
   showMemo();
 }
 function close() { const note = notes.shift(); memo = null; if (note?.kind === 'cards') G.ackCardSale(note.buyer); else watchShop(); }
@@ -221,7 +242,7 @@ function showMemo() {
   // gets a new order; the current bill balance refreshes separately without moving the purchase button.
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}`
-    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind;
+    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'kept' ? `kept:${m.id}` : m.kind;
   if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) { refreshBill(el); return; } // keep quantities, refresh the bill balance
   el.dataset.ident = ident; el.dataset.cost = '0';
   const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>${m.kind === 'done' ? '开始经营' : '关闭'}</button></div>`;
@@ -234,6 +255,14 @@ function showMemo() {
     render(keyed(ident, html`<div class="mm-box"><h2>${m.buyer === 'collector' ? '展示柜开张了' : '找卡的买走了闪卡'}</h2>
       <p>${m.buyer === 'collector' ? '收藏党从展示柜买走' : '找卡的从卡本或展示柜买走'}${m.card}${m.n > 1 ? `等 ${m.n} 张卡` : ''}，<b class="gain">+${money(m.gain)}</b>。</p>
       <p class="mm-say">这是卖卡收入，不是卖包；卡本和展示柜都在货柜的单卡页。</p>${ok}</div>`), el);
+    return;
+  }
+  if (m.kind === 'kept') {
+    render(keyed(ident, html`<div class="mm-box"><h2>仓库留的这包还没开</h2>
+      <p>${G.setById(m.id).name}还留着 1 包。想收图鉴，可以从这包开始。</p>
+      <p class="mm-say">只拆已经进货的包，不会另买；也可以留着上架卖。</p>
+      <div class="mm-btns"><button type="button" class="primary" data-act="open1" data-id="${m.id}">去开这 1 包</button>
+        <button type="button" @click=${() => { keptDismissed = true; memo = null; watchShop(); }}>先不拆</button></div></div>`), el);
     return;
   }
   if (m.kind === 'case') {

@@ -311,19 +311,32 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const fix = id => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
   const outIds = () => { const all = [...out], fx = all.map(fix), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || !guiding();
+  // The lowest-priority warehouse invitation. This player accepts it; the real UI also offers a session-long dismissal.
+  const keptAvailable = id => st().stock[id] === 1 && G.unlocked(id) && !G.master(id);
+  const keptAllowed = () => uiNotes && !hold && !guiding() && page !== 'open' && (page !== 'grow' || yellow().length === 0) && G.shelves().some(s => s.id && s.qty > 0);
+  const keptPack = () => {
+    if (!keptAllowed()) return null;
+    let id = null, share = Infinity;
+    for (const s of SETS) if (keptAvailable(s.id)) { const p = G.dexCount(s.id) / G.dexTotal(s.id); if (p < share) { id = s.id; share = p; } }
+    return id;
+  };
   const holds = m => { switch (m.kind) {
     case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
     case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
     case 'new': return !guiding() && fresh.has(m.id);
     case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
     case 'case': return !guiding() && !hold && !!collectorCard() && !!st().singles[m.key]?.count;
+    case 'kept': return keptAllowed() && keptAvailable(m.id);
     default: return false; } };
   const pickMemo = () => {
     if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
     if (notes.length) return notes[0];
     if (guiding()) return null;
     const nu = [...fresh][0], k = page === 'grow' ? '' : growKey(), c = collectorCard();
-    return nu ? { kind: 'new', id: nu } : c ? { kind: 'case', key: c[0] } : k && k !== grew ? { kind: 'grow', k } : null; };
+    if (nu) return { kind: 'new', id: nu };
+    if (c) return { kind: 'case', key: c[0] };
+    if (k && k !== grew) return { kind: 'grow', k };
+    const id = keptPack(); return id ? { kind: 'kept', id } : null; };
   let inWatch = false;
   function watchShop() {
     if (inWatch) return; inWatch = true;
@@ -344,12 +357,14 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id);
       const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine();
       const receiptReady = uiNotes && notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case');
-      memo = memo && holds(memo) && !cut && !receiptReady ? memo : pickMemo();
+      const keep = memo && holds(memo) && !cut && !receiptReady;
+      const next = !keep || memo?.kind === 'kept' ? pickMemo() : null;
+      memo = keep && (memo.kind !== 'kept' || next?.kind === 'kept') ? memo : next;
       // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
         const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind;
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}` : memo.kind;
         if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
       }
       memoShown = shown;
@@ -424,6 +439,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards') { if (uiNotes && m.kind === 'intake') page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's primary button is 去看收到的卡 (closes the note, goes to the case page)
     else if (m.kind === 'case') G.list(m.key);
     else if (m.kind === 'grow') grow();
+    else if (m.kind === 'kept') openPack(m.id, false);
     else { const ids = printed.sets, fx = printed.fixes;
       if (ids.length > 1) for (const [i, x] of ids.entries()) refill(x, fx[i]?.n ?? 0);
       else if (fx[0]?.up) G.shelve(ids[0], fx[0].up);
