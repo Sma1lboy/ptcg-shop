@@ -12,7 +12,8 @@ import { SETS } from '../src/sets.ts';
 import { note, check, watch } from '../src/achievements.ts';
 import { debtBeat } from '../src/debt.ts';
 import { SCENES, sceneFor, BIG_PULL } from '../src/story.ts';
-// node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json]: the deterministic first hour of a new player who does what the guide (ui/guide.ts) and the shop's message box (ui/notice.ts) say; see firstHour() below.
+// node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json] [old]: the deterministic first hour of a new player who does what the guide (ui/guide.ts) and the shop's message box (ui/notice.ts) say; see firstHour() below.
+// node scripts/autoplay.mjs firsthour [seeds=12] [react=6] diag [old]: where the longest drought's money went, the cost ladder it stalls on, and whether the afford events at the start are decisions the player can take (droughtWhy()).
 
 export function boot(seed = 1, t0 = 1_700_000_000_000) {
   let T = t0, s = seed >>> 0;
@@ -229,18 +230,25 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 //    level 闲钱 covers (the box says 「够买 N 项」); if nothing is bought the box is waved off (ui would repeat it). Then back to 货柜.
 //  - the opening scene plays at t = 0 and is kept OUT of the event metric by default (`countOpening`): it would hide a leading drought.
 //  - start time is local noon, so 夜猫子 can't fire from the time zone of whoever runs this.
-//  - NOT modelled (so no events from them): receipts (SLIP), card selling, the case/binder, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
-//    phone layout, the sound/animation timings, 先不管 (the player never waves a box off).
+//  - uiNotes (default true) mirrors the message box of the current ui/notice.ts: the first-sale note is gated on earned.sealed, the first seeker / collector sale each leave a 知道了 note, a collector's big card in the binder
+//    gets the 上柜 box (least valuable eligible hit, pressed = G.list), a waiting note cuts in over a 钱够升级 / 上柜 box, and 收卡's button (去看收到的卡) takes the player to the case page. `old` (uiNotes: false) is the box
+//    before that: the baseline of ROADMAP (mean 20.4 events, mean longest drought 1055.8 s, worst 1557 s over seeds 1–12).
+//  - NOT modelled (so no events from them): receipts (SLIP), selling cards to peers, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
+//    phone layout, the sound/animation timings, 先不管 / 先不摆 (the player never waves a box off).
 // Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
 // the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene. Refills never count.
-export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare' } = {}) {
+export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare', snapEvery = 300, series = false, uiNotes = true } = {}) {
   const { G, SETS, advance } = boot(seed, new Date(2023, 10, 14, 12, 0, 0).getTime()), N = minutes * 60;
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0), st = () => G.state;
   let t = 0, page = 'open', hold = false, holdLeft = 0, storyLeft = 0, cashPrev = st().cash;
   const rec = {}, events = [], seenEv = new Set(), acts = [];
   const stamp = () => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-  const ev = (kind, key, label, count = true) => { const k = kind + ':' + key; if (seenEv.has(k)) return; seenEv.add(k); events.push({ t, at: stamp(), kind, key, label, count }); };
+  const ev = (kind, key, label, count = true, extra) => { const k = kind + ':' + key; if (seenEv.has(k)) return; seenEv.add(k); events.push({ t, at: stamp(), kind, key, label, count, ...(typeof extra === 'function' ? extra() : extra) }); };
   const did = s => acts.push(`${stamp()} ${s}`);
+  // Diagnostics only (no random calls, no policy): money the player puts out, by kind. refill = packs bought by hand (guide, box, 开一包), growth = upgrades/skills
+  // bought, bill = 九姐's bill_paid amounts, bonus = 成就 cash paid in; intake = state.intake.cost (收卡 at the counter); bare* = seconds a racked shelf stood empty.
+  const sp = { refill: 0, growth: 0, bill: 0, bonus: 0 }, bare = { any: 0, all: 0 }, ser = [];
+  const pay = (id, n) => { const before = st().stock[id] || 0, ok = G.buy(id, n); if (ok) sp.refill += ((st().stock[id] || 0) - before) * G.wholesale(id); return ok; };
   // ----- common.ts -----
   const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0; return Math.min(room, n > 1 ? n - 1 : n); };
   const shelfFill = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), s = st().stock[id] || 0, want = Math.max(0, Math.min(room + 1 - s, G.WAREHOUSE - s)), n = Math.min(want, Math.floor(st().cash / G.wholesale(id))); return { n, full: n === want }; };
@@ -290,55 +298,65 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     return live(all)[0] || all[0]; };
   const yellow = () => buyables().filter(b => b.cost <= st().cash && b.cost <= G.spare()).sort((a, b) => a.cost - b.cost || KS.indexOf(a.k) - KS.indexOf(b.k));
   const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || yellow().length > 0) ? `${g.k}:${g.lv}` : ''; };
-  const buy = b => (b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k));
+  const boughtAt = {}, buy = b => { const ok = b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k); if (ok) { sp.growth += b.cost; boughtAt[`${b.k}:${b.lv + 1}`] ??= t; } return ok; };
   // ----- notice.ts -----
-  let memo = null, memoShown = false, printed = null, soldBefore = st().cust.sold, tookBefore = st().intake?.n ?? 0, grew = '';
+  // uiNotes = the box of the current ui/notice.ts (first-sale note gated on earned.sealed, 知道了 notes for the first seeker / collector sale, the 上柜 box for a collector's big card,
+  // a waiting note cutting in over a 钱够升级/上柜 box, 收卡's button going to the case page); uiNotes: false = the box as it was before (cust.sold gate, no card notes, no case box).
+  let memo = null, memoShown = false, printed = null, soldBefore = uiNotes ? st().earned.sealed : st().cust.sold, tookBefore = st().intake?.n ?? 0, grew = '';
   const stocked = {}, out = new Set(), fresh = new Set(), notes = [], known = new Set(unlockedIds());
+  // a collector needs a big card in the case: offer the least valuable eligible hit from the binder, only while no big card is up and a slot is free (notice.ts collectorCard)
+  const collectorCard = () => (!uiNotes || hold || st().shown.length >= G.slots() || st().shown.some(c => c.price >= G.BIG_CARD) ? null
+    : Object.entries(st().singles).filter(([, c]) => c.count > 0 && S.HITS.includes(c.kind) && c.price >= G.BIG_CARD).sort((a, b) => a[1].price - b[1].price)[0] ?? null);
   const rackedIds = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id))];
   const fix = id => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
   const outIds = () => { const all = [...out], fx = all.map(fix), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || !guiding();
   const holds = m => { switch (m.kind) {
-    case 'first': case 'intake': case 'done': return notes[0] === m;
+    case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
     case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
     case 'new': return !guiding() && fresh.has(m.id);
     case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
+    case 'case': return !guiding() && !hold && !!collectorCard() && !!st().singles[m.key]?.count;
     default: return false; } };
   const pickMemo = () => {
     if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
     if (notes.length) return notes[0];
     if (guiding()) return null;
-    const nu = [...fresh][0], k = page === 'grow' ? '' : growKey();
-    return nu ? { kind: 'new', id: nu } : k && k !== grew ? { kind: 'grow', k } : null; };
+    const nu = [...fresh][0], k = page === 'grow' ? '' : growKey(), c = collectorCard();
+    return nu ? { kind: 'new', id: nu } : c ? { kind: 'case', key: c[0] } : k && k !== grew ? { kind: 'grow', k } : null; };
   let inWatch = false;
   function watchShop() {
     if (inWatch) return; inWatch = true;
     try {
       const s = st();
-      if (soldBefore === 0 && s.cust.sold > 0) notes.push({ kind: 'first' });
-      soldBefore = s.cust.sold;
+      if (soldBefore === 0 && (uiNotes ? s.earned.sealed > 0 : s.cust.sold > 0)) { if (!uiNotes || s.recent.find(x => x.r === 'sold' && !!x.n && !x.card)) notes.push({ kind: 'first' }); }
+      soldBefore = uiNotes ? s.earned.sealed : s.cust.sold;
       if (!tookBefore && s.intake?.n) notes.push({ kind: 'intake' });
       tookBefore = s.intake?.n ?? 0;
+      if (uiNotes) for (const buyer of ['seeker', 'collector']) {
+        if (s.cardFirst?.[buyer]?.card && !notes.some(n => n.kind === 'cards' && n.buyer === buyer)) notes.push({ kind: 'cards', buyer });
+      }
       const on = rackedIds();
       for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; }
       for (const id of out) if (!on.includes(id)) out.delete(id);
       for (const id of unlockedIds()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
       const free = G.shelves().some(r => !r.id);
       for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id);
-      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine();
-      memo = memo && holds(memo) && !cut ? memo : pickMemo();
+      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine();
+      const receiptReady = uiNotes && notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case');
+      memo = memo && holds(memo) && !cut && !receiptReady ? memo : pickMemo();
       // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
         const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0), b = G.nextBill(), short = !!(cost && b && s.cash - cost < b.amount);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind;
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind;
         if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
       }
       memoShown = shown;
     } finally { inWatch = false; }
   }
   // ----- achievements (ui/ach.ts) / story (ui/story.ts) -----
-  const achFlush = () => { if (hold) return; for (const a of check(G)) ev('ach', a.id, a.name); };
+  const achFlush = () => { if (hold) return; for (const a of check(G)) { sp.bonus += a.cash; ev('ach', a.id, a.name); } };
   const seen = {}, queue = []; let cur = null, missedWeek = 0;
   const lines = id => SCENES[id].reduce((a, sc) => a + sc.lines.length, 0);
   function storyFlush() {
@@ -372,6 +390,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   }
   G.on(e => { // listener order of main.ts: message box, story, guide, achievements
     if (e?.type === 'bill_due' && e.week <= 3) { const b = bill(e.week); b.amount = e.amount; b.due = t; b.cashBefore = Math.round(cashPrev); b.shop = snap(); }
+    if (e?.type === 'bill_paid') sp.bill += e.amount;
     if (e?.type === 'bill_paid' && e.week <= 3) { const b = bill(e.week); b.paid = t; b.cashAfter = Math.round(st().cash); }
     if (e?.type === 'bill_missed' && e.week <= 3) bill(e.week).missed = t;
     if (e?.type === 'loan_taken' && e.week <= 3) bill(e.week).loan = { t, amount: e.amount, forced: !!e.forced };
@@ -380,8 +399,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   });
   // ----- the player -----
   const refill = (x, dataN) => { if ((st().stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
-    const n = dataN ?? shelfFill(x).n; if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
-  const openPack = (id, buyFirst) => { if (hold) return; if (buyFirst && !G.buy(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, 1).length) { hold = false; holdLeft = 0; } };
+    const n = dataN ?? shelfFill(x).n; if (n > 1 && pay(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
+  const openPack = (id, buyFirst) => { if (hold) return; if (buyFirst && !pay(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, 1).length) { hold = false; holdLeft = 0; } };
   const grow = () => { page = 'grow'; const g = nextStep(), b = g && g.cost <= G.spare() ? g : others ? yellow()[0] : null;
     if (b && buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); else { grew = growKey(); did('成长: nothing bought'); } page = 'shelf'; };
   // what is on screen, top priority first: { id, press }
@@ -397,12 +416,13 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     return ps; }
   function guideKey(s, tg) {
     did(`guide ${s.h} ${tg.act}${tg.id ? ' ' + tg.id : ''}${tg.n ? ' ×' + tg.n : ''}`);
-    if (tg.act === 'buy') G.buy(tg.id, tg.n); else if (tg.act === 'shelve') G.shelve(tg.id, tg.n);
+    if (tg.act === 'buy') pay(tg.id, tg.n); else if (tg.act === 'shelve') G.shelve(tg.id, tg.n);
     else if (tg.act === 'price') rec.price = 1; else if (tg.act === 'bill') rec.bill = 1;
     else if (tg.act === 'open1') openPack(tg.id, false); else if (tg.act === 'buyopen') openPack(tg.id, true); }
   function memoKey(m) {
-    did(`box ${m.kind}${m.ids ? ' ' + m.ids.join() : m.id ? ' ' + m.id : ''}`);
-    if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done') { notes.shift(); memo = null; memoShown = false; }
+    did(`box ${m.kind}${m.ids ? ' ' + m.ids.join() : m.id ? ' ' + m.id : ''}${m.key ? ' ' + m.key : ''}${m.buyer ? ' ' + m.buyer : ''}`);
+    if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards') { if (uiNotes && m.kind === 'intake') page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's primary button is 去看收到的卡 (closes the note, goes to the case page)
+    else if (m.kind === 'case') G.list(m.key);
     else if (m.kind === 'grow') grow();
     else { const ids = printed.sets, fx = printed.fixes;
       if (ids.length > 1) for (const x of ids) refill(x);
@@ -413,16 +433,27 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   // ----- the clock -----
   const shownAt = new Map(); let lastPress = -1e9;
   const level = () => Object.keys(G.UPGRADES).reduce((a, k) => a + G.lvl(k), 0) + Object.keys(G.SKILLS).reduce((a, k) => a + G.skill(k), 0);
-  const snap = () => ({ t, cash: Math.round(st().cash), level: level(), racks: G.racks(), rate: +(G.rate() * 60).toFixed(2) });
+  const shelfGap = () => Math.round(G.shelves().reduce((a, r) => a + (r.id ? Math.max(0, G.depth() - r.qty) * G.wholesale(r.id) : 0), 0)); // what filling every labelled shelf to the top costs now
+  const spent = () => ({ refill: Math.round(sp.refill), growth: Math.round(sp.growth), bill: Math.round(sp.bill), intake: Math.round(st().intake?.cost ?? 0), bonus: sp.bonus });
+  const snap = () => { const g = nextStep(), b = G.nextBill(), c = st().cust;
+    return { t, cash: Math.round(st().cash), level: level(), racks: G.racks(), rate: +(G.rate() * 60).toFixed(2),
+      spare: Math.round(G.spare()), bill: b ? b.amount : 0, next: g ? `${g.name} Lv${g.lv + 1} $${Math.round(g.cost)}` : null, nextCost: g ? Math.round(g.cost) : null, gap: shelfGap(),
+      rev: Math.round(G.revenue()), visits: c.visits, sold: c.sold, pricey: c.pricey, none: c.none, spent: spent(), bare: { ...bare },
+      held: Math.round(Object.values(st().singles).reduce((a, s) => a + s.price * s.count, 0)) }; }; // held = market value of singles in the binder (收卡 money not yet back)
   const rows = [], init0 = new Set(unlockedIds());
   watchShop(); seen.sets = init0.size; play('opening');
   for (t = 1; t <= N; t++) {
     advance(1); G.tick(hold); cashPrev = st().cash;
-    if (storyLeft > 0) { if (--storyLeft === 0) { cur = null; G.pause(false); storyFlush(); } if (t % 300 === 0) rows.push(snap()); continue; }
+    if (storyLeft > 0) { if (--storyLeft === 0) { cur = null; G.pause(false); storyFlush(); } if (t % snapEvery === 0) rows.push(snap()); continue; }
     for (const id of unlockedIds()) if (!init0.has(id)) ev('unlock', id, G.setById(id).name);
     const all = buyables().sort((a, b) => a.cost - b.cost), pool = live(all);
     if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r && !pool.includes(r)) pool.push(r); }
-    for (const b of pool) if ((basis === 'cash' ? st().cash : G.spare()) >= b.cost) ev('afford', `${b.k}:${b.lv + 1}`, `${b.name} Lv${b.lv + 1} $${Math.round(b.cost)}`);
+    const afford = () => { const g = nextStep(), b = G.nextBill(), i = current(); // what the player faces when a level first becomes affordable (diagnostic)
+      return { cash: Math.round(st().cash), spare: Math.round(G.spare()), bill: b ? b.amount : 0, gap: shelfGap(), guiding: i >= 0, step: i >= 0 ? STEPS[i].h : null, rec: g ? `${g.k}:${g.lv + 1}` : null, box: memoShown ? memo.kind : null, hold }; };
+    for (const b of pool) if ((basis === 'cash' ? st().cash : G.spare()) >= b.cost) ev('afford', `${b.k}:${b.lv + 1}`, `${b.name} Lv${b.lv + 1} $${Math.round(b.cost)}`, true, afford);
+    const gate = pool.filter(b => !seenEv.has(`afford:${b.k}:${b.lv + 1}`)).sort((a, b) => a.cost - b.cost)[0]; // the cheapest level that has not yet counted as an event
+    const racked = G.shelves().filter(r => r.id); if (racked.some(r => !r.qty)) bare.any++; if (racked.length && racked.every(r => !r.qty)) bare.all++;
+    if (series) ser.push({ t, cash: Math.round(st().cash), spare: Math.round(G.spare()), gate: gate ? Math.round(gate.cost) : null, gateName: gate ? `${gate.name} Lv${gate.lv + 1}` : null, rev: Math.round(G.revenue()), ...spent(), bareAny: bare.any, none: st().cust.none, sold: st().cust.sold });
     watchShop(); guideSync();
     if (hold) { if (--holdLeft <= 0) { hold = false; achFlush(); storyFlush(); watchShop(); guideSync(); } }
     else {
@@ -434,7 +465,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
         const p = ps[0]; if (p && t - shownAt.get(p.id) >= react && t - lastPress >= react) { lastPress = t; shownAt.delete(p.id); p.press(); }
       }
     }
-    if (t % 300 === 0) rows.push(snap());
+    if (t % snapEvery === 0) rows.push(snap());
   }
   t = N;
   const counted = events.filter(e => e.count), times = counted.map(e => e.t).sort((a, b) => a - b), edges = [0, ...times, N];
@@ -443,15 +474,40 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const byKind = {}; for (const e of counted) byKind[e.kind] = (byKind[e.kind] || 0) + 1;
   const firsts = Object.fromEntries(['unlock', 'afford', 'ach', 'story'].map(k => [k, counted.find(e => e.kind === k)?.t ?? null]));
   for (const w of [1, 2, 3]) bill(w);
+  for (const e of events) if (e.kind === 'afford') e.boughtAt = boughtAt[e.key] ?? null; // when the player actually bought that level (null = never in the hour)
   return { seed, per5, byKind, drought, firsts, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
-    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts };
+    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined };
+}
+
+// firsthour diagnosis (read-only on a run made with { series: true }): what the player's money did inside the longest event drought.
+// Cash identity: cash = START_CASH + revenue + bonus − refill − growth − bill − intake (other = what that leaves unexplained, 0 when every outflow is counted).
+export function droughtWhy(r) {
+  const s = r.series, { from, to } = r.drought, at = x => s.findLast(p => p.t <= x) ?? s[0], a = at(from), b = at(to), win = s.filter(p => p.t > from && p.t <= to);
+  const peak = win.reduce((m, p) => (p.spare > m.spare ? p : m), win[0]), near = win.filter(p => p.gate != null).reduce((m, p) => (p.gate - p.spare < m.gap ? { gap: p.gate - p.spare, p } : m), { gap: Infinity, p: null });
+  const d = k => b[k] - a[k], mins = (to - from) / 60, buys = Object.entries(r.boughtAt).filter(([, x]) => x > from && x <= to).map(([k, x]) => `${k}@${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`);
+  const clock = x => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
+  return { seed: r.seed, window: `${clock(from)}–${clock(to)}`, mins: +mins.toFixed(1), gate: `${a.gateName} $${a.gate}`, 'spare start→peak(@t)': `${a.spare}→${peak.spare}(@${clock(peak.t)})`, 'closest gate−spare': near.p ? `${near.gap}@${clock(near.p.t)} (gate $${near.p.gate}, spare ${near.p.spare}, cash ${near.p.cash})` : '-',
+    'rev/min': Math.round(d('rev') / mins), 'refill/min': Math.round(d('refill') / mins), 'growth/min': Math.round(d('growth') / mins), 'bill': d('bill'), 'intake': d('intake'), 'cash Δ': d('cash'),
+    'lost visits': d('none'), 'bare s': d('bareAny'), other: Math.round(d('cash') - (d('rev') + d('bonus') - d('refill') - d('growth') - d('bill') - d('intake'))), 'bought in window': buys.join(' ') || '-',
+    'buy waits min': Object.values(r.boughtAt).sort((x, y) => x - y).map((x, i, a) => Math.round((x - (a[i - 1] ?? 0)) / 60)).join(' ') };
 }
 
 
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
-  if (mode === 'firsthour') { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json]
-    const [seeds = 12, react = 6] = rest.map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react }));
+  if (mode === 'firsthour' && rest.includes('diag')) { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] diag [old]: why the longest drought, per seed (see droughtWhy); plus snaps and the starting-afford check. old = the message box before the collector/card notes (uiNotes: false)
+    const [seeds = 12, react = 6] = rest.filter(x => x !== 'diag' && x !== 'old').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, snapEvery: 300, series: true, uiNotes: !rest.includes('old') }));
+    console.table(runs.map(droughtWhy));
+    const R = runs[0]; console.log('seed 1 snaps every 300 s'); console.table(R.snaps.map(x => ({ t: x.t, cash: x.cash, spare: x.spare, bill: x.bill, next: x.next, 'shelf gap $': x.gap, rev: x.rev, ...x.spent, held: x.held, visits: x.visits, sold: x.sold, pricey: x.pricey, none: x.none, 'bare s': x.bare.any })));
+    console.log('afford events that fired while the guide was still running (guiding) — can the player take them?');
+    console.table(runs.flatMap(r => r.timeline.filter(e => e.kind === 'afford' && e.guiding).map(e => ({ seed: r.seed, at: e.at, level: e.label, cash: e.cash, spare: e.spare, 'shelf gap $': e.gap, step: e.step, rec: e.rec, box: e.box, 'bought at': e.boughtAt ?? '-' }))));
+    const tot = k => runs.reduce((a, r) => a + r.spent[k], 0), rev = runs.reduce((a, r) => a + r.revenue, 0);
+    const lag = runs.flatMap(r => r.timeline.filter(e => e.kind === 'afford' && !e.guiding && e.boughtAt != null).map(e => e.boughtAt - e.t)).sort((a, b) => a - b), unbought = runs.reduce((a, r) => a + r.timeline.filter(e => e.kind === 'afford' && !e.guiding && e.boughtAt == null).length, 0);
+    console.log('afford events after the guide:', lag.length + unbought, '— bought later:', lag.length, `(median wait ${lag[lag.length >> 1]} s, max ${lag.at(-1)} s); never bought in the hour:`, unbought);
+    console.log('hour totals over', seeds, 'seeds: revenue', rev, 'refill', tot('refill'), `(${Math.round(100 * tot('refill') / rev)}% of revenue)`, 'growth', tot('growth'), 'bill', tot('bill'), 'intake', tot('intake'), 'bonus', tot('bonus'));
+  } else
+  if (mode === 'firsthour') { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json] [old]  (old = uiNotes: false, the baseline box before the collector/card notes)
+    const [seeds = 12, react = 6] = rest.filter(x => x !== 'json' && x !== 'old').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, uiNotes: !rest.includes('old') }));
     if (rest.includes('json')) console.log(JSON.stringify(runs, null, 1));
     else { console.table(runs.map(r => ({ seed: r.seed, events: r.events, per5: r.per5.join(' '), 'drought s': r.drought.secs, 'from–to': `${r.drought.from}–${r.drought.to}`, 'unlock/afford/ach/story s': [r.firsts.unlock, r.firsts.afford, r.firsts.ach, r.firsts.story].join('/'), cash: r.end.cash, level: r.end.level, racks: r.end.racks, 'walk-ins/min': r.end.rate, billsPaid: r.billsPaid, loan: r.loan })));
       const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs))); }
