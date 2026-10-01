@@ -1189,3 +1189,17 @@ console.log('ok luck percentile');
   const dueAt = G.dueIn(); run(G.WEEK); assert.equal(G.dueIn() > dueAt - G.WEEK - 1 && evs.includes('bill_due'), true, 'and the bill comes a week of shop time after, not before');
   console.log(`ok 开张期: no 倒爷 in the first ${G.OPENING / 60} min, ≤ half a shelf until ${G.OPENING_CAP / 60} min (${sweeps.cap.length} sweeps, max ${Math.max(...sweeps.cap)}), then up to ${Math.max(...sweeps.after)}; 暂停 freezes the shop and hands the gap back`);
 }
+
+// Follow the visible guide and shop notes through the third bill: growth must not need a loan.
+{
+  const { firstHour } = await import('../scripts/autoplay.mjs');
+  for (let seed = 1; seed <= 12; seed++) {
+    const r = firstHour({ seed, minutes: 70 }), first = r.bills[0], third = r.bills[2];
+    assert.ok(r.bills.every(b => b.paid !== null && b.loan === null), `seed ${seed}: all three bills paid without borrowing`);
+    assert.equal(r.loans.length, 0, `seed ${seed}: no emergency loan between bills`);
+    assert.ok(third.shop.level >= first.shop.level + 1, `seed ${seed}: at least one more level by bill 3`);
+    assert.ok(third.shop.racks >= first.shop.racks + 1, `seed ${seed}: another stocked-series slot by bill 3`);
+    assert.ok(third.shop.rate + 1e-9 >= first.shop.rate * 1.2, `seed ${seed}: at least 20% more walk-ins by bill 3`);
+  }
+  console.log('ok 第一小时: guide + shop notes, seeds 1–12 pay bills 1–3 without loans and gain levels, a shelf and ≥20% walk-ins');
+}

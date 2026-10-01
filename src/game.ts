@@ -200,26 +200,27 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 人气 multiplies outside the cap, like 老主顾: it has a max level, and a level bought is the walk-ins it says (inside the cap,
   // a collector's 人气 Lv6 added +0.7%).
   const CROWD_KNEE = 1.4, CROWD_ROOM = 1, ROOM_STEP = 0.15;
-  // Scale (game setting): the shop trades in volume (ARRIVAL, baskets, shelf depth), so every price the shop pays for growth —
-  // upgrades, skills, unlock thresholds — is COST_X times its old list; market prices of packs and cards are never scaled.
-  const COST_X = 4;
+  // Game settings: cheaper early shelves, supply and traffic help the first shop grow without
+  // bringing the clerk's large restocking rounds forward. Every new shop uses the same prices.
+  // Pack/card market prices and series unlock thresholds are unchanged.
+  const COST_X = 4, EARLY_DISCOUNT = 0.65;
   const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // ×COST_X below // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${SIGN_STEP * 100}% / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750].map(c => c * COST_X) },
-    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(200 * 1.6 ** i / 10) * 10 * COST_X) }, // up to one per set: a second shelf of a set is only more depth
+    racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(Math.round(200 * 1.6 ** i / 10) * 10 * COST_X * (i < 2 ? EARLY_DISCOUNT : 1))) }, // up to one per set: a second shelf of a set is only more depth
     depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640].map(c => c * COST_X) },
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
-    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map(c => c * COST_X) },
+    supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map((c, i) => Math.round(c * COST_X * (i === 0 ? EARLY_DISCOUNT : 1))) },
     expand:   { name: '店面扩建', desc: `口碑客流的上限 +${ROOM_STEP}`, costs: Array.from({ length: 12 }, (_, i) => Math.round(2000 * 1.55 ** i / 100) * 100 * COST_X) },
     clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；仓库里的货随时搬上架（留 ${CLERK_KEEP} 包给你拆）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
   };
-  // 技能: the long-term money sink, levelled with cash. Level L+1 costs base × grow^L. step = the effect of one level (see fx).
+  // Skills: base is the regular first-level price; early counts discounted levels.
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
   // recorded with the odds it was opened at, so 欧气检测 compares it with packs opened at the same odds.
-  const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; step: number; fx: (lv: number) => string }> = {
+  const SKILLS: Record<string, { name: string; group: string; desc: string; max: number; base: number; grow: number; early?: number; step: number; fx: (lv: number) => string }> = {
     luck: { name: '手气', group: '幸运', desc: '开包时闪卡（双稀有及以上）的概率乘系数，官方概率不变', max: 5, base: 400 * COST_X, grow: 2.2, step: 0.05, fx: lv => `闪卡概率 ×${S.roundM(1 + 0.05 * lv).toFixed(2)}` },
     talk: { name: '口才', group: '经营', desc: '顾客肯付的上限（倒爷除外）', max: 10, base: 250 * COST_X, grow: 1.5, step: 0.02, fx: lv => `肯多付 +${Math.round(2 * lv)} 个百分点` },
-    crowd: { name: '人气', group: '经营', desc: '进店人数，乘在口碑客流外面，不受客流上限递减', max: 10, base: 300 * COST_X, grow: 1.5, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
+    crowd: { name: '人气', group: '经营', desc: '进店人数，乘在口碑客流外面，不受客流上限递减', max: 10, base: 300 * COST_X, grow: 1.5, early: 2, step: 0.1, fx: lv => `进店 +${Math.round(10 * lv)}%` },
     watch: { name: '看店', group: '经营', desc: '打烊期间最多结算多久（要先雇店员，没店员一律 1 小时）', max: 3, base: 600 * COST_X, grow: 2.5, step: 2, fx: lv => `最多 ${OFFLINE_CAP / 3600 + 2 * lv} 小时` },
     apprentice: { name: '带徒弟', group: '经营', desc: '店员随时把单卡库存里最贵的闪卡挂进空柜位（要先雇店员）', max: 1, base: 800 * COST_X, grow: 1, step: 0, fx: lv => lv ? '柜位一空就补，按展示柜标价' : '不上柜' },
   };
@@ -538,7 +539,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit();
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
-  const skillCost = (k: string) => skill(k) < skillMax(k) ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k)) : undefined;
+  const skillCost = (k: string) => skill(k) < skillMax(k) ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k) * (skill(k) < (SKILLS[k].early || 0) ? EARLY_DISCOUNT : 1)) : undefined;
   const canLearn = (k: string) => k !== 'apprentice' || lvl('clerk') > 0;
   function learn(k: string) {
     const cost = skillCost(k);
