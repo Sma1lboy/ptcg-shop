@@ -10,6 +10,19 @@ import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 import { bill, owed } from '../debt.ts';
 import { SETS } from '../sets.ts';
+import { HITS } from '../sim.ts';
+
+// A collector needs a case card, not just any missing seeker tier. Offer the least valuable eligible card, never a trophy.
+function collectorCard() {
+  if (hold || G.state.shown.length >= G.slots() || G.state.shown.some(c => c.price >= G.BIG_CARD)) return null;
+  return Object.entries(G.state.singles).filter(([, c]) => c.count > 0 && HITS.includes(c.kind) && c.price >= G.BIG_CARD)
+    .sort((a, b) => a[1].price - b[1].price)[0] ?? null;
+}
+function caseAction() {
+  const pick = collectorCard();
+  return pick ? html`<button type="button" class="primary" data-act="list" data-key="${pick[0]}">上柜：${pick[1].name}</button>`
+    : html`<button type="button" @click=${() => go('case')}>去看卡本和展示柜</button>`;
+}
 
 // On a phone the receipt first shows only its tear-off stub (style.css): one line under the top bar with the hours and the net,
 // so it doesn't cover or push down what the player came back to press; tapping the stub prints the whole receipt.
@@ -25,17 +38,30 @@ export function renderNotice() {
   const h = o.secs >= 3600 ? `${(o.secs / 3600).toFixed(1)} 小时` : `${Math.round(o.secs / 60)} 分钟`;
   el.hidden = false;
   el.classList.toggle('unrolled', unrolled);
-  const net = o.revenue - (o.bills || 0), due = G.state.overdue, short = due ? Math.max(0, due.amount - G.state.cash) : 0;
+  const d = o.detail, net = d?.cash ?? o.revenue, due = G.state.overdue, short = due ? Math.max(0, due.amount - G.state.cash) : 0;
+  const empty = G.shelves().find(r => !r.id || !r.qty), pick = collectorCard();
   // a bill that fell due while away and is still unpaid: its grace only starts now (game.ts), the red chip counts it; 去凑钱 = the chip
   render(html`<button type="button" class="stub" aria-label="展开离店小票" @click=${() => { unrolled = true; renderNotice(); }}>
-      <b>离店小票</b><span>离开 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
+      <b>离店小票</b><span>离开 ${h}</span><span class="${net >= 0 ? 'gain' : 'loss'}">${d ? '现金' : '销售'} ${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</span></button>
     <div class="paper"><h2>离店小票</h2>
       <dl><dt>离开</dt><dd>${h}</dd><dt>成交</dt><dd>${o.sales} 位顾客</dd><dt>入账</dt><dd class="gain">+${money(o.revenue)}</dd>
         ${o.lost ? html`<dt>没找到要买的包或卡</dt><dd>${o.lost} 位顾客</dd>` : ''}
         ${o.bills ? html`<dt>九姐来收账</dt><dd>−${money(o.bills)}</dd>` : ''}${o.borrowed ? html`<dt>钱不够，记成借款</dt><dd>${money(o.borrowed)}</dd>` : ''}
         ${due ? html`<dt>第 ${due.week} 周的账还没付</dt><dd>${money(due.amount)}</dd>${short ? html`<dt>还差</dt><dd>${money(short)}</dd>` : ''}` : ''}</dl>
+      ${d ? html`<details><summary>看收入和缺货明细</summary><dl>
+        ${([['买包的和倒爷', d.packs], ['找卡的', d.seeker], ['收藏党', d.collector]] as const).map(([name, part]) => html`
+          <dt>${name}成交</dt><dd>${part.sales} 位 · ${money(part.revenue)}</dd>
+          ${part.lost ? html`<dt>${name}没找到</dt><dd>${part.lost} 位</dd>` : ''}`)}
+        ${d.intake ? html`<dt>柜台收卡</dt><dd>−${money(d.intake)}</dd>` : ''}
+        ${d.restock ? html`<dt>店员进货</dt><dd>−${money(d.restock)}</dd>` : ''}
+        ${d.bulk ? html`<dt>店员卖散卡</dt><dd>+${money(d.bulk)}</dd>` : ''}
+        <dt>营业现金变化</dt><dd class="${net >= 0 ? 'gain' : 'loss'}">${net >= 0 ? '+' : '−'}${money(Math.abs(net))}</dd>
+      </dl><p class="note">含收卡、补货和还账；不含成就奖金及回店后的操作。倒爷也可能买走柜里的卡。</p></details>` : html`<p class="note">这张旧小票只有合计，没有按顾客分类；销售入账不等于现金增加。</p>`}
       ${due ? html`<p class="due-note">不在店里时宽限不走，从现在接着算（离开时才到期的给满 ${G.GRACE / 60} 分钟），看顶栏的红牌子。</p>` : ''}
-      <div class="nt-btns">${due && short ? html`<button type="button" @click=${() => $('due').click()}>去凑钱</button>` : ''}<button type="button" data-act="ack">收起小票</button></div></div>`, el);
+      ${!due ? html`<p class="note">${empty ? '现在有空货架，先去补货上架。' : pick ? `卡本里有收藏党会看的大卡，先把${pick[1].name}摆进展示柜。` : '货架还在卖。卡本里的闪卡会自动卖给找卡的；去看看单卡生意和缺货表。'}</p>` : ''}
+      <div class="nt-btns">${due ? html`<button type="button" class="primary" @click=${() => $('due').click()}>${short ? '去凑钱' : '去看账单'}</button>`
+        : empty ? html`<button type="button" class="primary" @click=${() => go('shelf')}>去补货</button>` : caseAction()}
+        <button type="button" data-act="ack">收起小票</button></div></div>`, el);
 }
 
 // ---------- 收据: a bill the till covered (every week after the first, ui/story.ts decides) prints a small receipt out of the
@@ -80,13 +106,15 @@ export function initSlip() {
 // A box stays up while what it says still holds, and its key keeps the count and price it was printed with while the cash covers them:
 // a box swapped for another between reading and clicking (新到 → another set's 进一架), or a key that read 40 and bought 46, did
 // something else than what the player read. Only a pack left mid-reveal on another page cuts in (after a sold-out shelf). ----------
-type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'intake'; n: number; paid: number } | { kind: 'done' };
-type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' };
+type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'intake'; n: number; paid: number } | { kind: 'done' }
+  | { kind: 'cards'; buyer: 'seeker' | 'collector'; card: string; n: number; gain: number };
+type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' } | { kind: 'case'; key: string };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
 // on a shelf, while one stands empty; notes: 第一笔生意 / 第一次收卡 / 引导走完了, each up until its 知道了 (a 9 s note went by unseen);
 // grew: the 下一步 (k + level) already said, or seen on 成长
-let memo: Memo | null = null, soldBefore = G.state.cust.sold, tookBefore = G.state.intake?.n ?? 0, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
+let memo: Memo | null = null, soldBefore = G.state.earned.sealed, tookBefore = G.state.intake?.n ?? 0, stocked: Record<string, boolean> = {}, out = new Set<string>(), fresh = new Set<string>(), grew = '';
 const notes: Note[] = [];
+let caseDismissed = false;
 // who speaks for a sold-out shelf: the guide's 补货 step while the guide runs — except during a reveal, when the guide's bubble is put
 // away and the shelf would stand empty unsaid until the last card (~a minute of walk-outs)
 const shelfMine = () => hold || !guiding();
@@ -111,12 +139,13 @@ function outIds() {
 }
 function holds(m: Memo) {
   switch (m.kind) {
-    case 'first': case 'intake': case 'done': return notes[0] === m;
+    case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
     case 'hand': return away();
     // a set that sells out while the box is up joins it when the cash covers both (it stood unsaid for a minute behind the first)
     case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
     case 'new': return !guiding() && !away() && fresh.has(m.id);
     case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
+    case 'case': return !guiding() && !hold && !caseDismissed && !!collectorCard() && !!G.state.singles[m.key]?.count;
   }
 }
 function pick(): Memo | null {
@@ -125,19 +154,28 @@ function pick(): Memo | null {
   if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
   if (notes.length) return notes[0];
   if (guiding()) return null;
-  const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey();
-  return nu ? { kind: 'new', id: nu } : k && k !== grew ? { kind: 'grow', k } : null;
+  const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey(), c = !caseDismissed && collectorCard();
+  return nu ? { kind: 'new', id: nu } : c ? { kind: 'case', key: c[0] } : k && k !== grew ? { kind: 'grow', k } : null;
 }
 function watchShop() {
   const s = G.state;
-  if (soldBefore === 0 && s.cust.sold > 0) { // this save's first sale (a reload after it starts above zero: never again)
+  if (soldBefore === 0 && s.earned.sealed > 0) {
     const v = s.recent.find(x => x.r === 'sold' && !!x.n && !x.card);
-    notes.push({ kind: 'first', n: v?.n ?? 1, gain: v?.gain ?? 0, set: v?.set ? G.setById(v.set).name : '' });
+    if (v) notes.push({ kind: 'first', n: v.n!, gain: v.gain ?? 0, set: v.set ? G.setById(v.set).name : '' });
   }
-  soldBefore = s.cust.sold;
+  soldBefore = s.earned.sealed;
   // the first time a pack buyer sells the hits they tore open back to the shop (收卡): cash goes down with nobody pressing anything
   if (!tookBefore && s.intake?.n) notes.push({ kind: 'intake', n: s.intake.n, paid: s.intake.cost });
   tookBefore = s.intake?.n ?? 0;
+  for (let i = notes.length - 1; i >= 0; i--) {
+    const note = notes[i];
+    if (note.kind === 'cards' && !s.cardFirst?.[note.buyer]) notes.splice(i, 1);
+  }
+  for (const buyer of ['seeker', 'collector'] as const) {
+    const v = s.cardFirst?.[buyer];
+    if (v?.card && !notes.some(n => n.kind === 'cards' && n.buyer === buyer))
+      notes.push({ kind: 'cards', buyer, card: v.card, n: v.n ?? 1, gain: v.gain ?? 0 });
+  }
   const on = racked();
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
@@ -146,11 +184,12 @@ function watchShop() {
   for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
   // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
-  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow') && out.size > 0 && shelfMine());
-  memo = memo && holds(memo) && !cut ? memo : pick();
+  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine());
+  const receiptReady = notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case');
+  memo = memo && holds(memo) && !cut && !receiptReady ? memo : pick();
   showMemo();
 }
-function close() { notes.shift(); memo = null; watchShop(); }
+function close() { const note = notes.shift(); memo = null; if (note?.kind === 'cards') G.ackCardSale(note.buyer); else watchShop(); }
 function showMemo() {
   const el = $('memo'), was = el.hidden;
   // yields to a reveal where it plays, except a sold-out shelf: a corner box off the cards (desktop: over the rail's empty lower half;
@@ -163,7 +202,8 @@ function showMemo() {
   // (the back room ran out) or a bill line that stopped being true is printed again
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const b = G.nextBill(), short = !!(cost && b && G.state.cash - cost < b.amount);
-  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}` : m.kind === 'grow' ? `grow:${m.k}` : m.kind;
+  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}`
+    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind;
   if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) return; // the same box keeps its words (above)
   el.dataset.ident = ident; el.dataset.cost = '0';
   const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>知道了</button></div>`; // a note's key: on a phone the guide's bubble waits while the box is up
@@ -172,11 +212,26 @@ function showMemo() {
       <p class="mm-say">货架上的包自己会卖，你在哪一页都一样；顶栏现金下面跳出来的 + 就是一笔卖出。</p>${ok}</div>`), el);
     return;
   }
+  if (m.kind === 'cards') {
+    render(keyed(ident, html`<div class="mm-box"><h2>${m.buyer === 'collector' ? '展示柜开张了' : '找卡的买走了闪卡'}</h2>
+      <p>${m.buyer === 'collector' ? '收藏党从展示柜买走' : '找卡的从卡本或展示柜买走'}${m.card}${m.n > 1 ? `等 ${m.n} 张卡` : ''}，<b class="gain">+${money(m.gain)}</b>。</p>
+      <p class="mm-say">这是卖卡收入，不是卖包；卡本和展示柜都在货柜的单卡页。</p>${ok}</div>`), el);
+    return;
+  }
+  if (m.kind === 'case') {
+    const c = G.state.singles[m.key];
+    render(keyed(ident, html`<div class="mm-box"><h2>给收藏党摆一张大卡</h2>
+      <p>卡本里的${c.name}市价 ${money(c.price)}，够收藏党看的 $${G.BIG_CARD} 门槛。展示柜还没有大卡，摆进去后按单卡标价等顾客挑。</p>
+      <div class="mm-btns"><button type="button" class="primary" data-act="list" data-key="${m.key}">上柜：${c.name}</button>
+        <button type="button" @click=${() => { caseDismissed = true; watchShop(); }}>先不摆</button></div></div>`), el);
+    return;
+  }
   if (m.kind === 'intake') { // money going out that nobody pressed for: 收卡 is the shop's second trade, and where the case's cards come from
     // counted as of now, not when the note was queued: the readout under the cash had already shown a bigger 收卡 −$ than it said
     const b = G.state.intake ?? { n: m.n, cost: m.paid };
     render(keyed('intake', html`<div class="mm-box"><h2>第一次收卡</h2><p>买包的顾客在柜台拆了包，把开出的闪卡按你的收卡价卖给了你：到现在收了 ${b.n} 张，<b class="loss">−${money(b.cost)}</b>。</p>
-      <p class="mm-say">现金少了，卡进了卡本；找卡的顾客会按单卡标价直接买走匹配的卡，不用先上柜。收藏党只看展示柜里的大卡。收卡价在货柜「顾客」里调，调低就少收。</p>${ok}</div>`), el);
+      <p class="mm-say">现金少了，卡进了卡本；找卡的顾客会按单卡标价直接买走匹配的卡，不用先上柜。收藏党只看展示柜里的大卡。收卡价在货柜「顾客」里调，调低就少收。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去看收到的卡</button><button type="button" @click=${close}>知道了</button></div></div>`), el);
     return;
   }
   if (m.kind === 'done') {

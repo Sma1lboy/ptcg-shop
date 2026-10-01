@@ -26,6 +26,8 @@ export interface State {
   shown: Shown[]; casePct?: number; buyPct?: number; intake?: { n: number; cost: number }; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
+  cardSales?: { seeker: number; collector: number }; // paying seeker / collector visits this shop (a visit may take several cards), counted as they happen. Absent in a save from before it existed: counting starts when it loads, the past is not guessed
+  cardFirst?: Partial<Record<'seeker' | 'collector', Visit>>; // first paid visits stay until their teaching note is acknowledged, even after recent expires
   offline: Receipt | null; // the 打烊小票 still on screen: what absences of AWAY seconds or more took in, added up until put away
   away: (Receipt & { at: number }) | null; // the absence going on now (at = when the player left), null while they are here
   ach: Record<string, number>; feat: Record<string, number>; // 成就 (src/achievements.ts owns both): id → when stamped; its counters (streaks, bests)
@@ -42,7 +44,16 @@ export interface State {
   bought?: { k: string; cost: number; week: number }[]; // upgrades / skills bought this shop, newest last (退回: see refundable)
 }
 // secs = seconds the shop traded (up to offlineCap), sales = paying visits; bills / borrowed: paid to 九姐 / borrowed meanwhile
-export interface Receipt { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number }
+// detail = the same absence taken apart, added up visit by visit as each is generated (state.recent keeps only MISS_WINDOW, an
+// absence lasts up to hours). packs / seeker / collector = paying visits (sales), what they paid (revenue, gross) and walk-ins who
+// found nothing (lost) by customer type; 倒爷 count under packs even when one took a case card. intake = what 收卡 paid at the
+// counter, restock = what the clerk bought, bulk = what the clerk's bulk sale to peers brought in. cash = the till's actual change
+// over the absence's ticks, bills, 顺手还 and all: 顺手还 has no field of its own, so with a loan cash is not the parts added up.
+// Absent only on a receipt from a save before it existed, and on any receipt merged with one: a breakdown that misses part of the
+// absence is never passed off as all of it.
+export interface Takings { sales: number; revenue: number; lost: number }
+export interface ReceiptDetail { packs: Takings; seeker: Takings; collector: Takings; intake: number; restock: number; bulk: number; cash: number }
+export interface Receipt { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number; detail?: ReceiptDetail }
 export interface Loan { at: number; week: number; amount: number; forced: boolean }
 export interface Wreck { at: number; week: number; shop: number; debt: number; cash: number; goods: number; cards: number; revenue: number }
 // 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
@@ -53,6 +64,16 @@ export interface GameEnv { now?: () => number; random?: () => number; storage?: 
 export type Game = ReturnType<typeof createGame>;
 // type = a debt event for the story (bill_due / bill_paid / bill_missed / loan_taken / bankrupt / story), with the bill's week and amount.
 export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean; set?: string } // what happened, for listeners that need more than the new state (achievements.ts)
+
+const SPLITS = ['packs', 'seeker', 'collector'] as const, TAKINGS = ['sales', 'revenue', 'lost'] as const, SUMS = ['intake', 'restock', 'bulk', 'cash'] as const;
+// A receipt with nothing on it yet, breakdown included: a new absence, or the 打烊小票 an absence is first added to, is counted whole from its first moment.
+const receipt = (): Receipt => ({ secs: 0, sales: 0, revenue: 0, lost: 0, detail: { packs: { sales: 0, revenue: 0, lost: 0 }, seeker: { sales: 0, revenue: 0, lost: 0 }, collector: { sales: 0, revenue: 0, lost: 0 }, intake: 0, restock: 0, bulk: 0, cash: 0 } });
+// A saved breakdown counts only if every field is a finite number; a damaged one is treated as absent (never half-filled).
+function validDetail(d: unknown): d is ReceiptDetail {
+  const r = d as Partial<Record<string, Record<string, unknown>>> | null; // unvalidated JSON: each number is checked below
+  return !!r && SPLITS.every(k => TAKINGS.every(f => Number.isFinite(r[k]?.[f]))) && SUMS.every(k => Number.isFinite(r[k]));
+}
+function addDetail(to: ReceiptDetail, d: ReceiptDetail) { for (const k of SPLITS) for (const f of TAKINGS) to[k][f] += d[k][f]; for (const k of SUMS) to[k] += d[k]; }
 
 export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
@@ -308,6 +329,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         if (s.week == null) { migrated = true; st.owe = st.debt = Math.round(DEBT0 * (1 + DEBT_STEP * st.branch.n)); } // pre-债务 saves: 九姐 turns up now
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
+        for (const r of [st.offline, st.away]) if (r && !validDetail(r.detail)) delete r.detail; // a receipt from before the breakdown has none, and a damaged one is no better: neither is ever half-filled
         for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...(st.trophy ? [st.trophy] : [])] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
         return st;
       } } catch {}
@@ -620,7 +642,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const balk = (v: Visit, c: Shown, max: number) => { v.r = 'pricey'; v.card = c.name; v.price = c.price; v.pct = cardPct(c); if (v.pct <= max) v.why = 'budget'; };
 
   // One walk-in customer: picks an errand, looks at what is on the shelf/in the case at what price, buys or leaves, and is
-  // kept in state.recent (see Visit). Returns cash taken in. r: 'sold' | 'pricey' (something matched but too dear, or they
+  // kept in state.recent (see Visit). Returns the visit (what it took in is v.gain). r: 'sold' | 'pricey' (something matched but too dear, or they
   // were short of money) | 'none' (nothing they wanted was for sale).
   function visit() {
     const type = pickW(Object.keys(TYPES), typeWeight), tol = tolOf(type), hits = state.shown;
@@ -666,9 +688,17 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       if (ok) sellCard(ok[1], v);
       else if (big.length) balk(v, big[0][0], tol);
     }
-    const c = state.cust; c.visits++; if (v.r === 'sold') { c.sold++; state.customers++; } else if (v.r === 'pricey') c.pricey++; else { c.none++; state.lost++; }
+    const c = state.cust; c.visits++;
+    if (v.r === 'sold') {
+      c.sold++; state.customers++;
+      if (type === 'seeker' || type === 'collector') {
+        const sales = state.cardSales ||= { seeker: 0, collector: 0 };
+        if (!sales[type]) (state.cardFirst ||= {})[type] = v;
+        sales[type]++;
+      }
+    } else if (v.r === 'pricey') c.pricey++; else { c.none++; state.lost++; }
     state.recent.unshift(v); while (state.recent.at(-1)!.at < vnow - MISS_WINDOW * 1000) state.recent.pop(); // bounded by rate() × MISS_WINDOW, and rate() is capped
-    return v.gain || 0;
+    return v;
   }
 
   // The clerk (upgrade): once a round, tops up every shelf whose set has auto-restock on (buying straight onto it; half full at
@@ -731,16 +761,21 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (pausedAt !== null) { save(); return; } // keeps savedAt fresh: a tab closed mid-scene is credited only what it was closed for
     const now = clock(), from = lastTick; lastTick = now; reveal = busy;
     const gap = !state.away && now - from > AWAY * 1000; // nobody said the player left, but the page did not run: that was an absence
-    if (gap) state.away = { at: from, secs: 0, sales: 0, revenue: 0, lost: 0 };
+    if (gap) state.away = { ...receipt(), at: from };
     const a = state.away, end = a ? Math.min(now, a.at + offlineCap() * 1000) : now, billEnd = a ? a.at + WEEK * 1000 : Infinity, dt = (end - from) / 1000;
     if (dt <= 0) return;
     if (now - state.heatT > HEAT_EVERY * 1000) rollHeat(now);
-    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0, short: 0 }, lost0 = state.lost, slice = CLERK_SLICE;
+    // d: the breakdown of the absence going on, counted here as the visits and the clerk's rounds happen. A legacy absence (a save from
+    // before it existed) has none and gets none: starting it mid-absence would pass a part for the whole.
+    const acc = { packs: 0, spent: 0, bulk: 0, bulkV: 0, listed: 0, short: 0 }, lost0 = state.lost, slice = CLERK_SLICE, d = a?.detail, cash0 = state.cash;
     let n = 0, revenue = 0, sales = 0;
     for (let left = dt; left > 0; left -= slice) {
       const len = Math.min(slice, left), x = rate() * len, m = Math.floor(x) + (random() < x % 1 ? 1 : 0), t0 = end - left * 1000, t1 = t0 + len * 1000;
       n += m;
-      for (let i = 0; i < m; i++) { vnow = t0 + (i + 0.5) / m * len * 1000; const got = visit(); revenue += got; if (got) sales++; } // spread over the slice
+      for (let i = 0; i < m; i++) {
+        vnow = t0 + (i + 0.5) / m * len * 1000; const v = visit(), got = v.gain || 0; revenue += got; if (got) sales++; // spread over the slice
+        if (d) { const k = d[v.t === 'seeker' || v.t === 'collector' ? v.t : 'packs']; if (got) { k.sales++; k.revenue += got; } else if (v.r === 'none') k.lost++; d.intake += v.paid || 0; } // 拆包玩家 and 倒爷 are the pack trade
+      }
       clerkWork(acc, t1);
       debtWork(Math.max(0, Math.min(t1, billEnd) - t0) / 1000, !!a || busy); // past the week, still called: a bill that fell due is paid once sales cover it
     }
@@ -750,27 +785,29 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     if (a) {
       a.secs += dt; a.sales += sales; a.revenue += revenue; a.lost += state.lost - lost0;
       for (const e of pending) { if (e.type === 'bill_paid') a.bills = (a.bills || 0) + e.amount!; if (e.type === 'loan_taken') a.borrowed = (a.borrowed || 0) + e.amount!; }
+      if (d) { d.restock += acc.spent; d.bulk += acc.bulkV; d.cash += state.cash - cash0; } // the till as it stands before home(), bailout() or a listener (成就奖金) touch it
     }
     if (gap) home(now);
     const rescued = !state.away && bailout(); // nobody is lent money, or goes bankrupt, while away
     if (flush()) return;
     if (n || a || acc.packs || acc.short || acc.bulk || acc.listed || rescued) emit(); else save();
   }
-  // The player is back: the absence ends. One of AWAY or longer goes on the 打烊小票 (added to one still on screen) and gets one
-  // line in 店内动态 saying how long they were gone and, if longer than the shop could trade, for how long it did.
+  // The player is back: the absence ends. One of AWAY or longer goes on the 打烊小票 (added to one still on screen, breakdown and all
+  // when both have one) and gets one line in 店内动态 saying how long they were gone and, if longer than the shop could trade, for how long it did.
   function home(at: number) {
     const a = state.away; if (!a) return;
     state.away = null;
     const gone = (at - a.at) / 1000, dur = (s: number) => s >= 3600 ? `${(s / 3600).toFixed(1)} 小时` : `${Math.round(s / 60)} 分钟`;
     if (gone < AWAY || !a.secs) return;
-    const o = state.offline ||= { secs: 0, sales: 0, revenue: 0, lost: 0 };
+    const o = state.offline ||= receipt();
     o.secs += a.secs; o.sales += a.sales; o.revenue += a.revenue; o.lost += a.lost;
+    if (o.detail && a.detail) addDetail(o.detail, a.detail); else delete o.detail; // totals only on either side: the merged receipt claims no breakdown
     if (a.bills) o.bills = (o.bills || 0) + a.bills;
     if (a.borrowed) o.borrowed = (o.borrowed || 0) + a.borrowed;
     const cut = gone - a.secs > 60 ? `，店开了 ${dur(a.secs)}（${lvl('clerk') ? `店员看店最多 ${offlineCap() / 3600} 小时` : '没雇店员，最多开 1 小时'}）` : '';
     log(`离开 ${dur(gone)}${cut}：成交 ${a.sales} 位顾客`, 'gain', a.revenue);
   }
-  function leave() { if (state.away) return; tick(); state.away = { at: clock(), secs: 0, sales: 0, revenue: 0, lost: 0 }; save(); }
+  function leave() { if (state.away) return; tick(); state.away = { ...receipt(), at: clock() }; save(); }
   function back() { if (!state.away) return; tick(); home(clock()); if (!flush()) emit(); }
   // pause(true) settles the shop up to now, then freezes it; pause(false) moves everything the shop timed by the wall clock
   // (last tick, 行情, the clerk's next round, 倒爷 cooldowns, the start of an absence) forward by the frozen time, so the shop
@@ -886,6 +923,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const missed = (id: string) => (state.miss[id] || []).filter(t => t > clock() - MISS_WINDOW * 1000).length;
   function setAuto(id: string, on: boolean) { state.auto[id] = !!on; emit(); }
   function ackOffline() { state.offline = null; emit(); }
+  function ackCardSale(buyer: 'seeker' | 'collector') { if (state.cardFirst) delete state.cardFirst[buyer]; emit(); }
 
   // 行情: every couple of minutes one unlocked set runs hot (+15% price and twice the demand) and another cold (−10% price, half the demand). Game setting.
   function rollHeat(now: number) {
@@ -973,6 +1011,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
+    ackCardSale,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,

@@ -920,6 +920,85 @@ console.log('ok luck percentile');
   console.log('ok 离开: a background tab is one absence (1 week, offlineCap of sales), grace waits for the return and for a reveal, short absences print nothing');
 }
 
+// 打烊小票的明细 (Receipt.detail): an absence is taken apart as the shop trades, visit by visit, by customer type (packs / seeker /
+// collector), with the counter's and the clerk's money beside it (intake, restock, bulk). The parts add up to the totals, and the
+// till's change over the absence is what the till really did, bills included. A receipt from an old save has no breakdown, and nothing
+// merged with it gets one: a breakdown that misses part of the absence is never passed off as all of it. cardSales counts paying
+// seeker / collector visits for the 新手引导, from the load on for a save that has none.
+{
+  let T = 1_700_000_000_000; const store = {}, KEY = 'ptcg-shop-v1', KINDS = ['packs', 'seeker', 'collector'];
+  const env = { now: () => T, random: S.rng(61), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+  const G = createGame(env), st = () => G.state;
+  const near = (a, b, m) => assert.ok(Math.abs(a - b) < 1e-6, `${m}: ${a} vs ${b}`), earned = g => g.state.earned.sealed + g.state.earned.singles;
+  const books = g => ({ cash: g.state.cash, earned: earned(g), intake: g.state.intake?.cost ?? 0, seeker: g.state.cardSales?.seeker ?? 0, collector: g.state.cardSales?.collector ?? 0, sold: g.state.cust.sold });
+  // What the receipt claims against what the shop's own books say, since `b` (a snapshot of the books before the absence(s) it covers).
+  const audit = (g, o, b, m) => {
+    const d = o.detail, now = books(g);
+    for (const f of ['sales', 'revenue', 'lost']) near(KINDS.reduce((s, k) => s + d[k][f], 0), o[f], `${m}: ${f} by type adds up to the total`);
+    assert.equal(o.sales, now.sold - b.sold, `${m}: sales are the shop's paying visits`);
+    assert.equal(d.seeker.sales, now.seeker - b.seeker, `${m}: seeker visits are what cardSales counted`); assert.equal(d.collector.sales, now.collector - b.collector, `${m}: collector visits too`);
+    near(d.cash, now.cash - b.cash, `${m}: cash is the till's real change`);
+    near(now.earned - b.earned, o.revenue + d.bulk, `${m}: takings plus bulk are what the books earned`); near(now.intake - b.intake, d.intake, `${m}: intake is what 收卡 paid`);
+    assert.ok(o.bills > 0 && !o.borrowed && g.state.loan === 0, `${m}: a bill was paid from the till, nothing borrowed or repaid`);
+    near(d.cash, o.revenue - d.intake - d.restock + d.bulk - o.bills, `${m}: cash = takings − intake − restock + bulk − bills`);
+  };
+  // A shop with every channel: a level-2 clerk (buys stock, sells bulk), 收卡 at the top price, packs bought and opened for real (bulk
+  // and hits for the binder), 3 big cards in the case; the shelves hold 40 packs of two sets and the back room none, so the clerk has to buy.
+  st().cash = 1e6; st().earned.sealed = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX);
+  G.buy('sv08', 15); G.open('sv08', 15);
+  for (const [id, i] of [['sv08', 0], ['sv10', 1]]) { G.buy(id, G.depth()); G.place(i, id); }
+  for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
+  const b0 = books(G);
+  // 1. Half an hour with nobody saying the player left: one tick finds the gap (an absence of its own) and prints one receipt.
+  T += 1800e3; G.tick();
+  const o1 = st().offline, d1 = JSON.parse(JSON.stringify(o1.detail)), b1 = books(G); assert.equal(st().away, null);
+  assert.ok(o1.secs === 1800 && o1.sales > 100 && d1.restock > 0 && d1.intake > 0 && d1.bulk > 0 && KINDS.every(k => d1[k].sales > 0 && d1[k].lost > 0), `every channel is in it: ${JSON.stringify(o1)}`);
+  audit(G, o1, b0, 'gap');
+  // 2. A second absence the player never put away the receipt for: leave / back adds to it, parts and totals alike.
+  const t1 = { sales: o1.sales, revenue: o1.revenue };
+  G.leave(); T += 1800e3; G.tick(); G.back();
+  const o2 = st().offline, dm = o2.detail; assert.equal(o2.secs, 3600); assert.ok(o2.sales > t1.sales && o2.revenue > t1.revenue && KINDS.every(k => dm[k].sales >= d1[k].sales));
+  audit(G, o2, b0, 'merged'); near(dm.cash - d1.cash, st().cash - b1.cash, 'the second absence added its own till change, not a rewrite of the first');
+  assert.equal(o2.sales - t1.sales, st().cust.sold - b1.sold, 'and its own paying visits');
+  // 3. The save keeps both, as they were.
+  assert.deepEqual(createGame({ ...env, random: S.rng(5) }).state.offline, o2); assert.deepEqual(createGame({ ...env, random: S.rng(5) }).state.cardSales, st().cardSales);
+  // The first sale survives the ten-minute visit window and a reload, until the player acknowledges it.
+  const first = structuredClone(st().cardFirst);
+  for (const buyer of ['seeker', 'collector']) {
+    assert.equal(first[buyer].t, buyer);
+    assert.equal(first[buyer].r, 'sold');
+    assert.ok(first[buyer].card && first[buyer].gain > 0);
+    assert.ok(first[buyer].at < T - 600e3 && !st().recent.some(v => v.at === first[buyer].at));
+  }
+  const restored = createGame({ ...env, random: S.rng(5) });
+  assert.deepEqual(restored.state.cardFirst, first);
+  restored.ackCardSale('seeker');
+  const acknowledged = createGame({ ...env, random: S.rng(5) });
+  assert.equal(acknowledged.state.cardFirst.seeker, undefined);
+  assert.deepEqual(acknowledged.state.cardFirst.collector, first.collector);
+  // 4. An old save: the receipt on screen has no breakdown (and its counters are absent: nothing about the past is guessed). A new
+  //    absence adds its totals to it and still no breakdown; once the receipt is put away the next absence is a whole one again.
+  const raw = JSON.parse(store[KEY]); delete raw.offline.detail; delete raw.cardSales; store[KEY] = JSON.stringify(raw);
+  const H = createGame({ ...env, random: S.rng(62) }), L = { ...H.state.offline }, hb = books(H);
+  assert.ok(!('detail' in L) && H.state.cardSales === undefined && L.sales === o2.sales && L.revenue === o2.revenue, 'totals load as they were, with no breakdown made up');
+  H.leave(); T += 1800e3; H.tick(); H.back();
+  const o3 = H.state.offline; assert.ok(!('detail' in o3), 'old receipt + new absence: totals only'); assert.equal(o3.sales - L.sales, H.state.cust.sold - hb.sold); assert.ok(o3.revenue > L.revenue && o3.secs === L.secs + 1800);
+  H.ackOffline(); const h4 = books(H); T += 1800e3; H.tick();
+  audit(H, H.state.offline, h4, 'after an old receipt');
+  // 5. A damaged breakdown (a NaN saved as null) is no breakdown, but the totals stay.
+  const bad = JSON.parse(store[KEY]); bad.offline.detail.cash = null; store[KEY] = JSON.stringify(bad);
+  const M = createGame({ ...env, random: S.rng(9) }); assert.ok(!('detail' in M.state.offline)); near(M.state.offline.revenue, H.state.offline.revenue, 'damaged breakdown: totals kept');
+  // 6. An old save closed mid-absence: it has no breakdown, gets none as the rest of the absence trades (a part is not the whole),
+  //    and the whole receipt it is added to loses its breakdown, with every total still adding up.
+  store[KEY] = JSON.stringify(H.state); H.leave();
+  const mid = JSON.parse(store[KEY]); assert.ok(mid.away.detail, 'a new leave starts with a breakdown'); delete mid.away.detail; store[KEY] = JSON.stringify(mid);
+  const J = createGame({ ...env, random: S.rng(63) }), on = { ...J.state.offline }; assert.ok(J.state.offline.detail && !('detail' in J.state.away));
+  T += 1800e3; J.tick(); const aw = { ...J.state.away }; assert.ok(!('detail' in aw) && aw.secs === 1800 && aw.sales > 0, 'the old absence still trades and still counts its totals');
+  J.back(); const o5 = J.state.offline; assert.ok(!('detail' in o5));
+  near(o5.sales, on.sales + aw.sales, 'sales'); near(o5.revenue, on.revenue + aw.revenue, 'revenue'); near(o5.lost, on.lost + aw.lost, 'lost'); near(o5.secs, on.secs + aw.secs, 'secs');
+  console.log(`ok 打烊小票明细: gap and leave/back absences split by type with intake/restock/bulk (${o2.sales} sales, till +$${dm.cash.toFixed(0)} after $${o2.bills.toFixed(0)} of bills), old receipts never get a made-up breakdown`);
+}
+
 // 凑钱 (ui/ledger.ts): the cards sold to cover an overdue bill are the cheapest ones, just enough of them; selling them in the game
 // brings in what the plan says, and the bill is then payable on the spot.
 {

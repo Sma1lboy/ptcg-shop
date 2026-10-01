@@ -668,6 +668,15 @@ button:disabled { cursor: not-allowed; }
 .notice button { width: 100%; }
 .notice .nt-btns { display: flex; gap: 8px; } .notice .nt-btns button { flex: 1; }
 .notice .due-note { margin: -4px 0 12px; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
+.notice .note { margin: 8px 0 12px; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
+.notice details { margin-bottom: 12px; font-size: var(--fs-cap); }
+.notice summary { cursor: pointer; padding-block: 6px; }
+.notice details dl { max-height: 180px; overflow-y: auto; margin-top: 8px; }
+.notice .nt-btns { flex-wrap: wrap; }
+.notice .nt-btns button { min-width: 96px; overflow-wrap: anywhere; }
+@media (min-width: 780px) {
+  .notice { max-height: calc(100dvh - var(--top-h) - 32px); overflow-y: auto; }
+}
 /* the weekly bill's receipt (notice.ts): the same paper, shorter — 九姐's scribble at the foot instead of a button; tap to put it away */
 .slip { cursor: pointer; }
 .slip .paper { padding-bottom: 20px; }
