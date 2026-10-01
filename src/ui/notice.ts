@@ -204,7 +204,7 @@ function showMemo() {
   // (the back room ran out) or a bill line that stopped being true is printed again
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const b = G.nextBill(), short = !!(cost && b && G.state.cash - cost < b.amount);
-  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map(f => (f ? (f.up ? 'u' : 'b') : '-')).join('')}${short ? ':$' : ''}`
+  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}${short ? ':$' : ''}`
     : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind;
   if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) return; // the same box keeps its words (above)
   el.dataset.ident = ident; el.dataset.cost = '0';
@@ -261,7 +261,7 @@ function showMemo() {
   }
   const ids = sets, id = ids[0], set = G.setById(id), f = fixes[0], names = ids.map(x => G.setById(x).name).join('、');
   el.dataset.cost = String(cost);
-  const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}">都补上${cost ? ` ${money(cost)}` : ''}</button>`
+  const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}" data-n="${fixes.map(f => f?.n ?? 0).join(',')}">都补上${cost ? ` ${money(cost)}` : ''}</button>`
     : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}">上架 ${f.up} 包</button>`
     : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${f.n}" title="${shelfFill(id).title}">进一架 ${f.n} 并上架 ${money(f.cost)}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;

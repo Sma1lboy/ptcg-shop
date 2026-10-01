@@ -1,7 +1,7 @@
 // Every button carries data-act (+ data-id / data-n / data-key / data-i / data-d / data-k); one document listener routes them.
 // Works the same for lit-rendered panels and the mat's innerHTML, since it never holds element references.
 import * as FX from '../fx.ts';
-import { G, shelfFill, toShelf } from './common.ts';
+import { G, toShelf } from './common.ts';
 import { startPack, openBatch, startRun, stopRun, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
@@ -40,11 +40,15 @@ export function bindEvents() {
       case 'trophy': G.setTrophy(b.dataset.key!); break;
       case 'untrophy': G.clearTrophy(); break;
       case 'shelve': G.shelve(id, +b.dataset.n!); break;
-      case 'refill': for (const x of id.split(',')) { // 店里的话: one set or every sold-out one — a shelf's worth each, up at once (the pack kept back to open stays)
-        if ((G.state.stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); continue; }
-        const n = b.dataset.n ? +b.dataset.n : shelfFill(x).n; // one set: the count its key reads
-        if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - 1));
-      } break;
+      case 'refill': { // Snapshot every quoted quantity before the first purchase emits and can repaint this button.
+        const ns = b.dataset.n!.split(',').map(Number), ids = id.split(',');
+        for (const [i, x] of ids.entries()) {
+          if ((G.state.stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); continue; }
+          const n = ns[i];
+          if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - 1));
+        }
+        break;
+      }
       case 'unshelve': G.unshelve(id, +b.dataset.n!); break;
       case 'price': G.setPrice(id, G.pctOf(id) + +b.dataset.d! * G.PCT_STEP); break;
       case 'cprice': G.setCardPrice(+b.dataset.i!, G.cardPct(G.state.shown[+b.dataset.i!]) + +b.dataset.d! * G.PCT_STEP); break;
