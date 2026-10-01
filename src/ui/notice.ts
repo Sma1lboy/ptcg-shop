@@ -28,6 +28,24 @@ function caseAction() {
 // so it doesn't cover or push down what the player came back to press; tapping the stub prints the whole receipt.
 let unrolled = false, ro: ResizeObserver | null = null;
 
+// Mobile paper changes the page's top padding. Keep an already-scrolled control under the pointer;
+// do not undo a deliberate scroll from the guide or navigation, or move the immersive opening table.
+function keepView(update: () => void) {
+  const y = scrollY, page = innerWidth < 780 && y > 0 && document.documentElement.dataset.page !== 'open'
+    ? document.querySelector<HTMLElement>('.page:not([hidden])') : null;
+  const top = page?.getBoundingClientRect().top;
+  update();
+  if (page && !page.hidden && scrollY === y) scrollBy({ top: page.getBoundingClientRect().top - top!, behavior: 'instant' });
+}
+
+// Budget follows the immutable printed quote, not a newly calculated order with more packs.
+function refreshBill(el: HTMLElement) {
+  const slot = el.querySelector<HTMLElement>('.mm-budget'); if (!slot) return;
+  const cost = +(el.dataset.cost || 0), b = G.nextBill(), short = b ? Math.max(0, b.amount - (G.state.cash - cost)) : 0;
+  render(cost && b ? html`<p class="mm-say"><span>第 ${b.week} 周账 ${money(b.amount)} · 约 ${Math.max(1, Math.floor(G.dueIn() / 60))} 分钟后到期</span>
+    <span>${short ? `补货后还差 ${money(short)} 付账` : '补货后账款已留够'}</span></p>` : '', slot);
+}
+
 // o.sales counts paying visits, not packs: a scalper who clears a shelf is one 成交
 export function renderNotice() {
   const o = G.state.offline, el = $('notice');
@@ -196,17 +214,15 @@ function showMemo() {
   const el = $('memo'), was = el.hidden;
   // yields to a reveal where it plays, except a sold-out shelf: a corner box off the cards (desktop: over the rail's empty lower half;
   // phone: over the display case under the table's head), never over the pack or the cards being turned
-  el.hidden = !memo || (hold && document.documentElement.dataset.page === 'open' && memo.kind !== 'out') || storyOpen();
-  if (el.hidden !== was) document.dispatchEvent(new Event('ptcg:memo')); // guide.ts: on a phone the bubble yields to the box
+  const hidden = !memo || (hold && document.documentElement.dataset.page === 'open' && memo.kind !== 'out') || storyOpen();
+  if (hidden !== was) keepView(() => { el.hidden = hidden; document.dispatchEvent(new Event('ptcg:memo')); }); // guide yields to the box
   if (el.hidden) return;
-  // the box's identity: which note, and for a shelf note how each set gets fixed (上架 / 进一架 / neither) and whether that leaves the
-  // next bill short — a count or a price that moved with the cash keeps its printed value, but a key that would now do something else
-  // (the back room ran out) or a bill line that stopped being true is printed again
+  // Keep the quoted quantity while cash changes. A different set, restock method, unit price, or unaffordable quote
+  // gets a new order; the current bill balance refreshes separately without moving the purchase button.
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-  const b = G.nextBill(), short = !!(cost && b && G.state.cash - cost < b.amount);
-  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}${short ? ':$' : ''}`
+  const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}`
     : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind;
-  if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) return; // the same box keeps its words (above)
+  if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) { refreshBill(el); return; } // keep quantities, refresh the bill balance
   el.dataset.ident = ident; el.dataset.cost = '0';
   const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>${m.kind === 'done' ? '开始经营' : '关闭'}</button></div>`;
   if (m.kind === 'first') {
@@ -265,21 +281,19 @@ function showMemo() {
     : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}">上架 ${f.up} 包</button>`
     : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${f.n}" title="${shelfFill(id).title}">进一架 ${f.n} 并上架 ${money(f.cost)}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
-  // the key spends into the bill's money: said on the box (the 成长 note keeps it, this one used to take the till down to $3). No
-  // amount left over in it: the words stay while the cash moves (above)
-  const bill = short && b ? html`<p class="mm-say">补货后现金不足以付第 ${b.week} 周的账（${money(b.amount)}，约 ${Math.max(1, Math.floor(G.dueIn() / 60))} 分钟后到期），需要继续卖货或筹款。</p>` : '';
   const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); memo = null; watchShop(); };
   const head = m.kind === 'out' ? html`<h2>${names}卖空了</h2><p class="mm-why">货架空着不进钱，来买${ids.length > 1 ? '这几个系列' : set.name}的顾客一半空手走。</p>`
     : html`<h2>新到：${set.name}</h2><p class="mm-why">营收够了，${set.name}可以进货了；店里还有一个空货架，摆上去就多一个系列在卖。</p>`;
-  render(keyed(ident, html`<div class="mm-box">${head}${bill}
+  render(keyed(ident, html`<div class="mm-box">${head}<div class="mm-budget"></div>
     <div class="mm-btns">${key}<button type="button" class="mm-x" aria-label="先不管" @click=${x}>先不管</button></div></div>`), el);
+  refreshBill(el);
 }
 export function initMemo() {
   for (const id of racked()) { stocked[id] = G.shelfQty(id) > 0; if (!stocked[id]) out.add(id); } // a page opened on empty shelves: said like a sell-out just now
   G.on(watchShop); watchShop();
   // the page makes room for the box instead of reflowing around it (style.css --memo-h): the phone's view tabs sat under it, and the
   // desktop's rows under it can scroll clear of it
-  const el = $('memo'); new ResizeObserver(() => document.documentElement.style.setProperty('--memo-h', `${el.offsetHeight}px`)).observe(el);
+  const el = $('memo'); new ResizeObserver(() => keepView(() => document.documentElement.style.setProperty('--memo-h', `${el.offsetHeight}px`))).observe(el);
   document.addEventListener('ptcg:release', () => setTimeout(watchShop, 600)); // the reveal is over: the box it held back, and no more 「还没翻完」
   document.addEventListener('ptcg:story', () => { if (storyOpen()) showMemo(); else setTimeout(showMemo, 400); }); // under the dialog at once; back 400 ms after it
   document.addEventListener('ptcg:guidedone', () => { notes.push({ kind: 'done' }); watchShop(); });

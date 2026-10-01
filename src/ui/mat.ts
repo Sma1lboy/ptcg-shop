@@ -166,7 +166,7 @@ const head3D = () => {
   if (mat.mode === 'idle') { $('m3-head').innerHTML = `<h2>今天拆哪包？</h2><span id="m3-line">${idleLine()}</span>${sndBtn()}`; return; }
   const live = batch() ? mat.torn : mat.mode === 'cards';
   $('m3-head').innerHTML = `<h2>${G.setById(mat.set).name}${batch() ? ` × ${mat.packs.length}` : ''}</h2><span id="mat-prog">${run ? runProg() : live ? prog() : ''}</span>${sndBtn()}
-      ${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}${held >= 0 ? '<button type="button" class="ghost" data-act="putback">放回</button>' : ''}`;
+      <span class="mat-actions">${run && !run.end ? stopBtn() : live && !mat.finished ? '<button type="button" class="ghost" data-act="flipall">全部翻开</button>' : ''}${held >= 0 ? '<button type="button" class="ghost" data-act="putback">放回</button>' : ''}</span>`;
 };
 // An empty warehouse (a new shop): the head says the guide's first step too; the pack on the table is the other way in.
 // A phone's head row has room for about ten characters beside 今天拆哪包？ and 音效: the short form, so the step isn't cut to 「先去…」.
@@ -279,6 +279,7 @@ function haulHTML() {
 const sndBtn = () => `<button type="button" class="ghost snd" data-act="mute">音效 ${FX.muted() ? '关' : '开'}</button>`;
 const prog = () => {
   const cs = batch() ? picked() : mat.cards, label = !batch() ? '已翻' : mat.news.length ? '翻开' : S.HITS.includes(cs[0].kind) ? '闪卡' : '最高价卡';
+  if (batch() && mat.up.size === cs.length) return `本批总值 ${money(mat.packs.reduce((s, p) => s + S.packValue(p), 0))}`;
   return `${label} ${mat.up.size}/${cs.length} · ${money(cs.reduce((s, c, k) => s + (mat.up.has(k) ? c.price : 0), 0))}`;
 };
 const ready = (img: HTMLImageElement | null) => (!img || img.complete ? Promise.resolve() : new Promise(r => { img.onload = img.onerror = r; setTimeout(r, 1500); }));

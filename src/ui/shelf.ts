@@ -184,12 +184,12 @@ function draw() {
       : html`<button type="button" class="primary" data-act="open1" data-id="${set.id}" ?disabled=${hold}>开 1 包</button>`;
     return html`<article class="set ${unfolded(set.id) ? 'open' : ''}" data-spot="set:${set.id}">${head(G.demand(set.id).tag, sum, html`<span class="s-go">${go}</span>`)}
         <p class="set-mkt">市价 ${money(G.sealedPrice(set.id))} · 进货 ${money(w)} · <span title="按 TCGplayer 单卡市价和开包时的概率计算；有手气时使用实测基础概率乘游戏加成后的概率">开出期望 ${money(ev)}</span></p>
-        <div class="verb" role="group" aria-label="${set.name} 进货">
+        <div class="verb v-buy" role="group" aria-label="${set.name} 进货">
           <span class="v-k">仓库</span><span class="v-n"><b>${stock}</b>/${G.WAREHOUSE}</span>
           <span class="v-btns"><button type="button" class="${can(10) ? '' : p('buy')}" data-act="buy" data-id="${set.id}" data-n="1" ?disabled=${!can(1)}>进 1</button>
             <button type="button" class="${can(10) && !fill && !rack ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="10" ?disabled=${!can(10)}>进 10</button>
-            ${shelfN.n > 10 && shelfN.n !== full.n ? html`<button type="button" class="${rack ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${shelfN.n}" title="${shelfN.title}">${shelfN.text}</button>` : nothing}
-            ${full.n > 10 ? html`<button type="button" class="${fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}">${full.text}</button>` : nothing}</span>
+            <button type="button" class="${rack ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${shelfN.n}" title="${shelfN.title}" ?disabled=${!shelfN.full || shelfN.n <= 0}>${shelfN.full && shelfN.n > 0 ? shelfN.text : '进一架'}</button>
+            <button type="button" class="${fill ? p('buy') : ''}" data-act="buy" data-id="${set.id}" data-n="${full.n}" title="${full.title}" ?disabled=${full.n <= 10}>${full.n > 10 ? full.text : '批量进货'}</button></span>
         </div>
         <div class="verb v-shelf" role="group" aria-label="${set.name} 货架">
           <span class="v-k">货架</span><span class="v-n">${own ? html`<b>${onShelf}</b>/${own * deep}${own > 1 ? html`<small>${own} 个货架</small>` : nothing}`

@@ -323,6 +323,9 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .v-k { width: 2.4em; flex: none; font-size: var(--fs-cap); color: var(--muted); }
 .v-n { min-width: 4.2em; color: var(--muted); font-size: var(--fs-cap); } .v-n b { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
 .v-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+/* Purchase controls keep their slots when cash or stock changes; a second click must not land on a larger order. */
+.v-buy .v-btns { display: grid; grid-template-columns: repeat(2, 7.8em); flex: none; }
+.v-shelf .v-n { min-height: 2.8em; }
 .sticker { display: inline-block; background: var(--sticker); color: var(--sticker-ink); font: 600 var(--fs-body)/1.35 var(--font-tag); padding: 1px 7px; border-radius: 2px; transform: rotate(-2deg); box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
 .set.locked .logo { filter: grayscale(1); opacity: .5; } .set.locked h3 { color: var(--muted); }
 .v-n small { display: block; font-size: var(--fs-cap); line-height: 1.3; } .v-n small b { font-size: var(--fs-cap); }
@@ -482,6 +485,8 @@ button:disabled { cursor: not-allowed; }
 .mat-head h2 { margin: 0; font: 400 24px/1.2 var(--font-pixel); text-shadow: 2px 2px 0 #000; }
 .mat-head span { font-size: var(--fs-body); color: var(--mat-muted); }
 .mat-head .ghost { margin-left: auto; }
+.mat-head .mat-actions { display: flex; flex: none; gap: 6px; }
+.mat-head .mat-actions .ghost { margin: 0; }
 .spread { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px; }
 .slot { margin: 0; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 
@@ -701,6 +706,7 @@ button:disabled { cursor: not-allowed; }
   font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 #0B0D10; }
 .memo p { margin: 0 0 8px; font-size: var(--fs-body); line-height: 1.55; text-wrap: pretty; }
 .memo .mm-say { color: var(--muted); font-size: var(--fs-cap); }
+.mm-budget span { display: block; min-height: 1.55em; }
 .memo .gain { color: var(--gain); } .memo .loss { color: var(--loss); }
 .memo .mm-btns { display: flex; flex-wrap: wrap; gap: 8px; }
 .memo .mm-btns .primary { flex: 1 1 auto; }
@@ -1292,13 +1298,13 @@ button:disabled { cursor: not-allowed; }
   .s3-top .hand-new { position: absolute; left: 3px; top: -19px; } /* on the card's corner: the name gets the plate's whole width */ }
 .mat.m3d .summary { margin: 10px 12px 12px; padding: 12px 16px 14px; }
 @media (max-width: 779px) { .mat.m3d .mat-head { padding: 10px 14px 6px; } .mat-head h2 { font-size: 20px; }
-  /* one row in every state: a head that wrapped as the running total grew (or 全部翻开 came and went) resized the scene
-     mid-reveal and the table reframed under the player's thumb. 全部翻开 floats over the scene's top-right corner instead. */
-  .mat.m3d .mat-head { flex-wrap: nowrap; align-items: center; }
-  .mat.m3d .mat-head h2 { flex: none; }
-  .mat.m3d .mat-head > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mat.m3d .mat-head .snd { flex: none; }
-  .mat.m3d .mat-head [data-act="flipall"] { position: absolute; top: calc(100% + 8px); right: 14px; } }
+  /* Two fixed rows reserve room for progress and reveal controls before a pack starts; no control floats under the notice. */
+  .mat.m3d .mat-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 40px 40px; align-items: center; gap: 6px 12px; }
+  .mat.m3d .mat-head h2 { grid-column: 1; grid-row: 1; }
+  .mat.m3d .mat-head > span:not(.mat-actions) { grid-column: 1; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mat.m3d .mat-head .snd { grid-column: 2; grid-row: 1; }
+  .mat.m3d .mat-head .mat-actions { grid-column: 2; grid-row: 2; }
+}
 
 /* idle 3D table (今天拆哪包？): table3d.js places each label under its set's stack; the stack itself is the thing to tap */
 .s3-hint:empty { display: none; }
@@ -1617,10 +1623,8 @@ button:disabled { cursor: not-allowed; }
   :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 22px + var(--notice-h, 44px)); }
   /* 店里的话 (no receipt up): the page starts under the box, so the 货架 / 展示柜 view tabs aren't covered at the top of the page */
   :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
-  /* 开包: the slot hangs under the mat's head row (「今天拆哪包？」and 音效, ~60px — it's mat.ts's markup, so the number lives here
-     once), over the display case where nothing is pressed; with a receipt it scrolls with the page like anywhere else (above), and
-     the table isn't pushed down */
-  :root[data-page="open"] .pops { top: calc(var(--top-h) + 72px); }
+  /* Keep the paper below both fixed header rows, including 全部翻开. The canvas itself does not reflow with the notice. */
+  :root[data-page="open"] .pops { top: calc(var(--top-h) + 132px); }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 156px; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -1648,7 +1652,7 @@ button:disabled { cursor: not-allowed; }
     border-width: 6px 0; border-image-width: 10px 0; padding: 10px 14px; }
   .mat.m3d { display: grid; grid-template-columns: minmax(0, 1fr) clamp(200px, 30%, 280px); grid-template-rows: auto minmax(0, 1fr); padding: 0; }
   .mat.m3d .scene3d { grid-column: 1; grid-row: 1 / -1; }
-  .mat.m3d .mat-head { grid-column: 2; grid-row: 1; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; padding: 10px 12px 8px;
+  .mat.m3d .mat-head { display: flex; grid-column: 2; grid-row: 1; flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; padding: 10px 12px 8px;
     border-left: 1px solid var(--mat-line); }
   .mat.m3d .mat-head h2 { font-size: 18px; }
   .mat.m3d .mat-head > span { font-size: var(--fs-cap); white-space: normal; overflow: visible; }

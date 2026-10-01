@@ -348,8 +348,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
-        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0), b = G.nextBill(), short = !!(cost && b && s.cash - cost < b.amount);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}${short ? ':$' : ''}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind;
+        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind;
         if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
       }
       memoShown = shown;
