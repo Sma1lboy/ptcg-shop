@@ -156,8 +156,8 @@ console.log('ok luck percentile');
   assert.deepEqual([G.shelfQty('sv08'), st().stock.sv08, G.shelfQty('sv10'), st().stock.sv10], [G.DEPTH_BASE, back + G.DEPTH_BASE, 3, 0], 'switching a shelf sends its packs back and fills it with the new set');
   G.setPrice('sv08', 9); assert.equal(G.pctOf('sv08'), G.MAX_PCT, 'price clamps'); G.setPrice('sv08', 0); assert.equal(G.pctOf('sv08'), G.MIN_PCT);
   G.setPrice('sv08', 1.02); assert.ok(Math.abs(G.pctOf('sv08') - 1) < 1e-9 && Math.abs(G.ask('sv08') - G.sealedPrice('sv08')) < 1e-9, 'price snaps to steps');
-  const cash0 = st().cash; assert.ok(G.upgrade('racks')); assert.equal(st().cash, cash0 - G.UPGRADES.racks.costs[0]);
-  assert.equal(G.shelves().length, G.RACK_BASE + 1); assert.ok(G.upgrade('depth')); assert.equal(G.depth(), G.DEPTH_BASE + G.DEPTH_STEP);
+  assert.ok(G.upgrade('depth')); assert.equal(G.depth(), G.DEPTH_BASE + G.DEPTH_STEP); // 加层 first: 货架 and 进货渠道 are its branches
+  const cash0 = st().cash; assert.ok(G.upgrade('racks')); assert.equal(st().cash, cash0 - G.UPGRADES.racks.costs[0]); assert.equal(G.shelves().length, G.RACK_BASE + 1);
   st().earned.sealed = G.unlockAt('sv08.5'); assert.ok(G.unlocked('sv08.5'));
 
   // 3. Customers respond to price. Same shop, same hour, three asking prices: cheap sells the most units, dear the fewest.
@@ -1115,6 +1115,106 @@ console.log('ok luck percentile');
   console.log(`ok 闲钱/退回: badge counts cash beyond the bill, this week's buys go back at ${G.REFUND * 100}% while short; 冲动新手 ${loans(rash)} loans, 看闲钱 0`);
 }
 
+// 成长树 (src/growth.ts): a branch opens with Lv 1 of its parent and only its first level asks, 柜台 grows from a card the shop really has,
+// and 退回 never takes a parent's last level out from under a level of its child.
+{
+  const NOW = 1_700_000_000_000, card = { set: 'sv08', n: '9', name: '卡9', r: 'SIR', kind: 'SIR', price: 30 }, key = `${card.set}|${card.n}|${card.kind}`;
+  const shop = (seed = 3, storage = { getItem: () => null, setItem() {} }) => { const G = createGame({ now: () => NOW, random: S.rng(seed), storage }); G.state.cash = 1e9; return G; };
+  const buy = (G, k) => k in G.UPGRADES ? G.upgrade(k) : G.learn(k), at = (G, k) => k in G.UPGRADES ? G.lvl(k) : G.skill(k);
+  const G0 = shop(), nameOf = k => (G0.UPGRADES[k] || G0.SKILLS[k]).name;
+  const fullDex = G => { for (const s of PTCG_SETS) for (const c of PTCG_DATA[s.id].cards) G.state.dexSeen[`${s.id}|${c.n}`] = 1; }; // before the game reads a dex count: they are cached
+
+  // A locked first purchase is refused whole: no cash, no level, no log line, no save, no event.
+  const refused = (k, why) => {
+    let heard = 0, saves = 0; const G = shop(4, { getItem: () => null, setItem() { saves++; } }), saves0 = saves; G.on(() => heard++); const before = JSON.stringify(G.state);
+    assert.ok(!G.canUpgrade(k) && !G.canLearn(k) && G.growthLock(k).includes(why), `${k} is locked, and says what opens it (${G.growthLock(k)})`);
+    assert.equal(buy(G, k), false, `${k}: first purchase refused`);
+    assert.deepEqual([JSON.stringify(G.state), heard, saves - saves0], [before, 0, 0], `${k}: the refusal changes nothing`);
+  };
+  for (const [k, p] of Object.entries({ racks: 'depth', supplier: 'depth', talk: 'signage', crowd: 'signage', expand: 'crowd', apprentice: 'clerk', watch: 'clerk' })) refused(k, `「${nameOf(p)}」`);
+  for (const k of ['case', 'luck']) refused(k, '开一包');
+
+  // Lv 1 of the parent opens both branches, and neither branch locks the other.
+  for (const [p, kids] of [['depth', ['racks', 'supplier']], ['signage', ['talk', 'crowd']], ['clerk', ['apprentice', 'watch']]]) {
+    const G = shop(); assert.ok(kids.every(k => G.growthLock(k)), `${p}: both branches start shut`);
+    assert.ok(buy(G, p) && at(G, p) === 1, `${p} Lv 1`);
+    assert.ok(kids.every(k => G.growthLock(k) === '' && G.canUpgrade(k)), `${p} Lv 1 opens both branches`);
+    assert.ok(kids.every(k => buy(G, k)), `${kids.join(' and ')} both buy`);
+  }
+  // 扩建 hangs on 人气 and keeps its own 客流上限 condition on every level.
+  { const G = shop(); assert.ok(buy(G, 'signage') && buy(G, 'crowd'));
+    assert.ok(G.growthLock('expand').includes(`×${G.CROWD_KNEE}`) && !G.upgrade('expand'), 'parent in hand, the cap condition still holds it');
+    const F = shop(); fullDex(F); assert.ok(buy(F, 'signage') && buy(F, 'crowd') && F.growthLock('expand') === '' && F.upgrade('expand') && F.upgrade('expand') && F.lvl('expand') === 2, 'both met: 扩建 buys'); }
+
+  // 柜台: neither a 图鉴 entry, a 战利品 record nor an empty slot is a card; every real source of one opens 展示柜 and 手气 alike, in either order.
+  { const G = shop(); assert.equal(G.cardBranchReady(), false);
+    assert.ok(G.collect('sv08'), 'a 图鉴补卡 went through'); G.state.hits.push({ ...card, t: 0 }); G.state.singles[key] = { ...card, count: 0 };
+    assert.equal(G.cardBranchReady(), false, 'a dex entry, a record and an empty slot are not cards'); assert.ok(!G.learn('luck') && !G.upgrade('case')); }
+  for (const [what, give] of [
+    ['a pack opened', G => { G.buy('sv08', 1); G.open('sv08', 1); }],
+    ['a card taken at the counter', G => { G.state.intake = { n: 1, cost: 4 }; }],
+    ['a card in the binder', G => { G.state.singles[key] = { ...card, count: 1 }; }],
+    ['a card in the case', G => { G.state.shown.push({ ...card, key, pct: 1.1 }); }],
+    ['a trophy', G => { G.state.trophy = { ...card, key }; }],
+    ['a card in the gallery', G => { G.state.gallery[0] = { ...card, key }; }],
+  ]) {
+    const G = shop(), H = shop(); give(G); give(H);
+    assert.ok(G.cardBranchReady() && G.growthLock('case') === '' && G.growthLock('luck') === '', `${what} opens both 柜台 roots`);
+    assert.ok(G.learn('luck') && G.upgrade('case'), `${what}: 手气 without 展示柜`); assert.ok(H.upgrade('case') && H.learn('luck'), `${what}: 展示柜 without 手气`);
+  }
+
+  // A save from before the tree: levels held without their parent stay effective, keep upgrading and survive a reload; nothing else comes free with them.
+  { const w = { store: {} }, env = { now: () => NOW, random: S.rng(6), storage: { getItem: k => w.store[k] ?? null, setItem: (k, v) => { w.store[k] = v; } } };
+    const L = createGame(env); L.state.cash = 1e9; Object.assign(L.state.up, { racks: 2, case: 1 }); Object.assign(L.state.skills, { watch: 1, crowd: 2 }); L.setPrice('sv08', 1); // any action saves
+    const R = createGame(env);
+    assert.deepEqual(['racks', 'case', 'depth', 'signage', 'clerk'].map(k => R.lvl(k)).concat(R.skill('watch'), R.skill('crowd')), [2, 1, 0, 0, 0, 1, 2], 'levels survive the reload with no parent');
+    assert.equal(R.racks(), R.RACK_BASE + 2); assert.ok(R.cardBranchReady() && R.growthLock('luck') === '', 'owning 展示柜 keeps 手气 open with no card');
+    assert.ok(['racks', 'case'].every(k => R.canUpgrade(k)) && ['watch', 'crowd'].every(k => R.canLearn(k)), 'the owned children are open');
+    assert.ok(R.upgrade('racks') && R.upgrade('case') && R.learn('watch') && R.learn('crowd'), 'and keep upgrading');
+    assert.deepEqual([R.lvl('racks'), R.lvl('case'), R.skill('watch'), R.skill('crowd')], [3, 2, 2, 3]); assert.equal(R.racks(), R.RACK_BASE + 3);
+    assert.ok(['supplier', 'talk', 'apprentice'].every(k => R.growthLock(k) && !buy(R, k)), 'a sibling or child of a legacy level still asks for its own parent');
+    const E1 = shop(); E1.state.up.expand = 1; assert.ok(E1.growthLock('expand') && !E1.upgrade('expand'), 'a legacy 扩建 still waits for the 客流上限 condition');
+    const E2 = shop(); fullDex(E2); E2.state.up.expand = 1; assert.ok(E2.growthLock('expand') === '' && E2.upgrade('expand') && E2.lvl('expand') === 2, 'and goes on without 人气 once it is met'); }
+
+  // A restart: the levels 名气 hands out (旧货架, 老店员) satisfy the parents they sit under, and a pack ever opened keeps 柜台 open with the binder gone.
+  { const G = shop(); G.buy('sv08', 1); G.open('sv08', 1); G.state.branch.fame = 20; assert.ok(G.learnPerk('fit') && G.learnPerk('hire')); assert.ok(G.bankrupt());
+    assert.deepEqual([G.lvl('racks'), G.lvl('depth'), G.lvl('clerk'), G.lvl('signage')], [1, 1, 1, 0]); assert.deepEqual(G.state.singles, {});
+    assert.ok(['racks', 'supplier', 'apprentice', 'watch'].every(k => G.growthLock(k) === ''), 'the perks open the branches under them');
+    assert.ok(G.growthLock('talk') && G.growthLock('crowd'), 'but not the ones under 招牌');
+    assert.ok(G.cardBranchReady() && G.growthLock('case') === '' && G.growthLock('luck') === '', 'the pack opened in the old shop still counts'); }
+
+  // 退回: the child goes back first. A parent with more levels still gives one back; its last level waits for every child.
+  { let T = NOW; const G = createGame({ now: () => T, random: S.rng(8), storage: null }), st = () => G.state, short = () => { st().cash = 10; }, rows = () => G.refundable().map(x => x.k).sort();
+    st().cash = 1e6; for (const k of ['depth', 'depth', 'racks', 'supplier', 'signage', 'talk']) assert.ok(buy(G, k), k);
+    short(); assert.deepEqual(rows(), ['depth', 'racks', 'supplier', 'talk'], 'short of the bill: 招牌 holds its last level while 口才 stands on it');
+    assert.ok(G.refundBlock('signage').includes(nameOf('talk')) && G.refundBlock('racks') === '' && G.refundBlock('depth') === '', 'the block names the child and only the blocked row has one');
+    const before = JSON.stringify(st()); assert.equal(G.refund('signage'), false); assert.equal(JSON.stringify(st()), before, 'a blocked refund changes nothing');
+    assert.ok(G.refund('depth') && G.lvl('depth') === 1, 'Lv 2 of the parent goes back, Lv 1 is still there for the children');
+    short(); assert.ok(G.refundBlock('depth') && !rows().includes('depth') && !G.refund('depth'), 'its last level waits for both children');
+    short(); assert.ok(G.refund('racks')); short(); assert.ok(G.refundBlock('depth').includes(nameOf('supplier')) && !G.refund('depth'), 'one child back is not enough');
+    short(); assert.ok(G.refund('supplier')); short(); assert.ok(G.refund('depth') && G.lvl('depth') === 0, 'both children out: the parent goes');
+    assert.equal(G.upgrade('racks'), false, 'and the branch is shut again');
+    short(); assert.ok(G.refund('talk')); short(); assert.ok(G.refund('signage') && G.lvl('signage') === 0, 'a skill child holds an upgrade parent the same way');
+    const O = createGame({ now: () => T, random: S.rng(8), storage: null }); O.state.cash = 1e6; O.state.up.racks = 2; // a legacy shop: 货架 with no 加层
+    assert.ok(O.upgrade('depth')); O.state.cash = 10; const o0 = JSON.stringify(O.state);
+    assert.ok(O.refundBlock('depth') && !O.refund('depth') && JSON.stringify(O.state) === o0, 'a level the save already had holds the parent just the same');
+    O.state.cash = 1e6; assert.equal(O.refundBlock('depth'), '', 'cash covers the bill: nothing to return, nothing to explain'); }
+  // A paid level a 名气 perk later covers is the perk's: 退回 returns the money once and leaves the level, and the branches under it, standing.
+  { const G = createGame({ now: () => NOW, random: S.rng(8), storage: null }), st = () => G.state, short = () => { st().cash = 10; };
+    st().cash = 1e6; for (const k of ['depth', 'depth', 'depth', 'racks', 'clerk', 'watch']) assert.ok(buy(G, k), k);
+    st().branch.fame = 20; assert.ok(G.learnPerk('fit') && G.learnPerk('fit') && G.learnPerk('hire')); // floors: 加层 and 货架 Lv 2, 店员 Lv 1
+    assert.deepEqual([G.lvl('depth'), G.lvl('racks'), G.lvl('clerk')], [3, 2, 1]);
+    const back = k => { short(); const row = G.refundable().find(x => x.k === k), c0 = st().cash; assert.ok(row && G.refund(k), `${k}: refunded`); assert.ok(Math.abs(st().cash - c0 - row.cost * G.REFUND) < 0.01, `${k}: back at 90%`); };
+    back('depth'); assert.equal(G.lvl('depth'), 2, 'the paid level above the floor goes back: Lv 3 → 2');
+    back('depth'); back('depth'); assert.equal(G.lvl('depth'), 2, 'the two payments 旧货架 covers return their money and the level stays');
+    short(); assert.ok(!G.refund('depth') && !G.refundable().some(x => x.k === 'depth'), 'every payment is used up once');
+    back('racks'); assert.equal(G.lvl('racks'), 2, 'a 货架 payment the perk covers: money back, Lv 2 stays');
+    back('clerk'); assert.equal(G.lvl('clerk'), 1, '老店员 holds 店员 Lv 1 although 看店 stands on it');
+    assert.ok(G.skill('watch') === 1 && G.growthLock('apprentice') === '' && G.refundTo('clerk') === 1, 'its branches are still open');
+    assert.ok(!/Lv\d/.test(st().log[0].text), 'a covered payment is not logged as a level lost'); }
+  console.log('ok 成长树: locked first buys refused without a trace, both branches open from Lv 1, 柜台 opens from a real card, legacy levels survive reload/perks/restarts, parents refund last');
+}
+
 // 顺手还 (GAMEPLAY §4.5): after a week's bill is paid, 九姐 takes a third of the loan (at least LOAN_MIN) back from cash above the
 // float. It never makes a bill late, is never borrowed for and never bankrupts; a till with nothing beyond the float just compounds.
 // And the point of it: the player who spends every dollar on growth and never repays (冲动新手) used to end with the loan stuck at the
@@ -1442,9 +1542,11 @@ console.log('ok luck percentile');
     const H = createGame({ ...w.env, random: S.rng(6) }), L = { ...H.state.offline }; assert.ok(!('tickets' in L) && !('bonus' in L));
     H.leave(); w.T += 1800e3; H.tick(); H.back(); const o3 = H.state.offline; assert.equal(o3.tickets, 600); assert.ok(o3.bonus > 0 && !('detail' in o3)); assert.ok(o3.sales > L.sales && o3.revenue > L.revenue);
     // 看店: three levels at 2,400 / 6,000 / 15,000, +5% each, the cap rule untouched
-    const s = shop(22); s.st().cash = 1e6; const costs = []; for (let i = 0; i < 3; i++) { const c = s.st().cash; assert.ok(s.G.learn('watch')); costs.push(c - s.st().cash); }
+    const s = shop(22); s.st().cash = 1e6; assert.ok(s.G.upgrade('clerk')); const costs = []; for (let i = 0; i < 3; i++) { const c = s.st().cash; assert.ok(s.G.learn('watch')); costs.push(c - s.st().cash); } // 看店 is a branch of 店员: hired first
     assert.deepEqual(costs, [2400, 6000, 15000]); assert.equal(s.G.learn('watch'), false); assert.equal(s.G.skillMax('watch'), 3); near(s.G.OFFLINE_BONUS * s.G.skillMax('watch'), 0.15, 'at most 15%');
-    assert.equal(s.G.offlineCap(), s.G.NOCLERK_CAP); s.G.upgrade('clerk'); assert.equal(s.G.offlineCap(), s.G.OFFLINE_CAP + 3 * 2 * 3600);
+    assert.equal(s.G.offlineCap(), s.G.OFFLINE_CAP + 3 * 2 * 3600);
+    const legacy = shop(23); legacy.st().cash = 1e6; legacy.st().skills.watch = 3; // a save from before the tree: 看店 with no clerk keeps the no-clerk cap until one is hired
+    assert.equal(legacy.G.offlineCap(), legacy.G.NOCLERK_CAP); legacy.G.upgrade('clerk'); assert.equal(legacy.G.offlineCap(), legacy.G.OFFLINE_CAP + 3 * 2 * 3600);
   }
   console.log('ok 展厅: moves keep every copy, the room is never sold, tickets and 挂机/离线 bonus are credited once and are not revenue, receipts add up, branch/bankruptcy keep the room');
 }

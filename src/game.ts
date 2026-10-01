@@ -4,6 +4,8 @@
 import { DATA, SETS } from './sets.ts';
 import * as S from './sim.ts';
 import type { Pull } from './sim.ts';
+import { GROWTH_KEYS, GROWTH_PARENTS, GROWTH_TREES } from './growth.ts';
+import type { GrowthKey } from './growth.ts';
 
 export interface Single extends Pull { count: number }
 export interface Shown extends Pull { key: string; pct: number }
@@ -601,7 +603,25 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
   const skillCost = (k: string) => skill(k) < skillMax(k) ? Math.round(SKILLS[k].base * SKILLS[k].grow ** skill(k) * (skill(k) < (SKILLS[k].early || 0) ? EARLY_DISCOUNT : 1)) : undefined;
-  const canLearn = (k: string) => k !== 'apprentice' || lvl('clerk') > 0;
+  // 成长树 (src/growth.ts, game setting): the first level of a node needs Lv 1 of its parent, and the 柜台 roots (展示柜, 手气) need a
+  // card the shop really has. Only the first level asks: levels already owned (a save from before the tree, the 旧货架 perk) stay
+  // effective and keep upgrading, so there is no marker or migration to keep. growthLock is the one answer canUpgrade / canLearn /
+  // upgrade / learn and the 成长 page share ('' = open, otherwise what is missing); 店面扩建 also keeps its 客流上限 condition at every level.
+  const owned = (k: string) => k in UPGRADES ? lvl(k) : skill(k);
+  const growthName = (k: string) => (UPGRADES[k] || SKILLS[k]).name;
+  // A card the shop really has: a pack opened (the lifetime counter, kept by every restart), a card taken at the counter, held, shown or kept in
+  // the 收藏室. 图鉴补卡 only marks the 图鉴 and 战利品 is a record, so neither is a card. A legacy shop that already owns 展示柜 or 手气 stays open.
+  const cardBranchReady = () => state.pulled > 0 || !!state.intake?.n || lvl('case') > 0 || skill('luck') > 0
+    || state.shown.length > 0 || !!state.trophy || state.gallery.some(Boolean) || Object.values(state.singles).some(c => c.count > 0);
+  function growthLock(k: string): string {
+    if (!owned(k)) {
+      const p = GROWTH_PARENTS[k as GrowthKey];
+      if (p && !owned(p)) return `先${p in UPGRADES ? '买' : '学'}「${growthName(p)}」Lv 1`;
+      if (GROWTH_TREES.some(t => t.milestone === 'cards' && t.roots.some(r => r.k === k)) && !cardBranchReady()) return '先开一包，或收进一张卡';
+    }
+    return k === 'expand' && crowdRaw() <= CROWD_KNEE ? `图鉴收录和新系列解锁的客流加成超过 ×${CROWD_KNEE} 后可扩建` : ''; // 扩建 only lifts a cap the shop has reached
+  }
+  const canUpgrade = (k: string) => !growthLock(k), canLearn = canUpgrade;
   function learn(k: string) {
     const cost = skillCost(k);
     if (cost == null || state.cash < cost || !canLearn(k)) return false;
@@ -620,25 +640,39 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // back for buying before the bill. Only the top level of each, only while short. REFUND = 1 − LOAN_RATE: buying after a bill and
   // returning before the next costs what borrowing that week would, so it is never a free rental (at full price autoplay did it
   // every week), yet unlike a loan nothing compounds.
-  function refundable() {
+  // What 退回 could return if nothing depended on it: this week's last buy of each k, while the till is short of the bill.
+  function refundRows() {
     const o = state.overdue, b = nextBill(), short = o ? state.cash < o.amount : !!b && state.cash < b.amount;
     if (!short) return [];
     const wk = o?.week ?? state.week, top = new Map<string, { k: string; cost: number; week: number }>();
     for (const x of state.bought || []) top.set(x.k, x); // the last buy of each k is its top level
     return [...top.values()].filter(x => x.week >= wk);
   }
+  // Levels a 名气 perk keeps in every shop: 旧货架 holds 货架 and 加层, 老店员 holds 店员. A level paid for and then covered by the perk
+  // is the perk's now: its 退回 returns the money (the record is used up once) but the level stays, so the perk is never refunded away.
+  const permanent = (k: string) => k === 'racks' || k === 'depth' ? perk('fit') : k === 'clerk' && perk('hire') ? 1 : 0;
+  // The level k stands at once its last paid level goes back; never below the perk's floor, never above what it has.
+  const refundTo = (k: string) => Math.min(owned(k), Math.max(owned(k) - 1, permanent(k)));
+  // A parent's last level never goes back while a level of its child stands on it: growthLock only asks at a first level, so
+  // returning the parent first would be a way round it. The child goes back first (its own rule), then the parent.
+  function depBlock(k: string): string {
+    if (refundTo(k) > 0) return '';
+    const kid = GROWTH_KEYS.find(c => GROWTH_PARENTS[c] === k && owned(c) > 0);
+    return kid ? `先退回「${growthName(kid)}」，才能退回「${growthName(k)}」的第 1 级` : '';
+  }
+  const refundable = () => refundRows().filter(x => !depBlock(x.k));
+  const refundBlock = (k: string) => refundRows().some(x => x.k === k) ? depBlock(k) : ''; // '' unless k would be refundable but for its child
   function refund(k: string) {
     const x = refundable().find(x => x.k === k); if (!x) return false;
-    const o = k in UPGRADES ? state.up : state.skills, got = cents(x.cost * REFUND); o[k]--;
+    const o = k in UPGRADES ? state.up : state.skills, got = cents(x.cost * REFUND), was = owned(k); o[k] = refundTo(k);
     state.bought!.splice(state.bought!.lastIndexOf(x), 1); state.cash += got;
     if (k === 'racks') for (const sh of state.shelves.splice(racks())) if (sh.id) state.stock[sh.id] = (state.stock[sh.id] || 0) + sh.qty; // back room may go past WAREHOUSE; buying waits
     if (k === 'depth') for (const sh of state.shelves) if (sh.id && sh.qty > depth()) { state.stock[sh.id] = (state.stock[sh.id] || 0) + sh.qty - depth(); sh.qty = depth(); }
     if (k === 'case') for (const c of state.shown.splice(slots())) { const { key, pct, ...card } = c; (state.singles[key] ||= { ...card, count: 0 }).count++; }
-    log(`退回：${(UPGRADES[k] || SKILLS[k]).name} Lv${o[k] + 1}，扣一成`, 'gain', got);
+    log(o[k] < was ? `退回：${growthName(k)} Lv${was}，扣一成` : `退回：${growthName(k)} 这一笔，扣一成（名气已送这一级，等级不变）`, 'gain', got);
     if (state.overdue && state.cash >= state.overdue.amount) settle(state.overdue);
     if (!flush()) emit(); return true;
   }
-  const canUpgrade = (k: string) => k !== 'expand' || crowdRaw() > CROWD_KNEE; // 扩建 only lifts a cap the shop has reached
   // fn() as if upgrade or skill k were one level higher, state untouched afterwards: the 成长 page shows what a level really does
   // (人气 and 扩建 go through the 客流上限, so their nominal step can be far from the walk-ins you get). fn must not pad shelves().
   function peek<T>(k: string, fn: () => T): T {
@@ -1094,7 +1128,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     ackCardSale,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, peek, spare, refundable, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     pause, paused: () => pausedAt !== null, OPENING, OPENING_CAP, FLIP_SHARE,
     GALLERY_SLOTS, GALLERY_RATE, TICKET_MIN, TICKET_MAX, IDLE_BONUS, OFFLINE_BONUS, galleryValue, ticketPrice, collectToGallery, collectTrophy, uncollect, moveCollect, setIdle, idling, revealing,

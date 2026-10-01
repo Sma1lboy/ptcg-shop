@@ -1,4 +1,4 @@
-# ptcg-shop（欧气卡铺）
+# ptcg-shop（PTCG卡店模拟器）
 
 宝可梦卡牌（PTCG）开包模拟 + 卡店经营放置游戏 + 欧气检测。Vite + TypeScript + lit-html，构建产物是单个自带全部代码和数据的 `dist/index.html`。
 
@@ -42,6 +42,7 @@
 | `src/sets.ts` | 系列配置（实测概率、置信区间、整包市价、来源链接），并载入 `data/cards-*.json` 导出为 `DATA` |
 | `src/sim.ts` | 纯函数：开包、期望值、欧气百分位。浏览器和 node 通用 |
 | `src/game.ts` | `createGame()`：存档、经济、店铺动作、收藏室实体卡转移及门票、挂机／离线奖励。不碰 DOM；`setIdle()` 由入口按页面与可见性切换，额外收入记 `state.extra`，不计商品营业额 |
+| `src/growth.ts` | 四类成长树的唯一拓扑：父项、子项与柜台实体卡里程碑。`game.ts` 据此限制首次购买和父项退回，`ui/upgrades.ts` 据此绘制可切换分类的真实分支；旧存档已有等级继续有效 |
 | `src/main.ts` | 入口：启动顺序、`renderAll()`。监听器的注册顺序就是旧的脚本加载顺序，别随手调换 |
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度名字 |
 | `src/ui/card.ts` | 卡面：全站唯一的 2D 卡（`face` 卡图 + 闪面 + 加载失败的白卡纸、`cap` 卡下的记号和价、`mark` 印刷的稀有度记号 SVG、`back` / `energy` 卡背和能量卡的 SVG 图，分享图也用）。规格在 DESIGN.md「卡面」；开包台拼字符串的地方用 `toHTML()` |

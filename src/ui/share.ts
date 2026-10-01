@@ -4,6 +4,7 @@ import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, rarLabel, RAR } from './common.ts';
 import { back, stock } from './card.ts';
+import { wordmark, NAME } from '../brand.ts';
 import type { ShareSpec } from './mat.ts';
 
 const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -163,7 +164,7 @@ function tcard(x: CanvasRenderingContext2D, X: number, Y: number, w: number, h: 
   text(x, '欧气鉴定', X + w - 42, Y + 60, 36, '#fff', 'right', BW.bandShadow);
   // the facts: 店 / 开了 / 最贵, on white strips beside the portrait
   const rx = X + 38, rw = w - 38 - 30 - (who ? who.width * 2 : 0) - 24, best = g.best;
-  const rows: [string, string, string?][] = [['店', `欧气卡铺 · 第 ${G.state.branch.n + 1} 家`], ['开了', g.what, g.short]];
+  const rows: [string, string, string?][] = [['店', `PTCG卡店 · 第 ${G.state.branch.n + 1} 家`], ['开了', g.what, g.short]];
   if (best) rows.push(['最贵', best.name, money(g.bestNow)]);
   rows.forEach(([k, v, alt], i) => {
     const ry = Y + 100 + i * 56;
@@ -203,9 +204,15 @@ function spread(x: CanvasRenderingContext2D, px: number, py: number, w: number, 
   const yl = `你 ${money(you)}`, al = yx > px + w - 90 ? 'right' : yx < px + 90 ? 'left' : 'center';
   text(x, yl, yx, py - 18, 36, BW.ink, al);
 }
+// The bottom line of both images: where the numbers come from on the left, the wordmark on the right.
+function footer(x: CanvasRenderingContext2D, W: number, H: number, X: number) {
+  text(x, '卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计', X + 8, H - 26, 24, BW.muted, 'left');
+  wordmark(x, NAME, W - X - 8, H - 24, 30, 'right');
+}
+
 async function drawCard() {
   const g = grade(), L = g.L, best = g.best, sims = S.luckSamples(G.state.packsBy), bestLine = g.bestLine, hitList = hits().map(([n, c]) => `${n} ×${c}`), hitsLine = hitList.join(' · ');
-  await fonts(L.title + '欧气卡铺鉴定训练家卡店开了最贵超过期望你战利品分布' + g.what + g.head + hitsLine + `ID No. ${g.cert}` + `第${G.state.branch.n + 1}家` + '卡价市价概率实开统计 · ' + money(L.value) + money(L.expected) + (best ? money(g.bestNow) : ''));
+  await fonts(L.title + 'PTCG卡店模拟器鉴定训练家卡店开了最贵超过期望你战利品分布' + g.what + g.head + hitsLine + `ID No. ${g.cert}` + `第${G.state.branch.n + 1}家` + '卡价市价概率实开统计 · ' + money(L.value) + money(L.expected) + (best ? money(g.bestNow) : ''));
   const [art, who] = await Promise.all([best ? loadArt(best) : loadOne(back()), loadOne('gen/story/owner.webp')]); // no hit yet: the card lies face down
   const W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H; // 3:4, the phone-feed shape
   const x = c.getContext('2d')!, X = 48, CW = W - 96;
@@ -227,7 +234,7 @@ async function drawCard() {
   const tally: string[] = []; x.font = pixel(24);
   for (const h of hitList) { const last = tally.length - 1; if (last >= 0 && x.measureText(`${tally[last]} · ${h}`).width <= room) tally[last] += ` · ${h}`; else tally.push(h); }
   tally.forEach((s, i) => text(x, s, X + 40, ay + aw * 88 / 63 - 8 - (tally.length - 1 - i) * 36, 24, BW.muted, 'left'));
-  text(x, '卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 26, 24, BW.muted, 'center');
+  footer(x, W, H, X);
   return c.toDataURL('image/png');
 }
 
@@ -241,7 +248,7 @@ async function drawPack(d: ShareSpec) {
   const row = d.n > 1 ? d.front.filter(c => c !== d.best).slice(0, 4) : [], rest = d.count - 1 - row.length, restV = d.value - d.best.price - row.reduce((a, c) => a + c.price, 0);
   const sub = d.n > 1 ? `最好的一包 ${money(d.bestPack)}` : '同系列的包里', what = d.n > 1 ? `${d.n} 包共开出` : '这包开出', diff = d.value - d.cost;
   const gain = `市价 ${money(d.value)} · 进货 ${money(d.cost)} · 按市价${diff >= 0 ? '赚' : '亏'} ${money(Math.abs(diff))}`, rank = d.rank.length > 30 ? d.rank.slice(0, 30) + '…' : d.rank;
-  await fonts(top + d.set + row.map(c => rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计欧气卡铺 · ');
+  await fonts(top + d.set + row.map(c => rarLabel(c.kind)).join('') + '另张合计' + sub + what + gain + rarLabel(d.best.kind) + money(d.value) + '卡价市价概率实开统计PTCG卡店模拟器 · ');
   const [art, ...arts] = await Promise.all([d.best, ...row].map(loadArt)), W = 1080, H = 1440, c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d')!, X = 48, CW = W - 96, WB = H - 96;
   screen(x, W, H);
@@ -280,7 +287,7 @@ async function drawPack(d: ShareSpec) {
   x.fillStyle = BW.frameIn; x.fillRect(X + 44, wb - 150, CW - 88, 2);
   x.font = plain(30); x.fillStyle = BW.ink; x.textAlign = 'center'; x.fillText(rank, X + CW / 2, wb - 96);
   line(x, gain, X + CW / 2, wb - 46, CW - 88, [36, 24], diff >= 0 ? BW.gain : BW.loss, 'center');
-  text(x, '卡价 TCGplayer 市价 · 概率 TCGplayer 实开统计 · 欧气卡铺', W / 2, H - 26, 24, BW.muted, 'center');
+  footer(x, W, H, X);
   return c.toDataURL('image/png');
 }
 
@@ -296,8 +303,8 @@ async function pop(draw: () => Promise<string>, text: string, file: string) {
   $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
   if (canShare) $('pop-share').onclick = () => navigator.share({ files: [png], text }).catch(() => null); // cancelled sheet rejects; nothing to do
 }
-export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在欧气卡铺开出了 ${d.best.name}（${money(d.best.price)}）；${d.n > 1 ? '其中最好的一包' : '这包'}${d.rank}`, 'ouqi-pack.png');
+export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在 PTCG卡店模拟器 开出了 ${d.best.name}（${money(d.best.price)}）；${d.n > 1 ? '其中最好的一包' : '这包'}${d.rank}`, 'ptcg-shop-pack.png');
 export const showLuck = () => {
   const g = grade(), L = g.L;
-  return pop(drawCard, `我在欧气卡铺开了 ${L.packs} 包，开出总值超过 ${pctText(g.pct!)}%（±${g.err}）的模拟玩家：${L.title}。${g.best ? `最贵的一张 ${g.best.name} ${money(g.bestNow)}，占总值 ${g.share}%。` : ''}`, 'ouqi.png');
+  return pop(drawCard, `我在 PTCG卡店模拟器 开了 ${L.packs} 包，开出总值超过 ${pctText(g.pct!)}%（±${g.err}）的模拟玩家：${L.title}。${g.best ? `最贵的一张 ${g.best.name} ${money(g.bestNow)}，占总值 ${g.share}%。` : ''}`, 'ptcg-shop.png');
 };

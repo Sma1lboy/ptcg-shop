@@ -12,14 +12,14 @@ export function inspectCard(c: Pull, note = '', revealed = true) {
   dialog.innerHTML = toHTML(html`<header class="inspect-head"><h2 id="inspect-name">${c.name}</h2><button type="button" data-close aria-label="关闭卡片欣赏">关闭</button></header>
     <div class="inspect-stage"><div class="inspect-size"><div class="inspect-tilt"><div class="inspect-turn">
       <div class="inspect-front">${revealed ? face(c, 'big') : html`<span class="cf cf-big pk-ghost"><b>${c.n}</b>${mark(c, false)}<small>尚未收录</small></span>`}</div>
-      ${revealed ? html`<img class="inspect-back" src=${back()} alt="欧气卡铺原创卡背">` : ''}
+      ${revealed ? html`<img class="inspect-back" src=${back()} alt="PTCG卡店模拟器原创卡背">` : ''}
     </div></div></div></div>
     <p class="inspect-meta">${G.setById(c.set).name} · ${c.n} 号 · ${rarLabel(c.kind)}</p>
     ${note ? html`<p class="inspect-note">${note}</p>` : ''}
     <div class="inspect-controls"><button type="button" data-flip ?disabled=${!revealed}>看背面</button>
       <label>放大 <input type="range" min="1" max="2" step="0.25" value="1" aria-label="卡片放大倍数" ?disabled=${!revealed}><output>100%</output></label>
       <button type="button" data-foil aria-pressed=${revealed && !!FOIL[c.kind] ? 'true' : 'false'} ?disabled=${!revealed || !FOIL[c.kind]}>${FOIL[c.kind] && revealed ? '闪面 开' : '无闪面'}</button></div>
-    <p class="inspect-help">${revealed ? '移动鼠标或手指转动卡片，闪卡会有反光；放大后可滚动查看细节。' : '收录这张卡后可查看卡面。'} Esc 或点击框外关闭。卡背为卡铺原创图案。</p>`);
+    <p class="inspect-help">${revealed ? '移动鼠标或手指转动卡片，闪卡会有反光；放大后可滚动查看细节。' : '收录这张卡后可查看卡面。'} Esc 或点击框外关闭。卡背为本游戏原创图案。</p>`);
   const turn = dialog.querySelector<HTMLElement>('.inspect-turn')!, tilt = dialog.querySelector<HTMLElement>('.inspect-tilt')!;
   const stage = dialog.querySelector<HTMLElement>('.inspect-stage')!, range = dialog.querySelector<HTMLInputElement>('input')!;
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');

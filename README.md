@@ -1,6 +1,6 @@
-# 欧气卡铺
+# PTCG卡店模拟器
 
-宝可梦卡牌开包模拟器 + 卡店放置经营 + 欧气检测器。在线玩：https://pcards.sma1lboy.me （push 到 main 后由 `.github/workflows/pages.yml` 自动发布到 GitHub Pages）。
+宝可梦卡牌开包模拟器 + 卡店放置经营 + 欧气检测器：开包、卖卡，经营自己的卡店。非官方的玩家自制游戏，与 Nintendo、The Pokémon Company、Game Freak 无关。在线玩：https://pcards.sma1lboy.me （push 到 main 后由 `.github/workflows/pages.yml` 自动发布到 GitHub Pages）。
 
 ```sh
 npm ci

@@ -78,7 +78,7 @@ export const ACH: Ach[] = [
   { id: 'offline-1k', group: 'shop', seal: '躺赚', name: '打烊也赚', desc: '一张离店小票入账 $10,000 以上', cash: 100, money: true, prog: G => [Math.min(f(G, 'off'), 1e4), 1e4] },
   { id: 'all-sets', group: 'shop', seal: '全系列', name: '全系列在售', desc: `${SETS.length} 个系列同时摆在货架上`, cash: 500, prog: G => [SETS.filter(s => G.shelfQty(s.id) > 0).length, SETS.length] },
   { id: 'level-20', group: 'shop', seal: '老店', name: '二十级老店', desc: '店铺等级 20（成长页的升级和技能级数之和）', cash: 300, prog: G => [Math.min(level(G), 20), 20] },
-  { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡铺', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
+  { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡店', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
 
   { id: 'flipped', group: 'hidden', seal: '被扫货', name: '被倒爷扫了货', desc: '标价低到倒爷一口气扫走一个系列', hint: '有人专挑便宜货下手', cash: 20, prog: G => yes(Object.keys(G.state.flipT).length > 0) },
   { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张双稀有以上都没有', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },

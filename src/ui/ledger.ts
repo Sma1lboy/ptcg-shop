@@ -147,7 +147,7 @@ export function renderRaise() {
   const rows: [string, unknown][] = [
     ['bulk', bulk.n ? row(`卖散卡 ${bulk.n} 张`, '同行按市价的 ' + Math.round(rate * 100) + '% 收', '散卡只能卖给同行，按这个收购价', bulk.v, html`<button type="button" class=${cls('bulk')} @click=${act(() => G.sellBulk())}>卖散卡</button>`) : nothing],
     // 退回 (game.ts refundable): this week's levels back at REFUND — the same tenth a loan costs in a week, but it stops there
-    ['refund', backL.length ? row(backL.length > 1 ? `退回这周买的 ${backL.length} 样` : '退回这周买的', backL.map(x => `${bname(x.k)} Lv ${blv(x.k)}`).join('、'), `扣一成（${money(backL.reduce((a, x) => a + x.cost * (1 - G.REFUND), 0))}），和借一周的利息一样多，但不会再滚`, backGet,
+    ['refund', backL.length ? row(backL.length > 1 ? `退回这周买的 ${backL.length} 样` : '退回这周买的', backL.map(x => `${bname(x.k)} ${G.refundTo(x.k) === blv(x.k) ? '退付款，保留等级' : `Lv ${blv(x.k)}`}`).join('、'), `扣一成（${money(backL.reduce((a, x) => a + x.cost * (1 - G.REFUND), 0))}），和借一周的利息一样多，但不会再滚`, backGet,
         html`${backL.map(x => html`<button type="button" data-act="refund" data-k="${x.k}">退回${bname(x.k)}</button>`)}`) : nothing], // events.ts routes data-act=refund
     ['hits', hits.pick.length ? row(hits.got >= short ? `卖 ${hits.pick.reduce((a, p) => a + p.n, 0)} 张闪卡给同行` : '卖掉全部闪卡', cardsNote(hits.pick), `从最便宜的卖起；按单卡标价（市价的 ${Math.round(G.casePct() * 100)}%）卖给找卡的，能多收 ${money(lose.hits)}`, hits.got,
         html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],

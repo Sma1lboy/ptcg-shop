@@ -17,13 +17,13 @@ function barcode(b: number[]) {
 function card(g: Grade) {
   const who = html`<img class="tc-who" src="gen/story/owner.webp" alt="" @error=${(e: Event) => ((e.target as HTMLElement).hidden = true)}>`;
   if (g.pct == null) return html`<figure class="tcard blank"><p class="tc-h"><span>训练家卡</span><span>欧气鉴定</span></p>
-    <div class="tc-body"><dl class="tc-rows"><div><dt>店</dt><dd>欧气卡铺</dd></div><div><dt>鉴定</dt><dd>开几包就能鉴定</dd></div></dl>
+    <div class="tc-body"><dl class="tc-rows"><div><dt>店</dt><dd>PTCG卡店</dd></div><div><dt>鉴定</dt><dd>开几包就能鉴定</dd></div></dl>
     <p class="tc-grade"><b>待鉴定</b></p>${who}</div></figure>`;
   return html`<figure class="tcard" aria-label="欧气鉴定：${g.L.title}，超过 ${pctText(g.pct)}% 的模拟玩家">
     <p class="tc-h"><span>训练家卡</span><span>欧气鉴定</span></p>
     <div class="tc-body">
       <dl class="tc-rows">
-        <div><dt>店</dt><dd>欧气卡铺 · 第 ${G.state.branch.n + 1} 家</dd></div>
+        <div><dt>店</dt><dd>PTCG卡店 · 第 ${G.state.branch.n + 1} 家</dd></div>
         <div><dt>开了</dt><dd>${g.what}</dd></div>
         ${g.best ? html`<div><dt>最贵</dt><dd class="tc-best"><span>${g.best.name}</span><b>${money(g.best.price)}</b></dd></div>` : ''}
       </dl>

@@ -73,7 +73,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     if (repay && G.state.loan > 0 && free() > float) G.repay(free() - float);
     let best = null; for (const k of Object.keys(G.UPGRADES)) { const c = G.upgradeCost(k); if (c != null && G.canUpgrade(k) && G.lvl(k) < (cap[k] ?? Infinity) && (!best || c < best[1])) best = [k, c]; }
     for (const k of Object.keys(G.SKILLS)) { const c = G.skillCost(k); if (c != null && wants(k) && G.canLearn(k) && (!best || c < best[1])) best = ['skill:' + k, c]; }
-    if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
+    if (SETS.filter(x => G.unlocked(x.id)).length > G.racks() && G.canUpgrade('racks') && G.upgradeCost('racks') != null && G.lvl('racks') < (cap.racks ?? Infinity)) best = ['racks', G.upgradeCost('racks')]; // a set is waiting for a shelf: that comes first
     if (clerkFirst && G.lvl('clerk') < 1) best = ['clerk', G.upgradeCost('clerk')]; // someone who leaves the page for hours hires a clerk before anything else
     if (repay && G.state.loan > 0 && best?.[0] !== 'racks') best = null; // a repaying player clears a 10%-a-week loan before buying growth (else upgrades cheaper than the float always come first and the loan compounds)
     if (heed && G.clerkShort() > 0 && !keep) G.clerkNow(); // not in the last 5 minutes before a bill

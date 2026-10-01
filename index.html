@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>欧气卡铺</title>
+<title>PTCG卡店模拟器 - 开包、卖卡，经营自己的卡店</title>
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
@@ -11,7 +11,7 @@
 <!-- Six pages stay in the DOM; layout.ts selects #open #shelf #case #luck #grow #ach #collection. #case is the second shelf view.
      The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
-  <h1 class="brand">欧气卡铺</h1>
+  <h1 class="brand" data-text="PTCG卡店">PTCG卡店</h1>
   <nav class="nav" aria-label="页面">
     <a href="#open">开包</a>
     <a href="#shelf">货柜<b class="tab-n tab-dot" id="shelf-n" hidden></b></a>
@@ -94,6 +94,7 @@
   <button class="ghost" data-act="story" type="button">开场剧情</button>
   <button class="ghost" data-act="guide" type="button">新手引导</button>
   <button class="ghost" id="reset" data-act="reset" type="button">清空存档</button>
+  <p class="disclaimer">这是玩家自制的模拟器，不是宝可梦出品，和 Nintendo、The Pokémon Company、Game Freak 没有关系。</p>
 </footer>
 <script type="module" src="/src/main.ts"></script>
 </body>

@@ -105,9 +105,10 @@ function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnTyp
 // The next 加一个货架, drawn where it would stand: the outline of an unbuilt bay (one board, so when it wraps to a row of its own it
 // is a small frame, not a wall-high hole) at the end of the wall, its price on the button.
 function ghost(cost: number) {
+  const lock = G.growthLock('racks');
   return html`<li class="rack ghost"><p class="r-sign"><span>还能加一个</span></p>
       <div class="r-bay" aria-hidden="true"><div class="board">${Array.from({ length: FACES }, () => html`<i></i>`)}</div></div>
-      <div class="r-ctl"><button type="button" data-act="up" data-k="racks" ?disabled=${G.state.cash < cost}>加一个货架 ${money(cost)}</button></div>
+      <div class="r-ctl"><button type="button" data-act="up" data-k="racks" ?disabled=${!!lock || G.state.cash < cost}>加一个货架 ${money(cost)}</button>${lock ? html`<small>${lock}</small>` : ''}</div>
     </li>`;
 }
 

@@ -1,10 +1,11 @@
 // 成长 page, part 1: the incremental loop at a glance — shop level, the next thing cash can buy, what growth has bought so far,
-// and the next set that lifetime revenue unlocks — then the 成长树: every upgrade and skill as a node on one of four lines.
+// and the next set that lifetime revenue unlocks — then the 成长树: every upgrade and skill as a node in one of four categories.
 // A node shows its badge ringed with its levels, current → next effect, and until it is affordable a bar filling toward the price.
-import { html, render } from 'lit-html';
+import { html, render, type TemplateResult } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { G, $, money, logoUrl, bar } from './common.ts';
 import { odds, luckUp, luckUpText } from './skills.ts';
+import { GROWTH_TREES, GROWTH_KEYS, type GrowthKey, type GrowthNode, type GrowthTree } from '../growth.ts';
 
 const moneyOf = money;
 
@@ -39,7 +40,7 @@ export function billNote(cost: number) {
 
 // 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.
 export const refundBtn = (k: string, name: string, lv: number, cost: number, note = true) =>
-  html`<p class="gt-back"><button type="button" data-act="refund" data-k="${k}">退回 ${name} Lv ${lv} · 拿回 ${moneyOf(cost * G.REFUND)}</button>${note ? html`<small>这周买的最高一级，账不够付时可以退，退回九成</small>` : ''}</p>`;
+  html`<p class="gt-back"><button type="button" data-act="refund" data-k="${k}">${G.refundTo(k) === lv ? `退回 ${name} 的付款，保留等级` : `退回 ${name} Lv ${lv}`} · 拿回 ${moneyOf(cost * G.REFUND)}</button>${note ? html`<small>这周买的最高一级，账不够付时可以退，退回九成</small>` : ''}</p>`;
 
 // Everything cash can level, as one list: the goal the header points at is the cheapest of these.
 function buyables() {
@@ -121,7 +122,7 @@ export function renderUpgrades() {
         ${bar(lv / max, `${lv}/${max}`, { k: 'EXP' })}</div>
       ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? (goal.cost <= G.spare() ? '下一步，现在就能升' : '下一步，钱够但要动账单的钱') : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
-        <button type="button" class="gg-what" @click=${() => seek(`tn-${goal.k}`)}><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span><i aria-hidden="true">↓</i></button>
+        <button type="button" class="gg-what" @click=${() => revealTarget(goal.k)}><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span><i aria-hidden="true">↓</i></button>
         ${cash >= goal.cost ? html`<button type="button" class="${goal.cost <= G.spare() ? 'primary' : ''}" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
           : html`${bar(cash / goal.cost, `攒了 ${Math.round(cash / goal.cost * 100)}%`)}
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
@@ -146,27 +147,20 @@ export function renderUpgrades() {
 document.addEventListener('ptcg:luck', renderUpgrades); // the 手气 level-up line times out (skills.ts luckUp)
 
 // ---------- 成长树 ----------
-// Four lines by what they change in the shop. A line's rail is the 营业额 track's ink rail: it fills up to the last node with a
-// level, so it reads how far down that line you are — not an order to buy in. The only real prerequisites (带徒弟 needs 店员,
-// 扩建 needs 口碑客流 at G.CROWD_KNEE) are locked nodes that say what opens them.
-const LINES = [
-  { name: '货架', say: '摆几个系列、每架多少包、进货多便宜', ks: ['racks', 'depth', 'supplier'] },
-  { name: '客人', say: '进来多少人、肯付多少', ks: ['signage', 'talk', 'crowd', 'expand'] },
-  { name: '店员', say: '你不在柜台时谁看店', ks: ['clerk', 'apprentice', 'watch'] },
-  { name: '柜台', say: '单卡的柜位，和你自己开包的手气', ks: ['case', 'luck'] },
-];
-
 // id: the stamp key and the node's element id (tn-<id>); a 名气 perk's is perk-<k>, since perk 手气底子 and skill 手气 are both `luck`.
 // have / price: what pays for it (名气 for perks: no bill, no 闲钱, no 退回) — cash when absent.
 interface Node { k: string; id: string; icon: string; act: string; name: string; desc: string; lv: number; max: number; cost: number | undefined; fx: [string, string]; end: string; blocked: string; gate?: [number, number]; have?: number; price?: (v: number) => string }
 function nodeOf(k: string): Node {
+  const lock = G.growthLock(k);
   if (k in G.UPGRADES) {
-    const u = G.UPGRADES[k], lv = G.lvl(k), ok = G.canUpgrade(k);
+    const u = G.UPGRADES[k], lv = G.lvl(k), ok = !lock;
+    // the 扩建 gate bar is only the real gate while its parent is out of the way: before that the lock names the parent
+    const crowd = k === 'expand' && !ok && (lv > 0 || G.lvl('crowd') > 0) && G.crowdRaw() <= G.CROWD_KNEE;
     return { k, id: k, icon: `u-${k}`, act: 'up', name: u.name, desc: u.desc, lv, max: u.costs.length, cost: G.upgradeCost(k), fx: ok ? fxOf(k, lv, UFX[k]) : [UFX[k](lv), UFX[k](lv + 1)], end: UFX[k](u.costs.length),
-      blocked: ok ? '' : `图鉴收录和新系列解锁的客流加成超过 ×${G.CROWD_KNEE} 后可扩建`, gate: ok ? undefined : [G.crowdRaw(), G.CROWD_KNEE] };
+      blocked: lock, gate: crowd ? [G.crowdRaw(), G.CROWD_KNEE] : undefined };
   }
   const sk = G.SKILLS[k], lv = G.skill(k), max = G.skillMax(k);
-  return { k, id: k, icon: `u-${k}`, act: 'learn', name: sk.name, desc: sk.desc, lv, max, cost: G.skillCost(k), fx: fxOf(k, lv, sk.fx), end: sk.fx(max), blocked: G.canLearn(k) ? '' : '先雇店员（店员 Lv 1）才能学' };
+  return { k, id: k, icon: `u-${k}`, act: 'learn', name: sk.name, desc: sk.desc, lv, max, cost: G.skillCost(k), fx: fxOf(k, lv, sk.fx), end: sk.fx(max), blocked: lock };
 }
 
 // The moment a level lands: its node stamps (badge pops, the new ring segment lights) for UP_MS, and sound.ts plays the stamp.
@@ -188,7 +182,7 @@ function perkNode(k: string): Node {
 // Everything the 成长 page paints yellow right now: tree levels 闲钱 covers, perks the 名气 on hand covers, and 开分店 once the debt
 // is paid. The nav badge (layout.ts) is this count, so the number and the yellow rings never disagree.
 export function growCount() {
-  return LINES.flatMap(l => l.ks).map(nodeOf).filter(yellow).length + Object.keys(G.PERKS).map(perkNode).filter(yellow).length + (G.canBranch() ? 1 : 0);
+  return GROWTH_KEYS.map(nodeOf).filter(yellow).length + Object.keys(G.PERKS).map(perkNode).filter(yellow).length + (G.canBranch() ? 1 : 0);
 }
 function yellow(n: Node) { const pay = n.have ?? G.state.cash; return n.cost != null && !n.blocked && pay >= n.cost && (n.have != null || n.cost <= G.spare()); }
 
@@ -200,11 +194,11 @@ function seek(id: string) {
   el.classList.remove('seek'); void el.offsetWidth; el.classList.add('seek');
 }
 
-function node(n: Node, next: string | undefined, lit: boolean) {
+function node(n: Node, next: string | undefined) {
   const perk = n.have != null, cash = n.have ?? G.state.cash, money = n.price ?? moneyOf, done = n.cost == null, can = !done && !n.blocked && cash >= n.cost!, free = can && yellow(n);
-  const back = !perk && G.refundable().find(x => x.k === n.k), up = popped(n.id, n.lv), got = n.id === 'luck' ? luckUp() : undefined;
+  const back = !perk && G.refundable().find(x => x.k === n.k), held = !perk && !back && n.lv > 0 ? G.refundBlock(n.k) : '', up = popped(n.id, n.lv), got = n.id === 'luck' ? luckUp() : undefined;
   const st = done ? 'max' : n.blocked ? 'lock' : n.lv ? 'own' : 'new';
-  return html`<li class="tn ${st}${free ? ' can' : ''}${n.k === next ? ' next' : ''}${up ? ' up' : ''}${lit ? ' lit' : ''}" id="tn-${n.id}" style="--lv:${n.lv};--max:${n.max}">
+  return html`<div class="tn ${st}${free ? ' can' : ''}${n.k === next ? ' next' : ''}${up ? ' up' : ''}" id="tn-${n.id}" style="--lv:${n.lv};--max:${n.max}">
     <span class="tn-badge" style="--i:url(gen/${n.icon}.webp)" role="img" aria-label="${n.name} Lv ${n.lv}/${n.max}${done ? '，满级' : n.blocked ? '，锁着' : ''}"></span>
     <p class="tn-top"><b>${n.name}</b><span class="gt-lv">Lv ${n.lv}<small>/${n.max}</small></span>${n.k === next ? html`<small class="tn-next">下一步</small>` : ''}</p>
     <p class="gt-fx">${done ? n.fx[0] : html`${n.fx[0]} <span aria-hidden="true">→</span> <b>${n.fx[1]}</b>`}</p>
@@ -214,22 +208,57 @@ function node(n: Node, next: string | undefined, lit: boolean) {
       : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
         ${can ? (perk ? '' : billNote(n.cost!)) : html`${bar(cash / n.cost!, `攒了 ${Math.round(cash / n.cost! * 100)}%`)}<small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
     ${back ? refundBtn(back.k, n.name, n.lv, back.cost) : ''}
-  </li>`;
+    ${held ? html`<p class="gt-held"><small>${held}</small></p>` : ''}
+  </div>`;
+}
+
+// The counter's free root: not an upgrade and not for sale — it opens when the player has opened a pack or taken in a card
+// (G.cardBranchReady), and 展示柜 and 手气 hang off it.
+function milestone() {
+  const ok = G.cardBranchReady();
+  return html`<div class="tn ms ${ok ? 'own' : 'new'}" id="tn-ms-cards" style="--lv:${ok ? 1 : 0};--max:1">
+    <span class="tn-badge" role="img" aria-label="开始收卡：${ok ? '已达成' : '还没达成'}"></span>
+    <p class="tn-top"><b>开始收卡</b><span class="gt-lv">${ok ? '已达成' : '未达成'}</span></p>
+    <p class="gt-fx">${ok ? '展示柜和手气都可以升了' : '开过一包，或收进一张卡，下面两项才能升'}</p>
+    <p class="gt-desc">这一步不用花钱，做到就算。</p>
+  </div>`;
+}
+
+// 成长树: one category open at a time, the others are a row of toggle buttons above it. A category is a real prerequisite
+// hierarchy (growth.ts, the one graph game.ts enforces too): a node hangs off the node that must be bought first, and the lines
+// between them are inked where the child has levels. A level bought before its parent was required stays owned and upgradable.
+let picked = '';
+const keysOf = (ns: readonly GrowthNode[]): GrowthKey[] => ns.flatMap(x => [x.k, ...keysOf(x.children ?? [])]);
+const treeOfKey = (k?: string) => GROWTH_TREES.find(t => k && keysOf(t.roots).includes(k as GrowthKey));
+
+// A node opens its category first, so 下一步 can scroll to a node that is not on screen; the panel is drawn at once for the scroll.
+export function revealTarget(k: string) {
+  const t = treeOfKey(k); if (t && t.id !== picked) { picked = t.id; renderUpgrades(); }
+  seek(`tn-${k}`);
+}
+
+function branch(g: GrowthNode, next: string | undefined): TemplateResult {
+  const n = nodeOf(g.k);
+  return html`<li class="tb${n.lv ? ' own' : ''}">${node(n, next)}${g.children?.length ? html`<ul class="tb-kids">${g.children.map(c => branch(c, next))}</ul>` : ''}</li>`;
 }
 
 function tree(next?: string) {
-  return html`<h2>成长树 <small>四条线，每一项是一个徽章，外圈一格一级</small></h2>
-    <div class="tree">${LINES.map(l => {
-      const ns = l.ks.map(nodeOf), lv = ns.reduce((a, n) => a + n.lv, 0), max = ns.reduce((a, n) => a + n.max, 0);
-      const reach = ns.reduce((a, n, i) => n.lv ? i : a, -1); // the rail is inked from the first node down to the last one with a level
-      return html`<section class="t-line" aria-label="${l.name}线">
-        <h3>${l.name}线 <small>${lv}/${max} 级</small></h3>
-        <p class="tl-say">${l.say}</p>
-        <ol>${ns.map((n, i) => node(n, next, i < reach))}</ol>
-        <p class="tl-end"><b>${lv === max ? '已全部升满' : '满级效果'}</b>${ns.map(n => n.end).join(' · ')}</p>
-        ${l.ks.includes('luck') ? odds() : ''}
-      </section>`;
-    })}</div>`;
+  const open = GROWTH_TREES.find(t => t.id === picked) ?? treeOfKey(next) ?? GROWTH_TREES[0];
+  picked = open.id;
+  const stat = (t: GrowthTree) => { const ns = keysOf(t.roots).map(nodeOf); return { t, ns, lv: ns.reduce((a, n) => a + n.lv, 0), max: ns.reduce((a, n) => a + n.max, 0), buy: ns.filter(yellow).length, next: ns.some(n => n.k === next) }; };
+  const tabs = GROWTH_TREES.map(stat), cur = tabs.find(s => s.t === open)!;
+  const roots = open.roots.map(g => branch(g, next));
+  return html`<h2>成长树 <small>分四类，一次展开一类；每一项挂在要先买的那项下面</small></h2>
+    <div class="tree">
+      <div class="tree-tabs" role="group" aria-label="成长分类">${tabs.map(s => html`<button type="button" class="tt" aria-pressed="${s.t === open ? 'true' : 'false'}" aria-controls="tree-panel" @click=${() => { picked = s.t.id; renderUpgrades(); }}>
+        <b>${s.t.name}</b><small>${s.lv}/${s.max} 级</small>${s.buy ? html`<small class="tt-n">${s.buy} 项买得起</small>` : s.next ? html`<small class="tt-n">下一步在这</small>` : ''}</button>`)}</div>
+      <section class="tree-panel" id="tree-panel" aria-label="${open.name}">
+        <p class="tl-say">${open.say}</p>
+        <ul class="tr">${open.milestone === 'cards' ? html`<li class="tb own">${milestone()}<ul class="tb-kids">${roots}</ul></li>` : roots}</ul>
+        <p class="tl-end"><b>${cur.lv === cur.max ? '已全部升满' : '满级效果'}</b>${cur.ns.map(n => n.end).join(' · ')}</p>
+        ${open.milestone === 'cards' ? odds() : ''}
+      </section>
+    </div>`;
 }
 
 // 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
@@ -269,6 +298,6 @@ function renderBranch() {
     </div>
     <section class="perks" id="perks" aria-labelledby="perks-h">
       <h3 class="br-h" id="perks-h">名气加成 <small>${b.got ? `永久，这家店和以后每家新店都有 · 手上 ${pts(b.fame)}` : '开分店带走的名气在这里花，每家新店都有'}</small></h3>
-      <ol>${Object.keys(G.PERKS).map(k => node(perkNode(k), undefined, false))}</ol>
+      <ol>${Object.keys(G.PERKS).map(k => html`<li>${node(perkNode(k), undefined)}</li>`)}</ol>
     </section>`, $('branch'));
 }
