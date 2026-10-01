@@ -38,6 +38,7 @@ function shelfDot() {
   const fresh = (HOME[currentPage()] ?? currentPage()) !== 'shelf' && (Object.values(s.miss).some(ts => ts.some(t => t > seen)) || s.recent.some(v => v.at > seen && v.r === 'pricey'));
   const n = SETS.reduce((a, x) => a + G.missed(x.id), 0);
   el.hidden = !fresh; el.classList.toggle('bare', !n);
+  el.title = n ? `最近 ${G.MISS_WINDOW / 60} 分钟，${n} 位顾客想买的整包没上架；不是库存数量` : '有顾客嫌标价贵，去货柜查看价格反馈';
   render(html`${n || ''}<span class="visually-hidden">${n ? ` 位顾客没买到` : ' 有顾客嫌贵走了'}</span>`, el);
 }
 
@@ -46,6 +47,7 @@ function shelfDot() {
 export function renderTabs() {
   const n = growCount(), el = $('grow-n');
   el.hidden = !n; render(html`${n}<span class="visually-hidden"> 项买得起</span>`, el);
+  el.title = `成长页有 ${n} 项可选；升级只计留好账款后买得起的项目`;
   shelfDot();
 }
 

@@ -32,6 +32,7 @@ function boost() {
 export function renderRail() {
   const s = G.state, L = G.luck();
   render(html`<h2>仓库里的包</h2>
+    ${s.debt > 0 ? html`<p class="rail-more">还欠九姐 <b>${money(s.debt)}</b>，按周还款。<a href="#grow">查看账本 →</a></p>` : ''}
     <ul class="rail-sets">${SETS.filter(x => G.unlocked(x.id)).map(x => {
       const n = s.stock[x.id] || 0, w = G.wholesale(x.id);
       return html`<li><img src="${logoUrl(x.id)}" alt="" loading="lazy"><span class="rs-name">${x.name}<small>${n ? `仓库 ${n} 包` : '仓库空了'}</small></span>

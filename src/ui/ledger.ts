@@ -32,7 +32,8 @@ export function renderDue() {
   el.hidden = false;
   const left = o ? o.until - s.shopT : G.dueIn(), hot = !!o || left < 300 || (b != null && s.cash < b.amount);
   el.className = `due${o ? ' late' : hot ? ' hot' : ''}`;
-  el.title = o ? `第 ${o.week} 周的账逾期，宽限 ${clock(left)}` : `第 ${b!.week} 周的账 ${money(b!.amount)}，${clock(left)} 后九姐来收`;
+  el.title = (o ? `第 ${o.week} 周的账逾期，宽限 ${clock(left)}` : `第 ${b!.week} 周的账 ${money(b!.amount)}，${clock(left)} 后九姐来收`) + `；总欠款 ${money(s.debt)}。点击查看账本`;
+  el.setAttribute('aria-label', el.title);
   // the chip is the shop's battle box: HP is the till against this bill — full means 九姐 gets paid on the spot
   const owed = o ? o.amount : b!.amount, hp = bar(s.cash / owed, `手上 ${money(s.cash)}，账 ${money(owed)}`, { hp: true, k: 'HP' });
   render(o ? html`<span class="k">逾期</span><b>${clock(left)}</b><small>差 ${money(Math.max(0, o.amount - s.cash))}</small>${hp}`

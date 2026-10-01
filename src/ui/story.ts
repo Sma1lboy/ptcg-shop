@@ -73,6 +73,7 @@ function draw() {
   render(html`${keyed(`${cur.id}.${cur.scene}`, html`<div class="st-scene" data-bg=${sc.bg}></div>`)}
     ${sc.seal && cur.ctx.setId ? keyed(`${cur.id}.${cur.scene}.book`, closing(cur.ctx.setId, sc.seal)) : nothing}
     ${cast.map(w => html`<img class="st-who ${SIDE[w]} ${w === line.who ? 'on' : ''}" src="gen/story/${w}.webp" alt="" @error=${(e: Event) => ((e.target as HTMLElement).hidden = true)}>`)}
+    <p class="st-pause">对话期间暂停经营与账单计时</p>
     <button type="button" class="ghost st-skip" @click=${(e: Event) => { e.stopPropagation(); end(); }}>跳过</button>
     <div class="st-box ${line.who ? '' : 'narr'}">
       ${line.who ? html`<p class="st-name ${SIDE[line.who] ?? ''}">${NAMES[line.who]}</p>` : nothing}

@@ -12,7 +12,7 @@ import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1; done?: 1 }; // done: every step was reached once — the guide is over for good (a sold-out shelf or a new set later is notice.ts's, not a step replayed)
+type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1; done?: 1; badges?: 1 }; // done: every guide step reached; badges: the missed-customer explanation was visible when the player acted
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -176,6 +176,7 @@ export function renderGuide() {
   render(html`<p class="co-k">${step.h === '补货' ? '新手 · 提醒' : `新手 ${NUMBERED.indexOf(step) + 1}/${NUMBERED.length}`}</p>
     <h3>${step.h}${here || page() === step.page ? nothing : html`<small>：到${page() === 'case' && step.page === 'shelf' ? '「货架」' : `「${TAB[step.page]}」页`}</small>`}</h3>
     <p>${step.p(here)}</p>
+    ${!rec.badges && here && SETS.some(s => G.missed(s.id) > 0) ? html`<p class="co-badge">货柜页签的数字不是库存：它记最近 ${G.MISS_WINDOW / 60} 分钟想买的整包没上架的顾客。进货后还要上架。</p>` : nothing}
     <div class="co-btns"><button type="button" class="ghost" data-coach="off">${n ? '关掉' : '跳过引导'}</button>
       ${n ? html`<button type="button" class="ghost" data-coach="next">${end ? '完成' : '下一步'}</button>`
         : step.h === '定价' && here ? html`<button type="button" class="ghost" data-coach="price">先按这个价卖</button>`
@@ -202,13 +203,15 @@ export function bindGuide() {
   document.addEventListener('ptcg:release', renderGuide); document.addEventListener('ptcg:story', renderGuide); document.addEventListener('ptcg:memo', renderGuide);
   document.addEventListener('click', e => {
     const t = e.target as Element, b = t.closest<HTMLElement>('[data-coach], [data-act]'); if (!b) return;
+    const badged = !rec.badges && !!$('coach').querySelector('.co-badge')?.getClientRects().length;
+    if (badged) { rec.badges = 1; save(); }
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }
     else if (b.dataset.act === 'sharemat') { if (!rec.share) { rec.share = 1; save(); } }
     else if (b.dataset.coach === 'price') { rec.price = 1; save(); }
     else if (b.dataset.coach === 'bill') { rec.bill = 1; save(); }
     else if (b.dataset.coach === 'off') { if (replay < 0) { rec.off = 1; save(); } replay = -1; }
     else if (b.dataset.coach === 'next') { replay = replay + 1 < STEPS.length ? replay + 1 : -1; if (replay >= 0) go(STEPS[replay].page); }
-    else return;
+    else { if (badged) queueMicrotask(renderGuide); return; }
     queueMicrotask(renderGuide);
   });
   G.on(renderGuide); renderGuide();
