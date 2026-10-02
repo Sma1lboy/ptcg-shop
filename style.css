@@ -637,8 +637,9 @@ button:disabled { cursor: not-allowed; }
 .sb-n { position: absolute; right: 3px; top: 3px; z-index: 1; padding: 0 5px; border-radius: 2px; background: var(--ink); color: var(--bg); font: 700 var(--fs-cap)/1.5 var(--font-tag); }
 .sb-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-cap); font-weight: 600; }
 .sb-btns { display: flex; flex-wrap: wrap; gap: 4px; }
-.page .sb-btns button { flex: 1 1 auto; min-height: 28px; padding: 2px 6px; font-size: var(--fs-cap); }
+.page .sb-btns button { flex: 1 1 auto; min-width: 44px; min-height: 44px; padding: 2px 6px; font-size: var(--fs-cap); }
 .page .sb-btns [data-act="sell"] { flex-basis: 100%; }
+.sb-pk.gone .sb-btns { visibility: hidden; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
