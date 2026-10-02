@@ -55,8 +55,8 @@ export const ACH: Ach[] = [
   { id: 'ten-gold', group: 'luck', seal: '十连三金', name: '十连三金', desc: '一次十连开出 3 张金星卡', cash: 100, prog: G => [Math.min(f(G, 'tenGold'), 3), 3] },
   { id: 'pack-100', group: 'luck', seal: '百刀包', name: '一包百刀', desc: '一包开出市值 $100 以上', cash: 100, money: true, prog: G => [Math.min(f(G, 'top'), 100), 100] },
 
-  { id: 'dex-25', group: 'dex', seal: '入册', name: '图鉴入册', desc: '任一系列图鉴收录 25%', cash: 15, prog: G => [Math.min(Math.round(bestDex(G) * 100), 25), 25] },
-  { id: 'dex-50', group: 'dex', seal: '半本', name: '半本图鉴', desc: '任一系列图鉴收录 50%', cash: 50, prog: G => [Math.min(Math.round(bestDex(G) * 100), 50), 50] },
+  { id: 'dex-25', group: 'dex', seal: '入册', name: '图鉴入册', desc: '任一系列图鉴收录 25%', cash: 15, prog: G => [Math.min(Math.floor(bestDex(G) * 100), 25), 25] },
+  { id: 'dex-50', group: 'dex', seal: '半本', name: '半本图鉴', desc: '任一系列图鉴收录 50%', cash: 50, prog: G => [Math.min(Math.floor(bestDex(G) * 100), 50), 50] },
   { id: 'master-1', group: 'dex', seal: '大师套', name: '第一套大师套', desc: '收齐一个系列的每一张卡', cash: 500, prog: G => [Math.min(masters(G), 1), 1] },
   { id: 'master-3', group: 'dex', seal: '三套', name: '三套大师套', desc: '收齐三个系列', cash: 1500, prog: G => [Math.min(masters(G), 3), 3] },
   { id: 'master-all', group: 'dex', seal: '全图鉴', name: '全图鉴', desc: `${SETS.length} 个系列全部收齐（只有标签，没有奖金）`, cash: 0, prog: G => [masters(G), SETS.length] },

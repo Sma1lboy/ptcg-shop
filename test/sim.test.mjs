@@ -367,6 +367,13 @@ console.log('ok luck percentile');
   assert.ok(A.ACH.every(a => a.cash >= 0 && a.seal.length <= 4 && A.GROUPS.some(([g]) => g === a.group) && (a.group !== 'hidden' || a.hint)), 'every achievement has a reward ≥ 0, a short seal, a group, and a hint if hidden');
   assert.ok(A.TIERS.every(([k]) => A.ACH.some(a => A.tier(a) === k)) && A.ACH.filter(a => A.tier(a) === 'black').every(a => !a.cash), 'every medal tier has achievements; 荣誉 are the honour-only ones');
   assert.deepEqual(A.check(G), [], 'a fresh shop has earned nothing');
+  // Rounded display percentages must not unlock a collection milestone one card early.
+  for (const percent of [25, 50]) for (const offset of [-1, 0]) {
+    const R = createGame({ now: () => T, random: S.rng(1234), storage: null }), cards = PTCG_DATA.sv08.cards;
+    const count = Math.ceil(cards.length * percent / 100) + offset;
+    for (const c of cards.slice(0, count)) R.state.dexSeen[`sv08|${c.n}`] = 1; // seed before the first cached dex count
+    assert.equal(ids(A.check(R)).includes(`dex-${percent}`), offset === 0, `${count}/${cards.length}: ${percent}% needs the actual share`);
+  }
 
   // One pack: 开张 is earned once, its reward paid once, and it is not revenue (set unlocks stay put).
   G.buy('sv08', 1); const cash0 = st().cash, rev0 = G.revenue(); G.open('sv08', 1);
