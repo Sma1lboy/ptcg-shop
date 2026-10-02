@@ -47,7 +47,7 @@ export function renderEarnings() {
     <p>停留在开包页且页面可见，顾客成交和店员卖散卡可多得 ${G.IDLE_BONUS * 100}% 奖励。切页或转到后台立即停止；没有销售就没有奖励。</p>
     <p>本店挂机奖励 <b class="gain">${money(extra.idle)}</b></p>
     <details><summary>离线经营 · 奖励 +${Math.round(offline * 100)}%</summary>
-      <p>离开后最多经营 ${G.offlineCap() / 3600} 小时，仍需库存。「看店」每级增加 ${G.OFFLINE_BONUS * 100}% 离线销售奖励，最多 ${G.SKILLS.watch.max * G.OFFLINE_BONUS * 100}%。与挂机不叠加，门票不加成。</p>
+      <p>离开后最多经营 ${G.offlineCap() / 3600} 小时，仍需库存。「看店」每级增加 ${G.OFFLINE_BONUS * 100}% 离线销售奖励，最多 ${Math.round(G.SKILLS.watch.max * G.OFFLINE_BONUS * 100)}%。与挂机不叠加，门票不加成。</p>
       <p>本店离线奖励 <b class="gain">${money(extra.offline)}</b> · <a href="#grow">去成长升级看店</a></p>
     </details>`, $('playmode'));
 }
