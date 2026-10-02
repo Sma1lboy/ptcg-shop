@@ -30,12 +30,12 @@ export function fxOf(k: string, lv: number, words: (lv: number) => string): [str
 // When a cash buy would leave less than the bill 九姐 collects next (paid from the till), or less than the clerk needs for a round
 // (he buys with what is in the till: a buy just before his round leaves the shelves bare until the next one), say it before the click.
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-export function billNote(cost: number) {
-  const b = G.nextBill(), cash = G.state.cash, left = cash - cost, clerk = G.clerkBudget();
+export function billNote(cost: number, k: string) {
+  const b = G.nextBill(), cash = G.state.cash, left = cash - cost, clerk = G.clerkBudget(), hire = k === 'clerk' && G.lvl('clerk') === 0;
   const bill = b && left < b.amount, stock = left < clerk;
-  if (cash < cost || (!bill && !stock)) return '';
-  return html`<p class="gt-bill">买完剩 ${moneyOf(left)}${bill ? html`，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b!.amount)}` : ''}${stock
-    ? html`${bill ? '；' : '，'}店员一轮补满货架要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}</p>`;
+  if (cash < cost || (!bill && !stock && !hire)) return '';
+  return html`<p class="gt-bill">仅扣本次费用后剩 ${moneyOf(left)}${bill ? html`，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b!.amount)}` : ''}${stock
+    ? html`${bill ? '；' : '，'}店员一轮进货要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}${hire ? html`。雇用后马上巡一轮货架，另用现金补到半满，不预留账款。` : ''}</p>`;
 }
 
 // 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.
@@ -123,7 +123,7 @@ export function renderUpgrades() {
       ${G.canBranch() ? branchGoal() : goal ? html`<div class="gh-goal">
         <p class="gg-k">${cash >= goal.cost ? (goal.cost <= G.spare() ? '下一步，现在就能升' : '下一步，钱够但要动账单的钱') : '下一步'}${goal.why ? `：${goal.why}` : ''}</p>
         <button type="button" class="gg-what" @click=${() => revealTarget(goal.k)}><b>${goal.name} Lv ${goal.lv + 1}</b><span>${goal.fx[0]} → <b>${goal.fx[1]}</b></span><i aria-hidden="true">↓</i></button>
-        ${cash >= goal.cost ? html`<button type="button" class="${goal.cost <= G.spare() ? 'primary' : ''}" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost)}`
+        ${cash >= goal.cost ? html`<button type="button" class="${goal.cost <= G.spare() ? 'primary' : ''}" data-act="${goal.act}" data-k="${goal.k}">升级 · ${money(goal.cost)}</button>${billNote(goal.cost, goal.k)}`
           : html`${bar(cash / goal.cost, `攒了 ${Math.round(cash / goal.cost * 100)}%`)}
             <small>${money(cash)} / ${money(goal.cost)}，还差 ${money(goal.cost - cash)}</small>`}
         ${spareLine()}
@@ -206,7 +206,7 @@ function node(n: Node, next: string | undefined) {
     <p class="gt-desc">${n.desc}</p>
     ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`${bar(n.gate[0] / n.gate[1], `口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}`)}<small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
       : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
-        ${can ? (perk ? '' : billNote(n.cost!)) : html`${bar(cash / n.cost!, `攒了 ${Math.round(cash / n.cost! * 100)}%`)}<small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
+        ${can ? (perk ? '' : billNote(n.cost!, n.k)) : html`${bar(cash / n.cost!, `攒了 ${Math.round(cash / n.cost! * 100)}%`)}<small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
     ${back ? refundBtn(back.k, n.name, n.lv, back.cost) : ''}
     ${held ? html`<p class="gt-held"><small>${held}</small></p>` : ''}
   </div>`;
