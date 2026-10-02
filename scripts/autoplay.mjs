@@ -245,9 +245,10 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const stamp = () => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   const ev = (kind, key, label, count = true, extra) => { const k = kind + ':' + key; if (seenEv.has(k)) return; seenEv.add(k); events.push({ t, at: stamp(), kind, key, label, count, ...(typeof extra === 'function' ? extra() : extra) }); };
   const did = s => acts.push(`${stamp()} ${s}`);
-  // Diagnostics only (no random calls, no policy): money the player puts out, by kind. refill = packs bought by hand (guide, box, 开一包), growth = upgrades/skills
+  // Diagnostics only (no random calls, no policy): money the player puts out, by kind. refill = packs bought by hand or clerk, growth = upgrades/skills
   // bought, bill = 九姐's bill_paid amounts, bonus = 成就 cash paid in; intake = state.intake.cost (收卡 at the counter); bare* = seconds a racked shelf stood empty.
   const sp = { refill: 0, growth: 0, bill: 0, bonus: 0 }, bare = { any: 0, all: 0 }, ser = [];
+  let clerkAt = null, clerkSpent = 0;
   const pay = (id, n) => { const before = st().stock[id] || 0, ok = G.buy(id, n); if (ok) sp.refill += ((st().stock[id] || 0) - before) * G.wholesale(id); return ok; };
   // ----- common.ts -----
   const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0; return Math.min(room, n > 1 ? n - 1 : n); };
@@ -461,6 +462,11 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   watchShop(); seen.sets = init0.size; play('opening');
   for (t = 1; t <= N; t++) {
     G.setIdle(page === 'open'); advance(1); G.tick(hold); cashPrev = st().cash;
+    const round = st().clerkRound;
+    if (round) {
+      sp.refill += round.spent - (round.at === clerkAt ? clerkSpent : 0);
+      clerkAt = round.at; clerkSpent = round.spent;
+    }
     if (storyLeft > 0) { if (--storyLeft === 0) { cur = null; G.pause(false); storyFlush(); } if (t % snapEvery === 0) rows.push(snap()); continue; }
     for (const id of unlockedIds()) if (!init0.has(id)) ev('unlock', id, G.setById(id).name);
     const all = buyables().sort((a, b) => a.cost - b.cost), pool = live(all);
