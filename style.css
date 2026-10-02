@@ -1596,9 +1596,9 @@ button:disabled { cursor: not-allowed; }
   :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px - 64px); }
   /* and the page's end scrolls clear of the strip (it lay over 清空存档) */
   :root:has(#coach[data-strip]:popover-open) body { padding-bottom: 64px; }
-  /* with a receipt hanging the slot scrolls with the page; an achievement label printed under it then lay over whatever the page
-     had scrolled to (the rail's first set). The label keeps to the top of the screen instead, for its few seconds */
-  .pops:has(> #notice:not([hidden])) > .ach-pop:not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 8px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
+  /* Long paper scrolls with the page. Achievement labels remain briefly visible under the top bar. */
+  .pops:has(> #notice:not([hidden])) > .ach-pop:not([hidden]),
+  :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])) > .ach-pop:not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 8px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
   /* panels keep the double frame but thinner, so a 390 screen still has ~330px of content */
   :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
@@ -1614,10 +1614,9 @@ button:disabled { cursor: not-allowed; }
   .memo .mm-why { display: none; }
   .memo .mm-box { padding-bottom: 10px; }
   .memo h2 { margin-bottom: 8px; }
-  /* while the receipt hangs the slot is part of the page: it scrolls away with it, and the page makes room for it (--notice-h,
-     notice.ts: the stub, or the whole receipt once unrolled) so the 货架 / 展示柜 tabs stay pressable. Labels alone hang fixed, to be
-     seen wherever the player has scrolled; they are brief and overlay */
-  .pops:has(> #notice:not([hidden])) { position: absolute; }
+  /* Receipts and non-opening memos hang over reserved document space, not over the viewport's scrolled controls. */
+  .pops:has(> #notice:not([hidden])),
+  :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])) { position: absolute; }
   :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 22px + var(--notice-h, 44px)); }
   /* 店里的话 (no receipt up): the page starts under the box, so the 货架 / 展示柜 view tabs aren't covered at the top of the page */
   :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
