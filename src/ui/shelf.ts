@@ -91,9 +91,11 @@ function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnTyp
         ${bt ? keyed(bt.k, html`<span class="r-beat ${bt.n ? '' : 'lost'}">${bt.n ? html`${bt.flip ? '倒爷买走' : '卖出'} ${bt.n} 包 <em>+${money(bt.gain)}</em>` : `${bt.lost} 位空手走`}</span>`) : nothing}</div>
       <p class="r-rail">${id ? html`<span class="sticker" title="标价（占市价 ${Math.round(G.pctOf(id) * 100)}%）">${money(G.ask(id))}</span>
         <span>${r.qty ? html`<b>${r.qty}</b>/${deep}` : html`<b>0</b>/${deep}`}</span>` : html`<span>放 ${deep} 包</span>`}</p>
+      <div class="r-notes" tabindex="${swept.length || miss || sw ? 0 : -1}" aria-label="货架近期销售与缺货">
       ${swept.length ? html`<p class="r-miss" title="倒爷只买便宜货：每人肯出的上限不同，平均约市价的 ${Math.round(G.TYPES.flipper.tol * 100)}%。你的标价不高于他的上限，他就一次买走 4 到 15 包（不超过货架上有的），按标价付钱；买过一批，${G.FLIP_COOLDOWN / 60} 分钟内不再买这个系列">倒爷买走 <b>${swept.reduce((a, v) => a + v.n!, 0)}</b> 包：标价是市价的 ${Math.round(swept[0].pct! * 100)}%，他肯出到 ${Math.round(Math.max(...swept.map(v => v.max!)) * 100)}%</p>` : nothing}
       ${miss ? html`<p class="r-miss" title="${lately()}，来买这个系列、货架上却没有的拆包玩家：一半改买了别的，一半走了">${lately()} <b>${miss}</b> 位没买到</p>` : nothing}
       ${sw ? html`<p class="r-miss r-swap" title="${lately()}：来买${G.setById(sw.id).name}却不在任何货架上的拆包玩家 ${sw.miss} 位；这个货架的系列买走的只有 ${sw.buyers} 位">${G.setById(sw.id).name} <b>${sw.miss} 位</b>没找到 · 这架只卖给 ${sw.buyers} 位${canSwap ? html` <button type="button" @click=${() => G.place(i, sw.id)}>换成${G.setById(sw.id).name}</button>` : '：在下面换系列'}</p>` : nothing}
+      </div>
       <div class="r-ctl"><select data-act="place" data-i="${i}" data-cur="${id ?? ''}" aria-label="第 ${i + 1} 个货架摆什么">
           ${id ? html`<option value="${id}" .selected=${live(true)}>${G.setById(id).name}</option>` : html`<option value="-" .selected=${live(true)} disabled>摆上…</option>`}
           ${others.map(opt)}
