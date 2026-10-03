@@ -8,7 +8,7 @@ let lastExtra: { tickets: number; idle: number; offline: number } | null = null;
 
 // What the till's change was made of, when it all came from the counter: packs sold stay a bare 「+$」 (the 第一笔生意 note says what
 // it is), a case card sold reads 「卖卡 +$」, hits bought off a customer 「收卡 −$」 — a net −$136 with packs sold and cards bought in the
-// same second read as money gone for nothing. Anything else in the change (the player's own buys) leaves the bare number.
+// same second read as money gone for nothing. Other changes (including the player's buys) are explicitly labelled as a net, not a transaction price.
 function sources(d: number, extra: { tickets: number; idle: number; offline: number }) {
   const vs = G.state.recent.filter(v => v.at > seenAt);
   seenAt = Math.max(seenAt, ...vs.map(v => v.at));
@@ -35,7 +35,7 @@ export function renderStats(reveal = false) {
   }
   else if (lastCash == null) seenAt = Math.max(seenAt, ...s.recent.map(v => v.at)); // what happened before this page opened isn't news
   lastCash = s.cash;
-  render(html`<p class="cash"><span class="k">现金</span><b>${money(s.cash)}</b>${stamp ? keyed(stamp, html`<span class="delta ${delta >= 0 ? 'gain' : 'loss'}" aria-hidden="true">${why || `${delta >= 0 ? '+' : '−'}${money(Math.abs(delta))}`}</span>`) : ''}</p>
+  render(html`<p class="cash"><span class="k">现金</span><b>${money(s.cash)}</b>${stamp ? keyed(stamp, html`<span class="delta ${delta >= 0 ? 'gain' : 'loss'}" aria-hidden="true">${why || `净 ${delta >= 0 ? '+' : '−'}${money(Math.abs(delta), 'exact')}`}</span>`) : ''}</p>
     <dl class="sub">${([
       ['shelf', '货架', `${shelf} 包`], ['stock', '仓库', `${stock} 包`], ['rate', '到店', `${(G.rate() * 60).toFixed(1)}/分`], ['sales', '成交', s.customers], ['held', '单卡市值', money(held)],
     ] as const).map(([k, n, v]) => html`<div data-k=${k} title=${n}><dt>${n}</dt><dd>${v}</dd></div>`)}</dl>`, $('stats'));
