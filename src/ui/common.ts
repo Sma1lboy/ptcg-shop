@@ -7,7 +7,9 @@ import { card, logo } from '../assets.ts';
 export const G = createGame();
 export const $ = (id: string) => document.getElementById(id)!;
 // Big sums shorten: $123.4K from $100,000, $1.23M from a million (the debt, late revenue); below that, whole dollars from $1,000.
-export const money = (v: number): string => v < 0 ? '−' + money(-v) : '$' + (v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e5 ? `${(v / 1e3).toFixed(1)}K` : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
+// Quotes use cents even above $1,000; overview readouts retain the compact format.
+const exactMoney = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const money = (v: number, mode?: 'exact'): string => v < 0 ? '−' + money(-v, mode) : '$' + (mode === 'exact' ? exactMoney.format(v) : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e5 ? `${(v / 1e3).toFixed(1)}K` : v >= 1000 ? v.toLocaleString('en-US', { maximumFractionDigits: 0 }) : v.toFixed(2));
 export const imgUrl = (c: { set: string; n: string }, size = 'low') => card(c.set, c.n, size);
 export const logoUrl = (id: string) => logo(id);
 // The BW status bar (DESIGN.md「状态条」): the dark plate of a battle box with the fill on a pale track. EXP (the default) is
@@ -54,7 +56,7 @@ export function batchBtn(id: string, again = false) {
 // and the clerk carries the back room onto the shelves between rounds, so one press stands for twenty 进 10).
 export function restock(id: string) {
   const room = G.WAREHOUSE - (G.state.stock[id] || 0), n = Math.max(0, Math.min(room, Math.floor(G.state.cash / G.wholesale(id))));
-  return { n, text: `${n === room ? '进满' : '进'} ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id))}${n < room ? `（仓库还能放 ${room}，钱只够这些）` : '，仓库放满'}` };
+  return { n, text: `${n === room ? '进满' : '进'} ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id), 'exact')}${n < room ? `（仓库还能放 ${room}，钱只够这些）` : '，仓库放满'}` };
 }
 // 进一架: what fills this set's shelves (one empty shelf when it has none yet) plus the one pack 上架 keeps back for the player to open,
 // less what the back room already holds; capped by the cash. The guide's first buy and the usual restock (DESIGN.md「引导」): ten packs
@@ -63,6 +65,6 @@ export function shelfFill(id: string) {
   const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth();
   const want = Math.max(0, Math.min(room + 1 - (G.state.stock[id] || 0), G.WAREHOUSE - (G.state.stock[id] || 0)));
   const n = Math.min(want, Math.floor(G.state.cash / G.wholesale(id)));
-  return { n, full: n === want, text: `进一架 ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id))}：摆满${own.length > 1 ? '这个系列的货架' : '一个货架'}（${G.depth()} 包），仓库留 1 包自己拆` };
+  return { n, full: n === want, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * G.wholesale(id), 'exact')}，数量按货架缺口、仓库空间和现金计算` };
 }
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };

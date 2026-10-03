@@ -2,17 +2,19 @@
 // Works the same for lit-rendered panels and the mat's innerHTML, since it never holds element references.
 import * as FX from '../fx.ts';
 import { G, toShelf } from './common.ts';
-import { startPack, openBatch, startRun, stopRun, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat } from './mat.ts';
+import { startPack, openBatch, startRun, stopRun, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat, hold } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
 import { branchClick } from './upgrades.ts';
 import { loanClick } from './ledger.ts';
 import { resetStory } from './story.ts';
 
+const CARD_ACTIONS = new Set(['shareluck', 'sell', 'bulk', 'list', 'fillcase', 'caseprice', 'buyprice', 'unlist', 'trophy', 'untrophy', 'cprice', 'collect']);
+
 export function bindEvents() {
   let resetArmed = 0;
   document.addEventListener('click', e => {
-    const b = (e.target as Element).closest<HTMLButtonElement>('[data-act]'); if (!b || b.disabled) return;
+    const b = (e.target as Element).closest<HTMLButtonElement>('[data-act]'); if (!b || b.disabled || b.closest('[inert]') || (hold && CARD_ACTIONS.has(b.dataset.act!))) return;
     FX.unlock();
     const id = b.dataset.id!;
     switch (b.dataset.act) {
@@ -30,7 +32,7 @@ export function bindEvents() {
       case 'mute': toggleMute(); break;
       case 'sharemat': shareMat(); break;
       case 'shareluck': showLuck(); break;
-      case 'sell': G.sell(b.dataset.key!); break;
+      case 'sell': { const n = Number(b.dataset.n); if (Number.isInteger(n) && n > 0) G.sell(b.dataset.key!, n); break; }
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key!); break;
       case 'fillcase': G.fillCase(); break;

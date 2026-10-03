@@ -17,7 +17,7 @@ import { go } from './log.ts';
 const pc = (x: number) => `${Math.round(x * 100)}%`;
 const count = (vs: Visit[], r: string, why?: string) => vs.filter(v => v.r === r && (why === undefined || (v.why || '') === why)).length;
 // "$9.80、$10.20" for a few, "$9.80–$11.40" for many
-const spread = (xs: number[]) => spreadOf(xs.map(money), xs);
+const spread = (xs: number[]) => spreadOf(xs.map(x => money(x)), xs);
 // labels of values in value order: "a、b" for a few, "lo–hi" for many
 const spreadOf = (ls: string[], xs: number[]) => { const o = xs.map((x, i) => [x, ls[i]] as const).sort((a, b) => a[0] - b[0]).map(p => p[1]); return o.length > 3 ? `${o[0]}–${o.at(-1)}` : o.join('、'); };
 const tally = (parts: [string, number][]) => parts.filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(' · ');

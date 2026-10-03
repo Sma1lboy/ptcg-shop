@@ -34,7 +34,7 @@ function said(v: Visit) {
     default: return v.r === 'sold' ? `买走 ${v.card}${v.n! > 1 ? ` 等 ${v.n} 张` : ''}` : dear(` ${v.card} `); // seeker (case or binder) / collector at the case
   }
 }
-const amt = (x?: number) => (x ? html`<em class=${x < 0 ? 'loss' : ''}>${x < 0 ? '−' : '+'}${money(Math.abs(x))}</em>` : html`<em></em>`);
+const amt = (x?: number) => (x ? html`<em class=${x < 0 ? 'loss' : ''}>${x < 0 ? '−' : '+'}${money(Math.abs(x), 'exact')}</em>` : html`<em></em>`);
 
 // At 80 walk-ins a minute 30 single lines last 20 seconds, so within a minute the everyday visits merge into one line per
 // (who, how it ended, which set / what they asked for): 「拆包玩家 ×23 买走 61 包同行之旅 +$540」. What carries its own detail

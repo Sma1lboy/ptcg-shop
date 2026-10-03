@@ -95,7 +95,7 @@ function milestones() {
       return html`<li class="${got ? 'got' : s === next ? 'next' : ''}" style="--f:${fill}">
         <img src="${logoUrl(s.id)}" alt="" loading="lazy"><b>${s.name}</b><small>${at[i] ? html`<span class="m-full">$${at[i].toLocaleString('en-US')}</span><span class="m-short">${kMoney(at[i])}</span>` : '开店就有'}</small></li>`;
     })}</ol>
-    <p class="mile-next">${next ? html`下一个：<b>${next.name}</b>，还差 ${money(G.unlockAt(next.id) - rev)} 营业额（卖出的整包和单卡都算）` : '七个系列都解锁了。'}</p>
+    <p class="mile-next">${next ? html`下一个：<b>${next.name}</b>，还差 ${money(G.unlockAt(next.id) - rev)} 营业额（卖出的整包和单卡都算）` : `${SETS.length} 个系列都解锁了。`}</p>
   </section>`;
 }
 

@@ -298,7 +298,8 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* danger: the one irreversible button, a deep red command so it can't pass for a normal one */
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled,
+:where(#luck, #dex, #singles, #casepanel, #case-cust)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }

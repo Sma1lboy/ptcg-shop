@@ -161,11 +161,11 @@ const unlocked = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
 const known = new Set(unlocked());
 // a pack left mid-reveal while the player is on another page: the story, the labels, the new cards and an overdue bill's grace all wait for it (mat.ts hold)
 const away = () => hold && document.documentElement.dataset.page !== 'open';
-// what fixes one set's empty shelf: 上架 from the back room (more than the pack kept to open), else 进一架 bought and put up (events.ts
-// 'refill' does the same per set); null when the cash doesn't cover a shelf's worth
+// Restock one empty set: move spare warehouse packs, or buy and shelve the quoted quantity (events.ts 'refill').
+// Cash may cover only part of the shelf; no quote when neither spare stock nor a purchase of at least 2 packs is available.
 function fix(id: string) {
-  const up = toShelf(id); if ((G.state.stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 };
-  const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null;
+  const up = toShelf(id); if ((G.state.stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货` };
+  const f = shelfFill(id); return f.n > 1 ? { ...f, cost: f.n * G.wholesale(id), up: 0 } : null;
 }
 // every sold-out set at once when each has a fix and the cash covers them together; else the first one alone
 function outIds() {
@@ -305,9 +305,9 @@ function showMemo() {
   }
   const ids = sets, id = ids[0], set = G.setById(id), f = fixes[0], names = ids.map(x => G.setById(x).name).join('、');
   el.dataset.cost = String(cost);
-  const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}" data-n="${fixes.map(f => f?.n ?? 0).join(',')}">都补上${cost ? ` ${money(cost)}` : ''}</button>`
-    : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}">上架 ${f.up} 包</button>`
-    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${f.n}" title="${shelfFill(id).title}">进一架 ${f.n} 并上架 ${money(f.cost)}</button>`
+  const key = ids.length > 1 ? html`<button type="button" class="primary" data-act="refill" data-id="${ids.join(',')}" data-n="${fixes.map(f => f?.n ?? 0).join(',')}" title="${fixes.map((f, i) => `${G.setById(ids[i]).name}：${f?.title ?? '暂时无法补货'}`).join('；')}">按报价补货${cost ? ` ${money(cost, 'exact')}` : ''}</button>`
+    : f?.up ? html`<button type="button" class="primary" data-act="shelve" data-id="${id}" data-n="${f.up}" title="${f.title}">${f.text}</button>`
+    : f ? html`<button type="button" class="primary" data-act="refill" data-id="${id}" data-n="${f.n}" title="${f.title}">${f.text}并上架 ${money(f.cost, 'exact')}</button>`
     : html`<a class="mm-go" href="#shelf">去货柜看看</a>`;
   const x = () => { for (const i of ids) (m.kind === 'out' ? out : fresh).delete(i); memo = null; watchShop(); };
   const head = m.kind === 'out' ? html`<h2>${names}卖空了</h2><p class="mm-why">货架空着不进钱，来买${ids.length > 1 ? '这几个系列' : set.name}的顾客一半空手走。</p>`

@@ -50,7 +50,7 @@ export function renderSingles() {
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
           <span class="sb-btns"><button type="button" data-act="col-take" data-key="${k}" ?disabled=${gone || !canCollect()} title="放进收藏室：只看不卖，不标价">收藏</button><button type="button" data-act="list" data-key="${k}" ?disabled=${gone || full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
             <button type="button" data-act="trophy" data-key="${k}" ?disabled=${gone} title="当镇店之宝，吸引收藏党，但不再出售">镇店</button>
-            <button type="button" data-act="sell" data-key="${k}" ?disabled=${gone} title="立刻卖给同行">卖 ${money(c.price * G.BUYLIST)}</button></span></li>`;
+            <button type="button" data-act="sell" data-key="${k}" data-n="${c.count}" ?disabled=${gone} title="一次卖出这 ${c.count} 张给同行">卖 ${c.count} 张 ${money(c.price * G.BUYLIST * c.count, 'exact')}</button></span></li>`;
       })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡可能按收卡价卖给你，自己开出的闪卡也放这里。</p>`}`, $('singles'));
 }
-addEventListener('hashchange', () => { positions.clear(); if (!hold) renderSingles(); });
+addEventListener('hashchange', () => { if (!hold) { positions.clear(); renderSingles(); } });
