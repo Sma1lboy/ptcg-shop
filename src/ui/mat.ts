@@ -60,7 +60,7 @@ export type ShareSpec = ReturnType<typeof shareSpec>;
 function bookLine(id: string, named = true) {
   const b = toBook(id), n = b.names.length;
   if (!n) return '';
-  return `<p class="to-bk">卡册新插进 <b>${n}</b> 张${named ? `：${b.names.slice(0, 3).map(esc).join('、')}${n > 3 ? ' 等' : ''}` : ''} · 入册 ${b.count}/${b.total}${b.next ? `，${b.next}` : ''}
+  return `<p class="to-bk">自上次看卡册起，新收录 <b>${n}</b> 张${named ? `：${b.names.slice(0, 3).map(esc).join('、')}${n > 3 ? ' 等' : ''}` : ''} · 入册 ${b.count}/${b.total}${b.next ? `，${b.next}` : ''}
       <a href="#luck" data-bk-set="${id}">看卡册</a></p>`;
 }
 function packSummary(cards: Pull[], set: { id: string }) {
@@ -75,10 +75,10 @@ function packSummary(cards: Pull[], set: { id: string }) {
       <p class="rank">${rankText(set.id, v).text}。</p>
       ${bookLine(set.id)}
       <div class="btns">
-        ${stock ? `<button type="button" class="primary" data-act="open1" data-id="${set.id}">再开一包（剩 ${stock}）</button>`
-          : otherId ? `<button type="button" class="primary" data-act="open1" data-id="${otherId}">开一包${esc(G.setById(otherId).name)}（剩 ${otherN}）</button>` : ''}
+        ${otherId ? `<button type="button" class="primary" data-act="open1" data-id="${otherId}">开一包${esc(G.setById(otherId).name)}（剩 ${otherN}）</button>`
+          : `<button type="button" class="primary" data-act="open1" data-id="${set.id}"${stock ? '' : ' disabled'}>再开一包（剩 ${stock}）</button>`}
         ${shareBtn()}
-        ${G.state.cash >= cost ? `<button type="button" data-act="buyopen" data-id="${set.id}">进 1 包马上开</button>` : ''}
+        <button type="button" data-act="buyopen" data-id="${set.id}"${G.state.cash >= cost ? '' : ' disabled'}>进 1 包马上开</button>
       </div></div>`;
 }
 
@@ -140,7 +140,37 @@ function renderIdle() {
         <span class="ip-tag"><b>${it.name}</b><small>${it.note}${it.price ? html`<span>${it.price}</span>` : ''}</small></span></button></li>`)}</ul>
     <p class="ip-next">${nextUnlock()}</p>`, box);
 }
-export const refreshIdle = () => { if (mat.mode === 'idle') { if (table) shelf3D(); else renderIdle(); } };
+export const refreshMat = () => {
+  if (mat.mode === 'idle') { if (table) shelf3D(); else renderIdle(); }
+  else refreshSummary();
+};
+
+// A finished result is a snapshot, but its next-action buttons depend on live stock and cash.
+// Update the existing nodes only: never reset the table, drop a held card, or change a suggested series under the pointer.
+function refreshSummary() {
+  if (hold) return;
+  const box = $('mat').querySelector('.summary'); if (!box) return;
+  for (const b of box.querySelectorAll<HTMLButtonElement>('button[data-id]')) {
+    const id = b.dataset.id!, n = G.state.stock[id] || 0;
+    let text = b.textContent, disabled = b.disabled;
+    switch (b.dataset.act) {
+      case 'open1':
+        text = `${id === mat.set ? '再开一包' : `开一包${G.setById(id).name}`}（剩 ${n}）`;
+        disabled = n < 1;
+        break;
+      case 'buyopen': disabled = G.state.cash < G.wholesale(id); break;
+      case 'open10': case 'fill10': {
+        const next = batchBtn(id, true);
+        if (b.dataset.act !== next.act) b.dataset.act = next.act;
+        text = n ? next.text : '仓库没有包'; disabled = n < 1;
+        break;
+      }
+      case 'autorun': disabled = !hunt(id) || !canGo(id); break;
+    }
+    if (b.textContent !== text) b.textContent = text;
+    if (b.disabled !== disabled) b.disabled = disabled;
+  }
+}
 
 // ---------- 3D table (src/table3d.js) ----------
 // The table only presents mat.cards; mat.up / mat.cur stay the truth, so a lost WebGL context hands the same pack to the 2D mat mid-reveal.
@@ -354,13 +384,13 @@ function finish() {
 function batchSummary() {
   const set = G.setById(mat.set), sp = shareSpec(), stock = G.state.stock[set.id] || 0, r = run;
   const [n, v, cost] = r ? [r.packs, r.value, r.cost] : [mat.packs.length, S.packValue(mat.packs.flat()), G.wholesale(set.id) * mat.packs.length], d = v - cost;
-  const again = hunt(set.id) && canGo(set.id) ? `<button type="button"${stock ? '' : ' class="primary"'} data-act="autorun" data-id="${set.id}">连开到出新卡</button>` : '';
+  const again = hunt(set.id) ? `<button type="button"${stock ? '' : ' class="primary"'} data-act="autorun" data-id="${set.id}"${canGo(set.id) ? '' : ' disabled'}>连开到出新卡</button>` : '';
   return `<div class="summary">
       <p>${r ? `连开 ${r.rounds} 轮 ${n} 包${r.bought ? `（其中现进 ${r.bought} 包）` : ''}` : `${n} 包`}开出 <b>${money(v)}</b>，进货价 ${money(cost)}，<span class="${d >= 0 ? 'gain' : 'loss'}">${d >= 0 ? '赚' : '亏'} ${money(Math.abs(d))}</span>。</p>
       ${r ? `<p class="run-end">${runEnd(r, set.id)}</p>` : ''}
       <p class="rank">${r ? '最后一轮' : ''}最好的一包 ${money(sp.bestPack)}，${sp.rank}。</p>
       ${bookLine(set.id, r?.end !== 'new')}
-      <div class="btns">${stock ? `<button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}">${batchBtn(set.id, true).text}</button>` : ''}${again}${shareBtn()}</div></div>`;
+      <div class="btns"><button type="button" class="primary" data-act="${batchBtn(set.id).act}" data-id="${set.id}"${stock ? '' : ' disabled'}>${stock ? batchBtn(set.id, true).text : '仓库没有包'}</button>${again}${shareBtn()}</div></div>`;
 }
 
 // ---------- 连开 ----------

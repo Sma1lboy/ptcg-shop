@@ -13,7 +13,7 @@ import { renderCase } from './ui/case.ts';
 import { renderCollection, initCollection } from './ui/collection.ts';
 import { renderNotice, initSlip, initMemo } from './ui/notice.ts';
 import { renderSources, renderBasis } from './ui/sources.ts';
-import { renderMat, refreshIdle, bindMatInput, hold } from './ui/mat.ts';
+import { renderMat, refreshMat, bindMatInput, hold } from './ui/mat.ts';
 import { bindEvents } from './ui/events.ts';
 import { bindLayout, renderTabs, currentPage } from './ui/layout.ts';
 import { renderRail } from './ui/rail.ts';
@@ -35,7 +35,7 @@ const cardPanels = ['luck', 'dex', 'singles', 'casepanel', 'case-cust'].map(id =
 // and the rail (their open buttons off). The mat fires ptcg:release when done.
 function renderAll() {
   for (const panel of cardPanels) if (panel.hasAttribute('inert') !== hold) panel.toggleAttribute('inert', hold);
-  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshIdle();
+  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshMat();
 }
 
 bindEvents(); bindMatInput();
