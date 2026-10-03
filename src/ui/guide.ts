@@ -49,8 +49,8 @@ const STEPS: Step[] = [
   { page: 'shelf', h: '进货', done: () => !toStock() && (sum(G.state.stock) + sum(G.state.opened) > 0 || G.shelves().some(r => r.id)), // a labelled shelf stays labelled once it sells out
     at: () => { const x = toStock(); return x ? inRow(x.id, '.primary[data-act="buy"]') ?? inRow(x.id, '[data-act="buy"][data-n="10"]:not(:disabled)') : null; },
     p: el => { const b = el as HTMLElement | null, id = b?.dataset.id, first = !sum(G.state.stock) && !G.shelves().some(r => r.id), key = `「${b?.textContent?.trim() || '进 10'}」`;
-      if (!id) return '进货价比市价低，差价就是卖一包的毛利。';
-      return first ? html`点${key}从批发商进货：${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，市价 ${money(G.sealedPrice(id))}，差价就是卖一包的毛利。一个货架放 ${G.depth()} 包；只进 10 包很快就卖光，货架空着就没有进账。`
+      if (!id) return '实际售价减进货价，才是卖一包的毛利；标价会随行情变化。';
+      return first ? html`点${key}从批发商进货：${G.setById(id).name}进货 ${money(G.wholesale(id))} 一包，当前售价 ${money(G.ask(id))}，每包毛利 ${money(G.ask(id) - G.wholesale(id))}。标价会随行情变化。一个货架放 ${G.depth()} 包；只进 10 包很快就卖光，货架空着就没有进账。`
         : html`${G.setById(id).name}也进一架（点${key}）。来的顾客想买的系列不一样，货架上没有他要的那个，一半人直接走。`; } },
   { page: 'shelf', h: '摆上货架', done: () => G.shelves().some(r => r.id) && !toRack(),
     at: () => { const x = toRack(); return x ? inRow(x.id, '[data-act="shelve"]:not(:disabled)') : pick('#shelf .set [data-act="shelve"]:not(:disabled)', '#shelf .set .primary'); },
@@ -59,7 +59,7 @@ const STEPS: Step[] = [
   { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.verb') ?? null) : null; },
     // the 倒爷 line quotes their own ceiling (game.ts TYPES.flipper.tol): 「市价附近」 read like the default 95%, and at 95% they walked out
-    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签是你定的价，默认市价的 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（${money(G.ask(id))}）` : ''}：虚线框里 − / + 调，不想调就点「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚；倒爷肯出的上限平均约市价的 ${flip}%（每人不同），标价在它以下，开张 10 分钟后他们会一次买走一批。`; } },
+    p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签按市价的百分比定价，默认 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（当前 ${money(G.ask(id))}）` : ''}；市价随行情波动，标价也跟着变。虚线框里 − / + 调比例，不想调就点「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚；倒爷肯出的上限平均约市价的 ${flip}%（每人不同），标价在它以下，开张 10 分钟后他们会一次买走一批。`; } },
   { page: 'open', h: '开一包', done: () => sum(G.state.opened) > 0,
     at: () => pick(`#page-${page()} [data-act="open1"]:not(:disabled)`, `#page-${page()} [data-act="buyopen"]:not(:disabled)`),
     p: el => (page() === 'open' && !el ? `钱不够进 1 包：等货架上的包卖出去，或者去「货柜」一键卖散卡。` : null) ?? `${(el as HTMLElement | null)?.dataset.act === 'buyopen' ? '货架上的包留给顾客，仓库空着：点这里进 1 包马上拆。' : '货架上的包留给顾客，自己拆仓库里的。'}撕开封口，一张张翻${matchMedia('(pointer: coarse)').matches ? '' : '（空格也行）'}。卡价和基础开包概率来自 TCGplayer 市价及实开统计，手气是另算的游戏加成。` },
