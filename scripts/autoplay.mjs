@@ -324,7 +324,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const holds = m => { switch (m.kind) {
     case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
     case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
-    case 'new': return !guiding() && fresh.has(m.id);
+    case 'new': return !guiding() && fresh.has(m.id) && G.shelves().some(r => !r.id);
     case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
     case 'case': return !guiding() && !hold && !!collectorCard() && !!st().singles[m.key]?.count;
     case 'kept': return keptAllowed() && keptAvailable(m.id);
@@ -333,7 +333,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
     if (notes.length) return notes[0];
     if (guiding()) return null;
-    const nu = [...fresh][0], k = page === 'grow' ? '' : growKey(), c = collectorCard();
+    const nu = G.shelves().some(r => !r.id) ? [...fresh][0] : undefined, k = page === 'grow' ? '' : growKey(), c = collectorCard();
     if (nu) return { kind: 'new', id: nu };
     if (c) return { kind: 'case', key: c[0] };
     if (k && k !== grew) return { kind: 'grow', k };
@@ -354,8 +354,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; }
       for (const id of out) if (!on.includes(id)) out.delete(id);
       for (const id of unlockedIds()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
-      const free = G.shelves().some(r => !r.id);
-      for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id);
+      for (const id of fresh) if (on.includes(id)) fresh.delete(id); // keep a newly unlocked set pending until a shelf is free
       const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine();
       const receiptReady = uiNotes && notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case');
       const keep = memo && holds(memo) && !cut && !receiptReady;

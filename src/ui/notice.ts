@@ -178,7 +178,7 @@ function holds(m: Memo) {
     case 'hand': return away();
     // a set that sells out while the box is up joins it when the cash covers both (it stood unsaid for a minute behind the first)
     case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
-    case 'new': return !guiding() && !away() && fresh.has(m.id);
+    case 'new': return !guiding() && !away() && fresh.has(m.id) && G.shelves().some(r => !r.id);
     case 'grow': return !guiding() && !away() && location.hash !== '#grow' && m.k !== grew && m.k === growKey();
     case 'case': return !guiding() && !hold && !caseDismissed && !!collectorCard() && !!G.state.singles[m.key]?.count;
     case 'kept': return keptAllowed() && keptAvailable(m.id);
@@ -190,7 +190,7 @@ function pick(): Memo | null {
   if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
   if (notes.length) return notes[0];
   if (guiding()) return null;
-  const nu = [...fresh][0], k = location.hash === '#grow' ? '' : growKey(), c = !caseDismissed && collectorCard();
+  const nu = G.shelves().some(r => !r.id) ? [...fresh][0] : undefined, k = location.hash === '#grow' ? '' : growKey(), c = !caseDismissed && collectorCard();
   if (nu) return { kind: 'new', id: nu };
   if (c) return { kind: 'case', key: c[0] };
   if (k && k !== grew) return { kind: 'grow', k };
@@ -219,8 +219,7 @@ function watchShop() {
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
   for (const id of unlocked()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
-  const free = G.shelves().some(r => !r.id);
-  for (const id of fresh) if (on.includes(id) || !free) fresh.delete(id); // put up, or no empty shelf left to put it on
+  for (const id of fresh) if (on.includes(id)) fresh.delete(id); // no free shelf means wait, not forget the unlocked set
   // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
   const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case') && out.size > 0 && shelfMine());
