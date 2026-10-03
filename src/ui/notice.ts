@@ -80,7 +80,10 @@ export function renderNotice() {
       ${due ? html`<p class="due-note">不在店里时宽限不走，从现在接着算（离开时才到期的给满 ${G.GRACE / 60} 分钟），看顶栏的红牌子。</p>` : ''}
       ${!due ? html`<p class="note">${empty ? '现在有空货架，先去补货上架。' : pick ? `卡本里有收藏党会看的大卡，先把${pick[1].name}摆进展示柜。` : '货架还在卖。卡本里的闪卡会自动卖给找卡的；去看看单卡生意和缺货表。'}</p>` : ''}
       <div class="nt-btns">${due ? html`<button type="button" class="primary" @click=${() => $('due').click()}>${short ? '去凑钱' : '去看账单'}</button>`
-        : empty ? html`<button type="button" class="primary" @click=${() => go('shelf')}>去补货</button>` : caseAction()}
+        : empty ? html`<button type="button" class="primary" @click=${() => {
+          G.ackOffline(); go('shelf');
+          $('shelf').querySelector<HTMLElement>(empty.id ? `.set[data-spot="set:${empty.id}"]` : '.set:not(.locked)')?.scrollIntoView({ block: 'center' });
+        }}>去补货</button>` : caseAction()}
         <button type="button" data-act="ack">收起小票</button></div></div>`, el);
 }
 
