@@ -19,7 +19,7 @@ const FACES = 5; // pack faces per board: each face is the front of a row of DEP
 // A pack row: its front pack face-out, and up to three packs behind it peeking over its top (the row's depth); rows fill board by
 // board from the bottom, left to right. A full shelf is a wall of packs three deep, an emptying one thins to single packs, then bare back.
 const PEEK = 3;
-const row = (left: number, per: number) => left <= 0 ? '' : `pk d${Math.round((Math.min(left, per) - 1) / (per - 1) * PEEK)}`;
+const row = (left: number, per: number) => left <= 0 ? '' : `shelf-pack d${Math.round((Math.min(left, per) - 1) / (per - 1) * PEEK)}`;
 // The pack's printed front, the very picture on the 3D pack (table3d.js packFront), once it's painted; until then, or where it
 // can't be read back (null: a CDN scan taints the canvas), style.css paints the same look from sets.ts LOOK (colours + chase art).
 const fronts: Record<string, string | null> = {};
@@ -82,7 +82,7 @@ function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnTyp
   const full = !!id && (s.stock[id] || 0) + r.qty > G.WAREHOUSE;
   // Options bind .selected through live(): after a swap the same template re-renders, and lit's cache would skip re-selecting
   // the current set, leaving the option the player clicked (now some other set) shown as chosen.
-  const bt = beat(i), lift = (j: number) => (bt?.faces.includes(j) ? keyed(bt.k, html`<i class="pk lift"></i>`) : nothing);
+  const bt = beat(i), lift = (j: number) => (bt?.faces.includes(j) ? keyed(bt.k, html`<i class="shelf-pack lift"></i>`) : nothing);
   const sw = swap?.i === i ? swap : null, canSwap = !!sw && (!!s.stock[sw.id] || clerk) && !full;
   return html`<li class="rack ${id ? (r.qty ? '' : 'out') : 'empty'} ${lit && (id === lit || sw?.id === lit) ? 'lit' : ''}" data-spot="set:${id ?? ''}" style="${id ? `--logo:url("${logoUrl(id)}");${look(id)}` : ''}">
       <p class="r-sign">${id ? html`<img src="${logoUrl(id)}" alt="" loading="lazy"><span>${G.setById(id).name}</span>` : html`<span>空货架</span>`}</p>

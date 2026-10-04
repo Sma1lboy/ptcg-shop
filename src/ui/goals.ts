@@ -228,12 +228,12 @@ function customers() {
   const tab = (el: HTMLElement, k: number, what: string) => { el.hidden = !k; render(html`${k}<span class="visually-hidden"> 位${what}</span>`, el); };
   tab($('n-packs'), none - atCase, '没买到整包'); tab($('n-case'), atCase, '在展示柜和卡本没找到');
   const quiet = html`<p class="muted">${G.state.cust.visits ? `${lately()}还没有顾客进门。` : '还没有顾客来过。先把货上架。'}</p>`;
-  if (!n) { render(html`<span class="muted">顾客：${G.state.cust.visits ? `${lately()}还没有人进门` : '还没有人来过'}</span>`, $('cust-head')); render(html`<h2>顾客 · 来买整包的</h2>${quiet}`, $('customers')); render(html`<h2>顾客 · 单卡</h2>${quiet}`, $('case-cust')); return; }
   const [sold, pricey] = ['sold', 'pricey'].map(r => count(rec, r));
   render(html`<span class="c-meta">顾客 · ${lately()}来了 ${n} 位 · 每分钟约 ${(G.rate() * 60).toFixed(1)} 位</span>
       <span class="cust-bar" role="img" aria-label="${lately()} ${n} 位顾客：买走 ${sold}，嫌贵 ${pricey}，没找到 ${none}">
         <span class="c-sold" style="flex:${sold}"></span><span class="c-pricey" style="flex:${pricey}"></span><span class="c-none" style="flex:${none}"></span></span>
       <span class="cust-sum"><b>买走 ${sold}</b> · 嫌贵 ${pricey} · <span class="muted">没找到 ${none}${none ? `（整包 ${none - atCase} · 展示柜 ${atCase}）` : ''}</span></span>`, $('cust-head'));
+  if (!n) { render(html`<h2>顾客 · 来买整包的</h2>${quiet}`, $('customers')); render(html`<h2>顾客 · 单卡</h2>${quiet}`, $('case-cust')); return; }
   render(html`<h2>顾客 · 来买整包的</h2>${packs(rec) || html`<p class="muted">${lately()}没有人来买整包。</p>`}`, $('customers'));
   render(html`<h2>顾客 · 单卡</h2>${showcase(rec) || html`<p class="muted">${lately()}没有人来翻展示柜和卡本，也没有人来卖卡。</p>`}`, $('case-cust'));
 }

@@ -28,14 +28,21 @@ function caseAction() {
 // so it doesn't cover or push down what the player came back to press; tapping the stub prints the whole receipt.
 let unrolled = false, ro: ResizeObserver | null = null;
 
-// Mobile paper changes the page's top padding. Keep an already-scrolled control under the pointer;
-// do not undo a deliberate scroll from the guide or navigation, or move the immersive opening table.
+// Keep compact-layout controls steady when paper changes the space before them.
+// On the opening page only anchor the rail once reached; never pull the first-screen table down with a memo.
 function keepView(update: () => void) {
-  const y = scrollY, page = innerWidth < 780 && y > 0 && document.documentElement.dataset.page !== 'open'
-    ? document.querySelector<HTMLElement>('.page:not([hidden])') : null;
-  const top = page?.getBoundingClientRect().top;
+  const y = scrollY, mode = document.documentElement.dataset.page, compact = innerWidth < 780 || (innerWidth > innerHeight && innerHeight <= 520);
+  let anchor: HTMLElement | null = null;
+  if (compact && y > 0) {
+    if (mode === 'open') {
+      const rail = $('rail'), bottom = innerWidth < 780 ? document.querySelector('.nav')?.getBoundingClientRect().top ?? innerHeight : innerHeight;
+      if (rail.getBoundingClientRect().top < bottom) anchor = rail;
+    } else anchor = document.querySelector<HTMLElement>('.page:not([hidden])');
+  }
+  const top = anchor?.getBoundingClientRect().top;
   update();
-  if (page && !page.hidden && scrollY === y) scrollBy({ top: page.getBoundingClientRect().top - top!, behavior: 'instant' });
+  if (anchor && anchor.getClientRects().length && document.documentElement.dataset.page === mode && scrollY === y)
+    scrollBy({ top: anchor.getBoundingClientRect().top - top!, behavior: 'instant' });
 }
 
 // Budget follows the immutable printed quote, not a newly calculated order with more packs.

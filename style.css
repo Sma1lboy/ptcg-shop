@@ -156,6 +156,10 @@ small { font-size: var(--fs-cap); }
 .sub div::before { content: ""; width: 24px; height: 24px; flex: none; background: var(--i) center / contain no-repeat; image-rendering: pixelated; }
 [data-k="shelf"] { --i: url(gen/i-shelf.webp); } [data-k="stock"] { --i: url(gen/i-pack.webp); } [data-k="rate"] { --i: url(gen/i-customer.webp); }
 [data-k="sales"] { --i: url(gen/i-receipt.webp); } [data-k="held"] { --i: url(gen/i-card.webp); }
+/* A sold-out series replaces the shelf sprite with a warning; keep its 24px footprint and the actual total beside it. */
+.sub div[data-empty]::before { --warn-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill-rule='evenodd' d='M11 2h2v2h2v4h2v4h2v4h2v6H3v-6h2v-4h2V8h2V4h2zM11 8h2v6h-2zM11 17h2v2h-2z'/%3E%3C/svg%3E");
+  background: var(--hud-ink); -webkit-mask: var(--warn-mask) center / contain no-repeat; mask: var(--warn-mask) center / contain no-repeat; }
+.sub dd a { color: inherit; text-decoration: underline dashed; text-underline-offset: .15em; }
 
 /* nav = the BW menu: each page a rounded command tab on the dark plate; the current one is the white tab under the blue cursor
    frame — cursor blue, not yellow: yellow stays for things to press. Docked to the bottom on phones */
@@ -214,9 +218,12 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 .views { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
 .subnav { display: flex; gap: 6px; }
 .subnav a { font-size: var(--fs-body); height: 38px; }
-.cust-head { flex: 1 1 360px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 0; }
+/* Counts must not add a flex row or push a transaction key when they gain a digit. */
+.cust-head { flex: 1 1 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 160px) minmax(0, 1.5fr); align-items: center; gap: 4px 14px; margin: 0; }
 .cust-head .c-meta { margin: 0; }
-.cust-head .cust-bar { flex: 1 1 120px; max-width: 320px; margin: 0; }
+.cust-head .cust-bar { width: 100%; max-width: none; margin: 0; }
+.cust-head :is(.c-meta, .cust-sum) { min-block-size: 2lh; }
+@media (min-width: 1100px) { .cust-head :is(.c-meta, .cust-sum) { min-block-size: 1lh; } }
 /* 店里的人 (ui/walk.ts): a BW indoor map under the view tabs — the back wall (planked, a window, two wall shelves of packs, a
    baseboard), checker floor tiles, the counter on the left with the owner behind it, the door with its mat on the right. The room
    is an illustration, so its colours are fixed (the same in both themes, like the story art): pale cool wall and tiles, the
@@ -358,21 +365,22 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* a pack face-out, painted like the 3D pack (table3d.js drawFront, colours from sets.ts LOOK): the foil gradient, the set logo up top,
    the chase card's art in the middle feathered into the foil, the darker foot, heat-seal crimps. Without the look (unknown set) it
    falls back to plain foil. d1–d3: that many packs of the row behind it, peeking over its top */
-.board i.pk { --back: color-mix(in oklab, var(--c1, var(--foil-3)) 55%, #0A0F1C); position: relative; border-radius: 2px; overflow: visible;
+/* Do not share .pk with binder pockets: its padding, border and negative margin change a stocked board's height. */
+.board i.shelf-pack { --back: color-mix(in oklab, var(--c1, var(--foil-3)) 55%, #0A0F1C); position: relative; border-radius: 2px; overflow: visible;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 2px 2px rgba(4, 8, 14, .35);
   background: var(--logo) 50% 8% / 90% auto no-repeat,
     repeating-linear-gradient(90deg, rgba(0, 0, 0, .28) 0 1px, rgba(255, 255, 255, .25) 1px 2px) top / 100% 6% no-repeat,
     repeating-linear-gradient(90deg, rgba(0, 0, 0, .28) 0 1px, rgba(255, 255, 255, .25) 1px 2px) bottom / 100% 5% no-repeat,
     linear-gradient(transparent 68%, var(--c2, transparent) 90%),
     linear-gradient(160deg, var(--c0, var(--foil-3)), var(--c1, var(--foil-2)) 50%, var(--c2, var(--foil-1))); }
-.board i.pk::before { content: ""; position: absolute; inset: 26% 0 24%; background: var(--art, none) 50% 17% / 118% auto no-repeat;
+.board i.shelf-pack::before { content: ""; position: absolute; inset: 26% 0 24%; background: var(--art, none) 50% 17% / 118% auto no-repeat;
   -webkit-mask: linear-gradient(transparent, #000 22%, #000 70%, transparent); mask: linear-gradient(transparent, #000 22%, #000 70%, transparent); }
-.rack[style*="--front"] .board i.pk { background: var(--front) 50% 50% / 100% 100%; } /* the printed front: logo, art and crimps are in the picture */
-.rack[style*="--front"] .board i.pk::before { display: none; }
-.board i.pk::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .55) 45%, transparent 60%); mix-blend-mode: soft-light; }
-.board i.pk.d1 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 0 2px 2px rgba(4, 8, 14, .35); }
-.board i.pk.d2 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C), 0 2px 2px rgba(4, 8, 14, .35); }
-.board i.pk.d3 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C),
+.rack[style*="--front"] .board i.shelf-pack { background: var(--front) 50% 50% / 100% 100%; } /* the printed front: logo, art and crimps are in the picture */
+.rack[style*="--front"] .board i.shelf-pack::before { display: none; }
+.board i.shelf-pack::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .55) 45%, transparent 60%); mix-blend-mode: soft-light; }
+.board i.shelf-pack.d1 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 0 2px 2px rgba(4, 8, 14, .35); }
+.board i.shelf-pack.d2 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C), 0 2px 2px rgba(4, 8, 14, .35); }
+.board i.shelf-pack.d3 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C),
   3px -9px 0 0 color-mix(in oklab, var(--back) 62%, #0A0F1C), 0 2px 2px rgba(4, 8, 14, .35); }
 .r-out { position: absolute; left: 50%; bottom: 30px; translate: -50% 0; rotate: -4deg; padding: 2px 8px; border: 1.5px solid var(--muted); border-radius: 2px;
   font: 700 var(--fs-cap)/1.3 var(--font-body); color: var(--muted); background: var(--panel); white-space: nowrap; }
@@ -1572,7 +1580,7 @@ button:disabled { cursor: not-allowed; }
 
 /* phones: one column per page; the nav docks to the bottom (thumb reach), the 开包 table fills the screen between the bars */
 @media (max-width: 779px) {
-  :root { --top-h: 52px; --nav-h: 56px; }
+  :root { --top-h: 52px; --nav-h: 56px; --mat-h: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); }
   body { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
   .top { gap: 6px; padding-inline: 10px; }
   .brand { display: none; }
@@ -1594,7 +1602,7 @@ button:disabled { cursor: not-allowed; }
   .nav .tab-n { position: absolute; top: 2px; right: 4px; margin: 0; }
   main { padding-top: 12px; }
   .page, .page-open, .page-shelf, .page-luck { grid-template-columns: minmax(0, 1fr); }
-  .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px); min-height: 400px; margin-inline: calc(var(--gap) * -1);
+  .mat { height: var(--mat-h); min-height: 400px; margin-inline: calc(var(--gap) * -1);
     border-width: 6px 0; border-image-width: 10px 0; }
   /* the guide's strip over the bottom tabs (a step on another page) sits where the table's summary keys are: the table ends above it */
   :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px - 64px); }
@@ -1633,11 +1641,12 @@ button:disabled { cursor: not-allowed; }
   .rack { scroll-snap-align: start; }
   .r-ctl select { min-height: 40px; }
   .subnav { flex: 1 1 100%; } .subnav a { flex: 1; min-width: 0; padding: 0 6px; height: 44px; white-space: nowrap; } .sub-k { display: none; }
-  .cust-head { gap: 4px 10px; } .cust-head .cust-bar { flex-basis: 100%; max-width: none; order: 1; }
+  .cust-head { grid-template-columns: minmax(0, 1fr); gap: 4px 10px; }
+  .cust-head .c-meta { grid-row: 1; } .cust-head .cust-bar { grid-row: 2; } .cust-head .cust-sum { grid-row: 3; }
 }
 @media (max-width: 429px) { .cash .k { display: none; } } /* phones: the coin goes (the money box still reads as 所持金 by its white frame), so a 7-character sum ($129.62, $31,262) fits beside both readouts */
 @media (max-width: 379px) { .sub dd { font-size: var(--fs-cap); } .sub div { padding: 3px 5px; } } /* 320–379: three-digit readouts ("598 包") beside a 7-character sum */
-@media (max-width: 359px) { .due .bar { display: none; } } /* 320–359: the countdown stays, its HP bar goes (the ledger has it) */
+@media (max-width: 359px) { .due .bar { display: none; } .cust-head .cust-sum { min-block-size: 3lh; } } /* 320–359: retain the bill countdown and reserve the third count line */
 @media (min-width: 780px) and (max-width: 859px) { .due .bar { --due-bar: 44px; --in: 3px; } .due .bar::before { display: none; } .nav a { padding: 0 6px; } }
 
 /* 开包 on a phone turned sideways (844×390, 667×375 …): the viewport is short, not narrow. The table fills the height under the
@@ -1646,10 +1655,10 @@ button:disabled { cursor: not-allowed; }
    ten-pack's front row and plates were squeezed under the hint. The column is there in every state, so the scene doesn't reframe
    when the summary arrives. DESIGN.md「开包台」 */
 @media (orientation: landscape) and (max-height: 520px) {
-  :root { --top-h: 48px; }
+  :root { --top-h: 48px; --mat-h: calc(100dvh - var(--top-h) - var(--nav-h, 0px) - env(safe-area-inset-bottom) - 6px); }
   main { padding-top: 6px; }
   .page-open { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .mat { height: calc(100dvh - var(--top-h) - var(--nav-h, 0px) - env(safe-area-inset-bottom) - 6px); min-height: 250px; margin-inline: calc(var(--gap) * -1);
+  .mat { height: var(--mat-h); min-height: 250px; margin-inline: calc(var(--gap) * -1);
     border-width: 6px 0; border-image-width: 10px 0; padding: 10px 14px; }
   .mat.m3d { display: grid; grid-template-columns: minmax(0, 1fr) clamp(200px, 30%, 280px); grid-template-rows: auto minmax(0, 1fr); padding: 0; }
   .mat.m3d .scene3d { grid-column: 1; grid-row: 1 / -1; }
@@ -1678,6 +1687,33 @@ button:disabled { cursor: not-allowed; }
   :root { --nav-h: 44px; }
   .nav a { height: 36px; flex-direction: row; gap: 6px; }
   .nav a::before { width: 18px; height: 18px; }
+}
+
+/* 店里的话 on the 开包 page (DESIGN.md「店里的话」). A phone's table already fills the screen between the bars (a 390×844 result is the
+   head 102 + canvas ~300 + summary 270), so a 150–200px box has no room beside it without covering a card or a key. It hangs in the
+   document under the table instead: the table never moves or shrinks when it comes and goes, and it is read and pressed by scrolling
+   down to it. Until then the top bar's shelf warning links to replenishment; the nav badge still counts missed customers.
+   --lane-top is the table's bottom edge (top bar + main's top padding + the table, --mat-h, + the page's row gap). The ::before spacer
+   keeps the rail below the box; being a sibling above the rail (a margin on the rail would suppress it), it lets scroll anchoring hold
+   the rail still when the box comes and goes, and the table is left out of anchoring so the rail is what anchors. z-index 9 stays
+   under the top bar (10): the docked nav would otherwise sit under the box on the page's first screen. Receipts and labels stay
+   fixed where the slot always put them. */
+@media (max-width: 779px) { :root { --lane-top: calc(var(--top-h) + 12px + max(400px, var(--mat-h)) + 20px); } }
+@media (orientation: landscape) and (max-height: 520px) { :root { --lane-top: calc(var(--top-h) + 6px + max(250px, var(--mat-h)) + 12px); } }
+@media (max-width: 779px), (orientation: landscape) and (max-height: 520px) {
+  .mat { overflow-anchor: none; }
+  .page-open::before { content: ""; order: 1; display: none; }
+  .page-open > .rail { order: 2; }
+  :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { display: block; height: var(--memo-h, 160px); }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) { position: absolute; z-index: 9; top: var(--lane-top); left: var(--gap); right: var(--gap); width: auto; max-width: 400px; margin-inline: auto; }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 132px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])):has(> #notice:not([hidden])) > #ach-pop:not([hidden]) { top: calc(var(--top-h) + 8px); }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  /* the row gap is 12 here and the slot's own padding 8 */
+  :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { height: calc(var(--memo-h, 160px) + 8px); }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { top: calc(var(--top-h) + 8px); right: calc(clamp(200px, 30vw, 280px) + 14px); left: auto; width: min(300px, 42vw); max-width: none; margin: 0; }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])):has(> #ach-pop:not([hidden])) > :is(#notice, #slip):not([hidden]) { top: calc(var(--top-h) + 108px); }
 }
 
 /* 奖章 (ui/ach.ts, DESIGN.md「奖章」): BW2's medal box. Earned: a round medal struck in its tier with the achievement's word on it,

@@ -22,7 +22,8 @@ function sources(d: number, extra: { tickets: number; idle: number; offline: num
 // reveal: a pack is being revealed — the till and the shelf keep moving (sales go on), but the singles' worth stays where it was, or it
 // would give away the pull before its card is flipped
 export function renderStats(reveal = false) {
-  const s = G.state, stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = G.shelves().reduce((a, o) => a + o.qty, 0);
+  const s = G.state, shelves = G.shelves(), stock = Object.values(s.stock).reduce((a, b) => a + b, 0), shelf = shelves.reduce((a, o) => a + o.qty, 0);
+  const empty = shelves.some(r => r.id && !r.qty && !G.shelfQty(r.id)); // another stocked facing of the same set is not sold out
   const held = reveal ? lastHeld : Object.values(s.singles).reduce((a, c) => a + c.price * c.count, 0);
   lastHeld = held;
   const extra = { tickets: 0, idle: 0, offline: 0 };
@@ -38,7 +39,8 @@ export function renderStats(reveal = false) {
   render(html`<p class="cash"><span class="k">现金</span><b>${money(s.cash)}</b>${stamp ? keyed(stamp, html`<span class="delta ${delta >= 0 ? 'gain' : 'loss'}" aria-hidden="true">${why || `净 ${delta >= 0 ? '+' : '−'}${money(Math.abs(delta), 'exact')}`}</span>`) : ''}</p>
     <dl class="sub">${([
       ['shelf', '货架', `${shelf} 包`], ['stock', '仓库', `${stock} 包`], ['rate', '到店', `${(G.rate() * 60).toFixed(1)}/分`], ['sales', '成交', s.customers], ['held', '单卡市值', money(held)],
-    ] as const).map(([k, n, v]) => html`<div data-k=${k} title=${n}><dt>${n}</dt><dd>${v}</dd></div>`)}</dl>`, $('stats'));
+    ] as const).map(([k, n, v]) => html`<div data-k=${k} ?data-empty=${k === 'shelf' && empty} title=${k === 'shelf' && empty ? '有系列卖空，去货柜补货上架' : n}><dt>${n}</dt><dd>${k === 'shelf' && empty
+      ? html`<a href="#shelf" aria-label="货架 ${v}，有系列卖空，去货柜补货">${v}</a>` : v}</dd></div>`)}</dl>`, $('stats'));
 }
 
 export function renderEarnings() {
