@@ -166,8 +166,10 @@ function dexOffer() {
   }
   return best;
 }
-// toShelf keeps one pack for the player. Invite only off the opening table, never over a reveal/result or available growth.
-const keptAvailable = (id: string) => G.state.stock[id] === 1 && G.unlocked(id) && !G.master(id);
+// The packs kept back for the player to open: the one 上架 leaves, or with a clerk the up-to-CLERK_KEEP he never shelves (a reviewer
+// only ever saw 「去开这 1 包」 while ten sat in the back room). Invite only off the opening table, never over a reveal/result or available growth.
+const keptN = (id: string) => G.state.stock[id] || 0;
+const keptAvailable = (id: string) => keptN(id) >= 1 && keptN(id) <= (G.lvl('clerk') && G.state.auto[id] ? G.CLERK_KEEP : 1) && G.unlocked(id) && !G.master(id);
 function keptAllowed() {
   const page = currentPage();
   return !keptDismissed && !hold && !guiding() && page !== 'open' && (page !== 'grow' || growCount() === 0) && G.shelves().some(s => s.id && s.qty > 0);
@@ -274,11 +276,13 @@ function showMemo() {
   if (hidden !== was) keepView(() => { el.hidden = hidden; document.dispatchEvent(new Event('ptcg:memo')); }); // guide yields to the box
   if (el.hidden) return;
   // Keep the quoted quantity while cash changes. A different set, restock method, unit price, or unaffordable quote
-  // gets a new order; the current bill balance refreshes separately without moving the purchase button.
+  // gets a new order; the current bill balance refreshes separately without moving the purchase button. A quote the till has
+  // outgrown (today's would be at least twice the printed one) is printed again: 「进 3 包 $19」 stood while the cash went $79 → $1,873.
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}`
-    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'kept' ? `kept:${m.id}` : m.kind === 'dex' ? `dex:${m.id}:${m.need}` : m.kind;
-  if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) { refreshBill(el); return; } // keep quantities, refresh the bill balance
+    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'kept' ? `kept:${m.id}:${keptN(m.id)}` : m.kind === 'dex' ? `dex:${m.id}:${m.need}` : m.kind;
+  const was$ = +(el.dataset.cost || 0), outgrown = was$ > 0 && cost >= 2 * was$ + 1;
+  if (!was && el.dataset.ident === ident && was$ <= G.state.cash && !outgrown) { refreshBill(el); return; } // keep quantities, refresh the bill balance
   el.dataset.ident = ident; el.dataset.cost = '0';
   const ok = html`<div class="mm-btns"><button type="button" class="primary" @click=${close}>${m.kind === 'done' ? '开始经营' : '关闭'}</button></div>`;
   if (m.kind === 'first') {
@@ -293,10 +297,11 @@ function showMemo() {
     return;
   }
   if (m.kind === 'kept') {
-    render(keyed(ident, html`<div class="mm-box"><h2>仓库留的这包还没开</h2>
-      <p>${G.setById(m.id).name}还留着 1 包。想收图鉴，可以从这包开始。</p>
+    const n = Math.min(10, keptN(m.id));
+    render(keyed(ident, html`<div class="mm-box"><h2>仓库留的${n > 1 ? `这 ${n} 包` : '这包'}还没开</h2>
+      <p>${G.setById(m.id).name}还留着 ${keptN(m.id)} 包${n > 1 ? '（店员不往货架搬，留给你拆）' : ''}。想收图鉴，可以从这里开始。</p>
       <p class="mm-say">只拆已经进货的包，不会另买；也可以留着上架卖。</p>
-      <div class="mm-btns"><button type="button" class="primary" data-act="open1" data-id="${m.id}">去开这 1 包</button>
+      <div class="mm-btns"><button type="button" class="primary" data-act="${n > 1 ? 'open10' : 'open1'}" data-id="${m.id}">去开这 ${n} 包</button>
         <button type="button" @click=${() => { keptDismissed = true; memo = null; watchShop(); }}>先不拆</button></div></div>`), el);
     return;
   }

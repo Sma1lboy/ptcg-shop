@@ -317,7 +317,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const outIds = () => { const all = [...out], fx = all.map(x => fix(x, false)), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || STEPS[current()]?.h !== '补货'; // guide.ts guideShelf: only the guide's own 补货 step speaks for an empty shelf
   // The lowest-priority warehouse invitation. This player accepts it; the real UI also offers a session-long dismissal.
-  const keptAvailable = id => st().stock[id] === 1 && G.unlocked(id) && !G.master(id);
+  const keptAvailable = id => (st().stock[id] || 0) >= 1 && (st().stock[id] || 0) <= (G.lvl('clerk') && st().auto[id] ? G.CLERK_KEEP : 1) && G.unlocked(id) && !G.master(id); // ui/notice.ts: the one 上架 leaves, or the clerk's kept-back packs
   const keptAllowed = () => uiNotes && !hold && !guiding() && page !== 'open' && (page !== 'grow' || yellow().length === 0) && G.shelves().some(s => s.id && s.qty > 0);
   const keptPack = () => {
     if (!keptAllowed()) return null;
@@ -382,8 +382,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
         const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind;
-        if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}:${st().stock[memo.id] || 0}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind;
+        if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash && !(printed.cost > 0 && cost >= 2 * printed.cost + 1))) printed = { ident, cost, fixes, sets }; // ui/notice.ts: an outgrown quote is printed again
       }
       memoShown = shown;
     } finally { inWatch = false; }
@@ -433,7 +433,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   // ----- the player -----
   const refill = (x, dataN) => { if ((st().stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
     const n = dataN ?? shelfFill(x).n; if (n > 1 && pay(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
-  const openPack = (id, buyFirst) => { if (hold) return; if (buyFirst && !pay(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, 1).length) { hold = false; holdLeft = 0; } };
+  const openPack = (id, buyFirst, n = 1) => { if (hold) return; if (buyFirst && !pay(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, n).length) { hold = false; holdLeft = 0; } };
   const grow = () => { page = 'grow'; const g = nextStep(), b = g && g.cost <= G.spare() ? g : others ? yellow()[0] : null;
     if (b && buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); else { grew = growKey(); did('成长: nothing bought'); } page = 'shelf'; };
   // what is on screen, top priority first: { id, press }
@@ -457,7 +457,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards') { if (uiNotes && m.kind === 'intake') page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's primary button is 去看收到的卡 (closes the note, goes to the case page)
     else if (m.kind === 'case') G.list(m.key);
     else if (m.kind === 'grow') grow();
-    else if (m.kind === 'kept') openPack(m.id, false);
+    else if (m.kind === 'kept') openPack(m.id, false, Math.min(10, st().stock[m.id] || 0));
     else if (m.kind === 'dex') { if (G.collect(m.id, m.need)) sp.dex = (sp.dex || 0) + m.cost; }
     else { const ids = printed.sets, fx = printed.fixes;
       if (ids.length > 1) for (const [i, x] of ids.entries()) refill(x, fx[i]?.n ?? 0);
