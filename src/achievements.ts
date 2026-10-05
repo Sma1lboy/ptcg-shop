@@ -62,7 +62,7 @@ export const ACH: Ach[] = [
   { id: 'master-all', group: 'dex', seal: '全图鉴', name: '全图鉴', desc: `${SETS.length} 个系列全部收齐（只有标签，没有奖金）`, cash: 0, prog: G => [masters(G), SETS.length] },
   { id: 'hand-1', group: 'dex', seal: '亲手开齐', name: '一张没买', desc: '一个系列的每一张卡都是自己开出来的（另有名气奖励）', cash: 1000, prog: G => hands(G) ? [100, 100] : [Math.floor(Math.max(0, ...SETS.map(s => G.handCount(s.id) / G.dexTotal(s.id))) * 100), 100] },
   { id: 'hand-all', group: 'dex', seal: '全手开', name: '全手开图鉴', desc: `${SETS.length} 个系列都亲手开齐（只有标签，没有奖金）`, cash: 0, prog: G => [hands(G), SETS.length] },
-  { id: 'trophy', group: 'dex', seal: '镇店', name: '镇店之宝', desc: '第一次摆上镇店之宝', cash: 10, prog: G => yes(!!G.state.trophy) },
+  { id: 'trophy', group: 'dex', seal: '镇店', name: '镇店之宝', desc: '第一次摆上镇店之宝', cash: 10, prog: G => yes(!!G.state.gallery[G.PEDESTAL]) },
   { id: 'case-full', group: 'dex', seal: '满柜', name: '展示柜摆满', desc: '展示柜每一格都有卡', cash: 30, prog: G => [Math.min(G.state.shown.length, G.slots()), G.slots()] },
   { id: 'big-card', group: 'dex', seal: '大货', name: '开出大货', desc: '开出一张市值 $250 以上的卡', cash: 300, money: true, prog: G => [Math.min(G.state.hits[0]?.price || 0, 250), 250] },
 

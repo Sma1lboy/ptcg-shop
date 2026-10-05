@@ -96,7 +96,7 @@ export function renderLedger() {
 }
 
 // ---------- 凑钱: the grace minutes of an overdue bill, laid out as choices. Every way the till can reach the bill before 九姐 borrows
-// it for you — sell cards to peers (散卡, 单卡库存, the case, the trophy), put the back room on the shelves, open a pack and hope,
+// it for you — sell cards to peers (散卡, 单卡库存, the case, the 镇店台), put the back room on the shelves, open a pack and hope,
 // borrow — each with what it brings, what it costs and one button, and the cheapest one that covers it all in yellow. It is not a
 // dialog: the player keeps shelving and selling around it. It opens by itself once per overdue week (after 九姐's scene), the red chip
 // reopens it, and it hides while a pack is being revealed (the cards are already in 单卡库存 before they are flipped) or a scene plays.
@@ -125,7 +125,7 @@ export function renderRaise() {
   const bulk = G.bulkValue();
   const hits = sellPlan(Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind)).map(([key, c]) => ({ key, name: c.name, price: c.price, count: c.count })), short, rate);
   const caseP = sellPlan(s.shown.map((c, i) => ({ i, name: c.name, price: c.price, count: 1, ask: G.cardAsk(c) })), short, rate);
-  const t = s.trophy, tGet = t ? t.price * rate : 0;
+  const t = s.gallery[G.PEDESTAL], tGet = t ? t.price * rate : 0;
   const backL = G.refundable(), backGet = backL.reduce((a, x) => a + x.cost * G.REFUND, 0), bname = (k: string) => (G.UPGRADES[k] || G.SKILLS[k]).name, blv = (k: string) => k in G.UPGRADES ? G.lvl(k) : G.skill(k);
   const stock = Object.entries(s.stock).filter(([, n]) => n > 0), back = stock.reduce((a, [, n]) => a + n, 0);
   const room = G.shelves().some(x => !x.id || x.qty < G.depth()), take5 = recentTake(300), onPace = take5 / 300 * Math.max(0, left);
@@ -138,7 +138,7 @@ export function renderRaise() {
   const lose = { hits: Math.max(0, hits.pick.reduce((a, p) => a + p.n * p.c.price * (G.casePct() - rate), 0)), case: Math.max(0, caseP.pick.reduce((a, p) => a + p.c.ask - p.c.price * rate, 0)), loan: part * r };
   // the yellow key, by what each dollar costs: 散卡 nothing, a loan a week's interest (10%), a card sold to peers what the case would
   // have paid on top (~57% of what it brings) — so bulk first, then borrow what is left, and only without credit sell the most you can
-  const sells = ([['hits', hits.got], ['case', caseP.got], ['trophy', tGet]] as const).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const sells = ([['hits', hits.got], ['case', caseP.got], ['pedestal', tGet]] as const).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
   const best = !short ? undefined : bulk.v >= 1 ? 'bulk' : part >= 1 ? 'loan' : sells[0]?.[0];
   const cls = (k: string) => (k === best ? 'primary' : '');
   // get: cash it brings (进账 red); a loan's is plain ink — borrowed money is not income (game.ts logs it as 'loss')
@@ -154,8 +154,8 @@ export function renderRaise() {
         html`<button type="button" class=${cls('hits')} @click=${act(() => { for (const p of hits.pick) G.sell(p.c.key, p.n); })}>卖这些</button>`) : nothing],
     ['case', caseP.pick.length ? row(`撤下展示柜 ${caseP.pick.length} 张卖给同行`, cardsNote(caseP.pick), `柜台标价合计 ${money(caseP.pick.reduce((a, p) => a + p.c.ask, 0))}，少卖 ${money(lose.case)}`, caseP.got,
         html`<button type="button" class=${cls('case')} @click=${act(() => sellCase(caseP.pick.map(p => p.c.i)))}>撤下卖掉</button>`) : nothing],
-    ['trophy', t ? row('卖掉镇店之宝', t.name, `收藏党不再多来、不再多付 ${Math.round(G.trophyBonus() * 60)}%`, tGet,
-        html`<button type="button" class=${cls('trophy')} @click=${act(() => { G.clearTrophy(); G.sell(t.key, 1); })}>卖掉</button>`) : nothing],
+    ['pedestal', t ? row('卖掉镇店之宝', t.name, `从镇店台撤下再卖；收藏党不再多来、不再多付 ${Math.round(G.trophyBonus() * 60)}%，门票也跟着少`, tGet,
+        html`<button type="button" class=${cls('pedestal')} @click=${act(() => { if (G.uncollect(G.PEDESTAL)) G.sell(t.key, 1); })}>卖掉</button>`) : nothing],
     ['shelf', row('等货架卖', take5 ? html`过去 5 分钟店里进账 ${money(take5)}，照这个速度宽限内约再进 <b>${money(onPace)}</b>${onPace >= short ? '，自己就能凑齐' : ''}` : '过去 5 分钟店里没进账',
         back ? `仓库还有 ${back} 包没上架${room ? '' : '，货架满了'}` : '仓库空了；进货会花掉手上的钱', null,
         back && room ? html`<button type="button" @click=${act(() => { for (const [id, n] of stock) G.shelve(id, n); })}>仓库全部上架</button>` : nothing)],

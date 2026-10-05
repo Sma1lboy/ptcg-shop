@@ -9,7 +9,7 @@ import type { GrowthKey } from './growth.ts';
 
 export interface Single extends Pull { count: number }
 export interface Shown extends Pull { key: string; pct: number }
-export interface Trophy extends Pull { key: string }
+export interface Exhibit extends Pull { key: string } // a card in the 收藏室 (state.gallery): the one copy it stands for, with the binder key it came from
 // One walk-in customer, as the 顾客 panel and 店内动态 show them. t = TYPES key, r = 'sold' | 'pricey' | 'none'; set = the set they
 // looked at (openers, flippers) or asked for (seekers; absent = any set); miss = the set an opener came for that was not on the shelf;
 // tier = seeker's SEEK row; card = the case card bought or balked at; price = that pack's or card's market price then; pct = its
@@ -25,7 +25,7 @@ export interface State {
   log: { t: number; text: string; tone: string; amt?: number }[]; shelves: Shelf[]; price: Record<string, number>; // price: asking price per set, share of market
   cust: { visits: number; sold: number; pricey: number; none: number }; recent: Visit[];
   up: Record<string, number>; dex: Record<string, { c: number; p: number }>; dexPacks: number; dexSeen: Record<string, 1>; auto: Record<string, boolean>;
-  shown: Shown[]; casePct?: number; buyPct?: number; intake?: { n: number; cost: number }; trophy: Trophy | null; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
+  shown: Shown[]; casePct?: number; buyPct?: number; intake?: { n: number; cost: number }; heat: Record<string, number>; heatT: number; lost: number; savedAt: number; flipT: Record<string, number>; clerkT: number; // clerkT: when the clerk's next round is due
   skills: Record<string, number>; packsBy: Record<string, number>; // packsBy: packs opened per S.rateKey (set + the 手气 odds they were opened at)
   miss: Record<string, number[]>; // per set: when a pack buyer came for it and it was on no shelf (last MISS_WINDOW only), so the shelf page can say who to make room for
   cardSales?: { seeker: number; collector: number }; // paying seeker / collector visits this shop (a visit may take several cards), counted as they happen. Absent in a save from before it existed: counting starts when it loads, the past is not guessed
@@ -44,9 +44,10 @@ export interface State {
   debt: number; owe: number; loan: number; week: number; shopT: number; billsPaid: number; loans: Loan[];
   overdue: { week: number; amount: number; inst: number; until: number } | null; best: number; weekRev0: number; wreck: Wreck | null;
   bought?: { k: string; cost: number; week: number }[]; // upgrades / skills bought this shop, newest last (退回: see refundable)
-  // 展厅 (gallery): GALLERY_SLOTS slots for cards the player owns and shows. galleryAcc = visitors admitted so far but not yet counted (a fraction of one; no random draw).
+  // 收藏室 (gallery): ROOM_SLOTS places for cards the player owns and shows: index PEDESTAL is the 镇店台 (the 镇店之宝: its card also draws collectors, see trophyBonus), the other GALLERY_SLOTS are the 展位 (第 1–5 格).
+  // galleryAcc = visitors admitted so far but not yet counted (a fraction of one; no random draw). v = the save format: 2 = the pedestal is gallery[0]; a save without it has a separate `trophy` and five slots (load() merges them).
   // extra = this shop's money that is not product sales: ticket money, 挂机加成 and 离线加成. It is never part of earned, so it never unlocks a set, earns 名气 or lifts the credit line.
-  gallery: (Trophy | null)[]; galleryAcc: number; extra: { tickets: number; idle: number; offline: number };
+  gallery: (Exhibit | null)[]; galleryAcc: number; extra: { tickets: number; idle: number; offline: number }; v: number;
 }
 // secs = seconds the shop traded (up to offlineCap), sales = paying visits; bills / borrowed: paid to 九姐 / borrowed meanwhile
 // detail = the same absence taken apart, added up visit by visit as each is generated (state.recent keeps only MISS_WINDOW, an
@@ -109,7 +110,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const TYPES: Record<string, { name: string; w: number; tol: number; sd: number }> = {
     opener:    { name: '拆包玩家', w: 50, tol: 1.06, sd: 0.08 }, // buys 1–5 packs of a set to open; budget-limited
     seeker:    { name: '找卡的', w: 22, tol: 1.12, sd: 0.10 },   // wants one card of a given rarity
-    collector: { name: '收藏党', w: 10, tol: 1.22, sd: 0.12 },   // wants the priciest card in the case; trophy and signage draw more of them
+    collector: { name: '收藏党', w: 10, tol: 1.22, sd: 0.12 },   // wants the priciest card in the case; the 镇店台 and signage draw more of them
     flipper:   { name: '倒爷', w: 8, tol: 0.93, sd: 0.05 },      // sweeps up bargains in bulk; ignores anything above ~market
   };
   // Per-set pack demand. w = share of pack buyers who come for this set, tol = added to how far over market they will pay,
@@ -169,12 +170,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // slept with the page open) a gap between two ticks longer than AWAY is an absence of its own. Absences of AWAY or longer
   // print a 打烊小票; shorter ones are just the shop carrying on.
   const AWAY = 120;
-  // 展厅 (game setting, GAMEPLAY): five slots of cards the player owns, shown and not for sale. Visitors walk in at GALLERY_RATE a second of
-  // trading time, no random draw, each paying the ticket: floor(sqrt(total market value) / 5) dollars, TICKET_MIN…TICKET_MAX, nothing for an empty room.
+  // 收藏室 (game setting, GAMEPLAY): a 镇店台 and five slots of cards the player owns, shown and not for sale. Visitors walk in at GALLERY_RATE a second of
+  // trading time, no random draw, each paying the ticket: floor(sqrt(total market value of every card in the room, the pedestal's too) / 5) dollars, TICKET_MIN…TICKET_MAX, nothing for an empty room.
   // Ticket money is not sales (see State.extra). 挂机加成 (game setting): the shop earns IDLE_BONUS more on every automatic sale (customers, the clerk's
-  // bulk sale) while the player has the 开包 page open and in view; 看店 earns OFFLINE_BONUS a level on the same sales while they are away. Never both, never on
+  // bulk sale) while the player has the 货柜 page (货架 or 展示柜) open and in view; 看店 earns OFFLINE_BONUS a level on the same sales while they are away. Never both, never on
   // tickets or 成就奖金, and never on a card the player sells by hand.
-  const GALLERY_SLOTS = 5, GALLERY_RATE = 2 / 60, TICKET_MIN = 1, TICKET_MAX = 20, IDLE_BONUS = 0.25, OFFLINE_BONUS = 0.05;
+  const GALLERY_SLOTS = 5, ROOM_SLOTS = GALLERY_SLOTS + 1, PEDESTAL = 0, SAVE_V = 2, GALLERY_RATE = 2 / 60, TICKET_MIN = 1, TICKET_MAX = 20, IDLE_BONUS = 0.25, OFFLINE_BONUS = 0.05;
   // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time while the page is open; a closed stretch
   // (sales credited up to offlineCap) moves the bill clock one week at most: 九姐 calls once while you are away. Shop n (0 = the first) owes
   // DEBT0 × (1 + DEBT_STEP·n); week w's bill is BILL0 × (1 + DEBT_STEP·n) × BILL_G^(w−1), capped at what is left, plus whatever
@@ -270,7 +271,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const revenue = () => state.earned.sealed + state.earned.singles;
   const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * COST_X * (1 - ACCESS_STEP * perk('access')));
   const unlocked = (id: string) => revenue() >= unlockAt(id);
-  const trophyBonus = () => state.trophy ? state.trophy.price / (state.trophy.price + 150) * 0.5 : 0; // 0..0.5, more for pricier cards
+  const trophyBonus = () => { const t = state.gallery[PEDESTAL]; return t ? t.price / (t.price + 150) * 0.5 : 0; }; // 0..0.5, more for pricier cards: the card on the 镇店台
   const shelfQty = (id: string) => shelves().reduce((a, s) => a + (s.id === id ? s.qty : 0), 0);
   const facings = (id: string) => shelves().filter(s => s.id === id && s.qty > 0).length;
   const pctOf = (id: string) => state.price[id] ?? DEFAULT_PCT;
@@ -315,14 +316,14 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const crowdMult = (raw = crowdRaw()) => raw <= CROWD_KNEE ? raw : CROWD_KNEE + (raw - CROWD_KNEE) / (1 + (raw - CROWD_KNEE) / room());
   const rate = () => ARRIVAL * (street().crowd ?? 1) * (1 + REG_STEP * perk('regulars')) * (1 + SKILLS.crowd.step * skill('crowd')) * crowdMult(); // walk-ins per second; 老主顾 and 人气 sit outside the cap (each has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
-    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], trophy: null, heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, away: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
-    debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null, gallery: Array(GALLERY_SLOTS).fill(null), galleryAcc: 0, extra: { tickets: 0, idle: 0, offline: 0 } });
+    up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, away: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
+    debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null, gallery: Array(ROOM_SLOTS).fill(null), galleryAcc: 0, extra: { tickets: 0, idle: 0, offline: 0 }, v: SAVE_V });
 
   let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   // 暂停 (pause): while a story scene plays the shop clock stands still (no walk-ins, no sales, no bill clock, no clerk round, no 行情
   // reroll), unlike 离开, which is the shop trading without you. Set by pause(true) and read only by tick(); not saved.
   let pausedAt: number | null = null;
-  let idle = false; // 挂机: the player has the 开包 page open and in view (setIdle); not saved
+  let idle = false; // 挂机: the player has the 货柜 page open and in view (setIdle); not saved
   const listeners: ((ev?: GameEvent) => void)[] = [];
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
@@ -334,9 +335,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   // A saved gallery card counts only if it still is a whole card whose key is its own identity (set|n|kind, as every singles key is); a damaged
   // one is an empty slot, never half a card: a card without its kind would come home to the binder as bulk and be sold by the clerk.
-  function galleryCard(x: unknown): Trophy | null {
-    const c = x as Partial<Trophy> | null;
-    return c && typeof c.set === 'string' && typeof c.n === 'string' && typeof c.kind === 'string' && typeof c.r === 'string' && typeof c.name === 'string' && c.key === `${c.set}|${c.n}|${c.kind}` && Number.isFinite(c.price) && c.price! >= 0 ? c as Trophy : null;
+  function galleryCard(x: unknown): Exhibit | null {
+    const c = x as Partial<Exhibit> | null;
+    return c && typeof c.set === 'string' && typeof c.n === 'string' && typeof c.kind === 'string' && typeof c.r === 'string' && typeof c.name === 'string' && c.key === `${c.set}|${c.n}|${c.kind}` && Number.isFinite(c.price) && c.price! >= 0 ? c as Exhibit : null;
   }
   function fin(v: unknown) { return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0; } // a saved amount of money: a finite number from zero up, or nothing. A declaration: load() runs before any const below it
   function load(): State {
@@ -354,9 +355,15 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
           if (!validDetail(r.detail)) delete r.detail; // a receipt from before the breakdown has none, and a damaged one is no better: neither is ever half-filled
           for (const f of ['tickets', 'bonus'] as const) if (f in r) { const v = fin(r[f]); if (v) r[f] = v; else delete r[f]; } // a damaged amount would break the sums and the 离开 line: it counts as none
         }
-        st.gallery = Array.from({ length: GALLERY_SLOTS }, (_, i) => galleryCard(Array.isArray(s.gallery) ? s.gallery[i] : null)); // padded or cut to the room; a pre-展厅 save has none
+        // 收藏室 (state.v): a save without v has the old two-part room, a separate `trophy` and five slots. The trophy becomes the 镇店台 (gallery[0]) and the
+        // five slots follow it as 第 1–5 格, so every card keeps standing; the trophy field goes. Each card is validated alone (a damaged one is an empty place),
+        // the room is padded or cut to ROOM_SLOTS, and a whole card that no longer fits goes home to the binder: nothing is lost on the way.
+        const kept: unknown[] = Array.isArray(s.gallery) ? s.gallery : [], places = s.v >= SAVE_V ? kept : [galleryCard(s.trophy), ...kept];
+        st.gallery = Array.from({ length: ROOM_SLOTS }, (_, i) => galleryCard(places[i]));
+        for (const x of places.slice(ROOM_SLOTS)) { const c = galleryCard(x); if (c) { const { key, ...card } = c; (st.singles[key] ||= { ...card, count: 0 }).count++; } }
+        delete st.trophy; st.v = SAVE_V;
         st.extra = { tickets: fin(s.extra?.tickets), idle: fin(s.extra?.idle), offline: fin(s.extra?.offline) }; st.galleryAcc = fin(s.galleryAcc) < 1 ? fin(s.galleryAcc) : 0;
-        for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...(st.trophy ? [st.trophy] : []), ...st.gallery.filter(Boolean)] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
+        for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...st.gallery.filter(Boolean)] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
         return st;
       } } catch {}
     return fresh();
@@ -467,7 +474,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 图鉴补卡: missing hits of a set, cheapest first, at today's market price.
   const missing = (id: string) => DATA[id].cards.filter(c => BUY_R.includes(c.r) && !state.dexSeen[`${id}|${c.n}`])
     .map(c => ({ n: c.n, name: c.name, r: c.r, price: S.cardPrice(id, c.n, c.r)! })).sort((a, b) => a.price - b.price);
-  // Buys the cheapest missing hit (or all of them) into the binder. Never into singles/case/trophy, so it cannot be resold.
+  // Buys the cheapest missing hit (or all of them) into the binder. Never into singles/case/收藏室, so it cannot be resold.
   function collect(id: string, all = false) {
     const miss = missing(id), buy = all ? miss : miss.slice(0, 1), cost = buy.reduce((a, c) => a + c.price, 0);
     if (!unlocked(id) || !buy.length || state.cash < cost) return false;
@@ -501,7 +508,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     emit(); return v;
   }
 
-  // ---------- shop: customers, display case, trophy, upgrades ----------
+  // ---------- shop: customers, display case, upgrades ----------
   function toCase(key: string, pct = casePct()) { // one copy of a hit from singles into the case, no log or save
     const c = state.singles[key];
     if (!c || state.shown.length >= slots() || !S.HITS.includes(c.kind)) return false;
@@ -547,46 +554,38 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const BUY_MIN = 0.3, BUY_MAX = 1;
   function setBuyPct(pct: number, commit = true) { state.buyPct = Math.round(Math.round(Math.min(BUY_MAX, Math.max(BUY_MIN, pct)) / PCT_STEP) * PCT_STEP * 100) / 100; if (commit) emit(); }
   function setCasePct(pct: number, commit = true) { state.casePct = clampPct(pct); for (const c of state.shown) c.pct = state.casePct; if (commit) emit(); }
-  function setTrophy(key: string) {
-    const c = state.singles[key]; if (!c) return false;
-    const old = state.trophy;
-    if (!--c.count) delete state.singles[key];
-    const { count, ...card } = c;
-    state.trophy = { key, ...card };
-    if (old) { const { key: k, ...o } = old; (state.singles[k] ||= { ...o, count: 0 }).count++; }
-    log(`镇店之宝：${card.name}，来的收藏党 +${Math.round(trophyBonus() * 300)}%`);
-    emit(); return true;
-  }
-  function clearTrophy() {
-    const old = state.trophy; if (!old) return;
-    const { key, ...o } = old; state.trophy = null;
-    (state.singles[key] ||= { ...o, count: 0 }).count++;
-    emit();
-  }
-
-  // ---------- 展厅 ----------
+  // ---------- 收藏室 ----------
   // The player's own collection on show. Not for sale and not offered to anyone: customers, the case, 带徒弟 and the clerk's bulk sale all look
-  // only at singles and the case. Each slot holds one physical copy; moving between here, the binder and the trophy never makes or loses one.
-  // It survives 开分店 and 破产 (restart); only 清空存档 clears it. Every move returns false, changing and saving nothing, when it is refused.
-  const galleryCards = () => state.gallery.filter((c): c is Trophy => !!c);
+  // only at singles and the case. Each place holds one physical copy; moving between here and the binder never makes or loses one.
+  // Place PEDESTAL is the 镇店台: its card is the 镇店之宝 (trophyBonus), and it counts toward 藏品总值 and the ticket like any other exhibit.
+  // The room survives 开分店 and 破产 (restart); only 清空存档 clears it. Every move returns false, changing and saving nothing, when it is refused.
+  const galleryCards = () => state.gallery.filter((c): c is Exhibit => !!c);
   const galleryValue = () => cents(galleryCards().reduce((a, c) => a + c.price, 0)); // the prices the cards are shown at
   const ticketPrice = () => galleryCards().length ? Math.max(TICKET_MIN, Math.min(TICKET_MAX, Math.floor(Math.sqrt(galleryValue()) / 5))) : 0;
-  const slotOk = (i: unknown): i is number => Number.isInteger(i) && (i as number) >= 0 && (i as number) < GALLERY_SLOTS;
+  const slotOk = (i: unknown): i is number => Number.isInteger(i) && (i as number) >= 0 && (i as number) < ROOM_SLOTS;
   const revealing = () => reveal;
-  // Singles → an empty slot. Refused during a reveal: the cards just pulled are already in singles and not flipped yet.
-  function collectToGallery(key: string, slot: number) {
-    if (reveal || !slotOk(slot) || state.gallery[slot] || typeof key !== 'string' || !Object.hasOwn(state.singles, key)) return false;
-    const c = state.singles[key]; if (!(c.count > 0)) return false;
+  // The binder's copy of a card → one place, out of its pocket. Refused during a reveal: the cards just pulled are already in singles and not flipped yet.
+  function takeSingle(key: string): Exhibit | null {
+    if (reveal || typeof key !== 'string' || !Object.hasOwn(state.singles, key)) return null;
+    const c = state.singles[key]; if (!(c.count > 0)) return null;
     if (!--c.count) delete state.singles[key];
     const { count, ...card } = c;
-    state.gallery[slot] = { key, ...card };
-    log(`收藏室：${card.name} 摆进第 ${slot + 1} 格，门票 $${ticketPrice()}`);
+    return { key, ...card };
+  }
+  // Singles → an empty place (the pedestal is place 0, the 展位 are 1–5).
+  function collectToGallery(key: string, slot: number) {
+    if (!slotOk(slot) || state.gallery[slot]) return false;
+    const card = takeSingle(key); if (!card) return false;
+    state.gallery[slot] = card;
+    log(`收藏室：${card.name} 摆${slot === PEDESTAL ? '上镇店台' : `进第 ${slot} 格`}，门票 $${ticketPrice()}`);
     emit(); return true;
   }
-  function collectTrophy(slot: number) { // the trophy itself moves, so the collectors it drew stop coming
-    const t = state.trophy; if (!t || !slotOk(slot) || state.gallery[slot]) return false;
-    state.gallery[slot] = t; state.trophy = null;
-    log(`收藏室：镇店之宝 ${t.name} 摆进第 ${slot + 1} 格，门票 $${ticketPrice()}`);
+  // Singles → the 镇店台, in one call: whatever stood there goes home to the binder (the 卡本 镇店 button). The collectors it drew follow the new card.
+  function toPedestal(key: string) {
+    const old = state.gallery[PEDESTAL], card = takeSingle(key); if (!card) return false;
+    state.gallery[PEDESTAL] = card;
+    if (old) { const { key: k, ...o } = old; (state.singles[k] ||= { ...o, count: 0 }).count++; } // after the take: the same card swapping with its own copy leaves the pocket as it was
+    log(`镇店之宝：${card.name}，来的收藏党 +${Math.round(trophyBonus() * 300)}%`);
     emit(); return true;
   }
   function uncollect(slot: number) { // back to singles, whatever the binder holds (BINDER only limits 收卡)
@@ -612,7 +611,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // A card the shop really has: a pack opened (the lifetime counter, kept by every restart), a card taken at the counter, held, shown or kept in
   // the 收藏室. 图鉴补卡 only marks the 图鉴 and 战利品 is a record, so neither is a card. A legacy shop that already owns 展示柜 or 手气 stays open.
   const cardBranchReady = () => state.pulled > 0 || !!state.intake?.n || lvl('case') > 0 || skill('luck') > 0
-    || state.shown.length > 0 || !!state.trophy || state.gallery.some(Boolean) || Object.values(state.singles).some(c => c.count > 0);
+    || state.shown.length > 0 || state.gallery.some(Boolean) || Object.values(state.singles).some(c => c.count > 0);
   function growthLock(k: string): string {
     if (!owned(k)) {
       const p = GROWTH_PARENTS[k as GrowthKey];
@@ -697,7 +696,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const lognorm = (median: number, sigma: number) => median * Math.exp(sigma * gauss());
   const pickW = <T,>(items: T[], w: (it: T) => number) => { let x = random() * items.reduce((a, it) => a + w(it), 0); return items.find(it => (x -= w(it)) < 0) || items[0]; };
   const typeWeight = (t: string) => t === 'flipper' && state.shopT < OPENING ? 0 : TYPES[t].w * (street().types?.[t] ?? 1) * (t === 'collector' ? 1 + 0.15 * lvl('signage') + 3 * trophyBonus() : t === 'seeker' ? 1 + 0.15 * lvl('signage') : 1);
-  // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the trophy, plus personal spread.
+  // Highest share of market this customer will pay: the type's mean, plus signage, plus (collectors) the 镇店台 card, plus personal spread.
   const tolOf = (t: string) => Math.max(0.5, TYPES[t].tol + (t === 'flipper' ? 0 : SIGN_STEP * lvl('signage') + SKILLS.talk.step * skill('talk')) + (t === 'collector' ? trophyBonus() * 0.6 : 0) + TYPES[t].sd * gauss());
   const heatW = (id: string) => { const h = state.heat[id]; return h > 1 ? 2 : h < 1 ? 0.5 : 1; };
   // Both record the sale on the visit (what went, at what asking price, for how much) and take the money.
@@ -932,7 +931,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     for (const id of Object.keys(state.flipT)) state.flipT[id] += d;
     if (state.away) state.away.at += d;
   }
-  // 挂机: the shop earns the idle bonus while the player has the 开包 page open and in view. The time since the last tick is settled under the
+  // 挂机: the shop earns the idle bonus while the player has the 货柜 page open and in view. The time since the last tick is settled under the
   // mode the player was in (never retroactively under the new one), and with the reveal state the last tick had, so a mid-reveal flip does not
   // unlock the cards still to be flipped. Paused: nothing is settled and the flag just changes; the pause hands its gap back on resume.
   function setIdle(on: boolean) { on = !!on; if (on === idle) return; const was = idle; idle = on; advance(reveal, was); }
@@ -1092,17 +1091,17 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function branch() {
     if (!canBranch()) return false;
     const fame = fameFor() + handFame(), b = state.branch, singles = { ...state.singles }, hands = SETS.filter(s => handDone(s.id)).length;
-    for (const c of state.trophy ? [...state.shown, state.trophy] : state.shown) { const { key, pct, ...o } = c as Shown; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder
+    for (const c of state.shown) { const { key, pct, ...o } = c; (singles[key] ||= { ...o, count: 0 }).count++; } // the case comes along, back in the binder; the 收藏室 (the 镇店台 too) stays as it is
     restart({ ...b, n: b.n + 1, fame: b.fame + fame, got: b.got + fame, life: b.life + revenue(), hands }, singles);
     log(`开了第 ${state.branch.n + 1} 家店，带来名气 ${fame}。九姐出的本钱：$${state.debt.toLocaleString('en-US')}`, 'hit');
     pending.push({ type: 'story', id: 'branch', week: 1, amount: state.debt }); flush(); return true;
   }
-  // 破产: 九姐 takes cash, stock, binder, sale case and trophy; the shop's revenue earns no 名气.
-  // Restart the same shop number and debt with a higher loan rate. Gallery cards/positions, 图鉴,
+  // 破产: 九姐 takes cash, stock, binder and sale case; the shop's revenue earns no 名气.
+  // Restart the same shop number and debt with a higher loan rate. The 收藏室 (its cards, the 镇店台's too, and their places), 图鉴,
   // achievements, the 欧气 record and previously earned 名气/perks survive.
   function bankrupt() {
     const o = state, goods = SETS.reduce((a, x) => a + ((o.stock[x.id] || 0) + shelfQty(x.id)) * wholesale(x.id), 0);
-    const cards = Object.values(o.singles).reduce((a, c) => a + c.price * c.count, 0) + [...o.shown, ...(o.trophy ? [o.trophy] : [])].reduce((a, c) => a + c.price, 0);
+    const cards = Object.values(o.singles).reduce((a, c) => a + c.price * c.count, 0) + o.shown.reduce((a, c) => a + c.price, 0);
     const wreck: Wreck = { at: clock(), week: o.week, shop: o.branch.n, debt: o.debt, cash: o.cash, goods: cents(goods), cards: cents(cards), revenue: cents(revenue()) };
     if (galleryCards().length) wreck.gallery = { n: galleryCards().length, value: galleryValue() }; // not the shop's: restart keeps it
     restart({ ...o.branch, broke: (o.branch.broke || 0) + 1 }, {});
@@ -1128,10 +1127,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
     ackCardSale,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
-    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, setTrophy, clearTrophy, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
+    list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     pause, paused: () => pausedAt !== null, OPENING, OPENING_CAP, FLIP_SHARE,
-    GALLERY_SLOTS, GALLERY_RATE, TICKET_MIN, TICKET_MAX, IDLE_BONUS, OFFLINE_BONUS, galleryValue, ticketPrice, collectToGallery, collectTrophy, uncollect, moveCollect, setIdle, idling, revealing,
+    GALLERY_SLOTS, ROOM_SLOTS, PEDESTAL, GALLERY_RATE, TICKET_MIN, TICKET_MAX, IDLE_BONUS, OFFLINE_BONUS, galleryValue, ticketPrice, collectToGallery, toPedestal, uncollect, moveCollect, setIdle, idling, revealing,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,

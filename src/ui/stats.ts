@@ -45,8 +45,8 @@ export function renderStats(reveal = false) {
 
 export function renderEarnings() {
   const active = G.idling(), extra = G.state.extra, offline = G.skill('watch') * G.OFFLINE_BONUS;
-  render(html`<h2>${G.paused() ? '剧情中 · 经营暂停' : active ? `挂机中 · 销售奖励 +${G.IDLE_BONUS * 100}%` : '挂机已暂停'}</h2>
-    <p>停留在开包页且页面可见，顾客成交和店员卖散卡可多得 ${G.IDLE_BONUS * 100}% 奖励。切页或转到后台立即停止；没有销售就没有奖励。</p>
+  render(html`<h2>${G.paused() ? '剧情中 · 经营暂停' : active ? `挂机中 · 销售奖励 +${G.IDLE_BONUS * 100}%` : '挂机已暂停 · 切到货柜页开始挂机'}</h2>
+    <p>${active ? '正停在货柜页，' : '停在货柜页（货架或展示柜）且页面可见时，'}顾客成交和店员卖散卡可多得 ${G.IDLE_BONUS * 100}% 奖励。切到其他页或转到后台立即停止；没有销售就没有奖励。</p>
     <p>本店挂机奖励 <b class="gain">${money(extra.idle)}</b></p>
     <details><summary>离线经营 · 奖励 +${Math.round(offline * 100)}%</summary>
       <p>离开后最多经营 ${G.offlineCap() / 3600} 小时，仍需库存。「看店」每级增加 ${G.OFFLINE_BONUS * 100}% 离线销售奖励，最多 ${Math.round(G.SKILLS.watch.max * G.OFFLINE_BONUS * 100)}%。与挂机不叠加，门票不加成。</p>

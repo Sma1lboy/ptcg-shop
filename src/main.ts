@@ -25,17 +25,18 @@ import { renderDue, renderLedger, renderWreck, initLedger } from './ui/ledger.ts
 import { initSound } from './ui/sound.ts';
 import { initMenu } from './ui/menu.ts';
 import { initWalk } from './ui/walk.ts';
+import { renderBoard, initBoard } from './ui/board.ts';
 
 const sourceDetails = document.getElementById('sources')!.parentElement as HTMLDetailsElement;
 sourceDetails.addEventListener('toggle', () => { if (sourceDetails.open) renderSources(); });
-const cardPanels = ['luck', 'dex', 'singles', 'casepanel', 'case-cust'].map(id => document.getElementById(id)!);
+const cardPanels = ['luck', 'dex', 'singles', 'casepanel', 'case-cust', 'board'].map(id => document.getElementById(id)!); // 排行 shows the live collection value and 图鉴 count, so it waits for a reveal too
 // While a pack is being revealed the panels that would show the pull early (luck, binder, singles, the till roll, the case, the closing
 // receipt) wait; the rest keep up with the shop, which goes on selling (a player who leaves a pack half-flipped for 货柜 or 成长 saw
 // frozen counts): the top bar (its singles' worth stays at the pre-pack value), the bill, the ledger, 成长, the tab counts, the shelf
 // and the rail (their open buttons off). The mat fires ptcg:release when done.
 function renderAll() {
   for (const panel of cardPanels) if (panel.hasAttribute('inert') !== hold) panel.toggleAttribute('inert', hold);
-  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderNotice(); refreshMat();
+  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderBoard(); renderNotice(); refreshMat();
 }
 
 bindEvents(); bindMatInput();
@@ -45,7 +46,7 @@ setInterval(() => G.tick(hold), 1000); // mid-reveal the grace of an overdue bil
 G.tick(); renderAll(); renderMat(); renderSources(); // first tick credits the time the shop was closed
 // Another tab, a locked screen, a closed lid: the player is away (game.ts AWAY) until the page is seen again, however the browser
 // throttles the timer meanwhile. A page opened in a background tab starts away.
-const syncIdle = () => { G.setIdle(!document.hidden && currentPage() === 'open'); renderEarnings(); };
+const syncIdle = () => { const p = currentPage(); G.setIdle(!document.hidden && (p === 'shelf' || p === 'case')); renderEarnings(); };
 const seen = () => { if (document.hidden) { G.setIdle(false); G.leave(); } else { G.back(); syncIdle(); } };
 document.addEventListener('visibilitychange', seen); seen();
 addEventListener('hashchange', syncIdle);
@@ -59,4 +60,5 @@ initStory(); // before the guide: the story comes first, the guide waits until i
 bindGuide();
 
 initGoals(); initBinder(); initCollection(); initMenu(); initWalk();
+initBoard(); // after bindLayout: a ?board= link imports its entry and opens the page
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

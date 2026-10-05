@@ -1,6 +1,7 @@
 // 成就 page (#ach) and the unlock pop as a BW medal box (DESIGN.md「奖章」): every earned achievement is a round medal struck in its
-// tier (铜 / 银 / 金牌, 荣誉 the dark one) with the achievement's word on its face, beside a small window with its name, what it
-// took, the day and the bonus. Not yet: a one-row outline with its tier and progress.
+// tier (铜 / 银 / 金牌, 荣誉 the dark one) with its badge art set in it (the achievement's word when the art is missing), beside a
+// small window with its name, what it took, the day and the bonus; the medal opens a 3D one to turn. Not yet: a one-row outline
+// with its tier and progress (no badge: a silhouette would give the hidden ones away).
 // Achievements are judged (check) only outside a reveal, so the pop never gives away a pull before its card is flipped;
 // the counters (note, watch) are kept on every emit.
 import { html, render } from 'lit-html';
@@ -18,20 +19,63 @@ const groupName = (g: string) => GROUPS.find(([k]) => k === g)![1];
 const tierName = (t: string) => TIERS.find(([k]) => k === t)![1];
 const pay = (a: Ach) => (a.cash ? `奖金 ${money(a.cash)}` : '荣誉');
 
-// The medal: its face is the tier (DESIGN.md「奖章」); the word is struck on it (SIR-like words in the price digits, long words
-// smaller). `新`: earned since the player last looked at this page.
-const medal = (t: string, word: string) => {
-  const wide = /^[A-Z]+$/.test(word) ? 'tag' : word.length > 2 ? 'long' : '';
-  return html`<i class="medal t-${t}" aria-hidden="true"><b class=${wide}>${word}</b></i>`;
+// The medal: its face is the tier (DESIGN.md「奖章」); the badge art (public/gen/badges/<id>.webp, referenced by URL like the story
+// art, never inlined) is set in it inside a ring of the tier's foil. Without the art — pen, offline, a file that 404s — the word is
+// struck on the face instead (SIR-like words in the price digits, long words smaller); `broken` remembers the ones that failed so a
+// re-render doesn't ask for them again. `新`: earned since the player last looked at this page.
+const badge = (id: string) => `gen/badges/${id}.webp`;
+const broken = new Set<string>();
+const lost = (id: string, e: Event) => { // an image that won't load: this medal (page, pop and an open dialog's flat view alike) becomes its word
+  broken.add(id);
+  const img = e.target as HTMLElement; img.closest('.medal')?.classList.remove('art'); img.remove();
+  renderAch();
 };
+const medal = (t: string, word: string, id = '') => {
+  const wide = /^[A-Z]+$/.test(word) ? 'tag' : word.length > 2 ? 'long' : '', art = !!id && !broken.has(id);
+  return html`<i class="medal t-${t} ${art ? 'art' : ''}" aria-hidden="true">${art ? html`<img src=${badge(id)} alt="" decoding="async" draggable="false" @error=${(e: Event) => lost(id, e)}>` : ''}<b class=${wide}>${word}</b></i>`;
+};
+// On the page the medal is a button that opens the 3D one; in the unlock pop (one big link to #ach) it is only the picture.
 function earned(a: Ach, cls = '') {
-  const at = G.state.ach[a.id], t = tier(a);
+  const at = G.state.ach[a.id], t = tier(a), face = medal(t, a.seal, a.id);
   return html`<li class="medal-row t-${t} ${cls}">
-      ${medal(t, a.seal)}
+      ${cls ? face : html`<button type="button" class="medal-btn" data-medal=${a.id} aria-label="看奖章：${a.name}">${face}</button>`}
       <div class="m-txt"><p class="m-k">${at > seenAt && !cls ? html`<em class="a-new">新</em>` : ''}${groupName(a.group)} · ${tierName(t)}</p>
         <p class="a-name">${a.name}</p><p class="m-desc">${a.desc}</p>
         <p class="m-foot"><span>${day(at)}</span>${a.cash ? html`<b class="gain">+${money(a.cash)}</b>` : html`<b>荣誉</b>`}</p></div>
     </li>`;
+}
+
+// ---------- the 3D medal (src/badge3d.js): a native dialog with the coin to turn. The flat medal is there first and stays when the
+// coin can't run (no WebGL, three.js didn't load, the context was lost); reduced motion gets the coin without the idle spin. The
+// renderer lives and draws only while the dialog is open ----------
+function openMedal(a: Ach) {
+  const focus = document.activeElement as HTMLElement | null, dialog = document.createElement('dialog'), t = tier(a);
+  dialog.id = 'medal-view'; dialog.className = 'inspect medal-view'; dialog.setAttribute('aria-labelledby', 'mv-name');
+  render(html`<header class="inspect-head"><h2 id="mv-name">${a.name}</h2><button type="button" data-close aria-label="关闭奖章">关闭</button></header>
+    <div class="mv-stage t-${t}"><div class="mv-flat">${medal(t, a.seal, a.id)}</div></div>
+    <p class="m-k">${groupName(a.group)} · ${tierName(t)}</p><p class="m-desc">${a.desc}</p>
+    <p class="m-foot"><span>${day(G.state.ach[a.id])}</span>${a.cash ? html`<b class="gain">+${money(a.cash)}</b>` : html`<b>荣誉</b>`}</p>
+    <div class="inspect-controls"><button type="button" data-flip hidden>翻面</button></div>
+    <p class="inspect-help">拖动或用方向键转动奖章，背面是章上的字。Esc 或点击框外关闭。</p>`, dialog);
+  const stage = dialog.querySelector<HTMLElement>('.mv-stage')!, flat = dialog.querySelector<HTMLElement>('.mv-flat')!, flip = dialog.querySelector<HTMLButtonElement>('[data-flip]')!;
+  let view: { flip(): void; dispose(): void } | null = null, outside = false;
+  const coin = () => { flat.hidden = false; flip.hidden = true; view = null; }; // the context was lost: back to the flat medal
+  import('../badge3d.js').then(m => m.mountBadge(stage, {
+    front: broken.has(a.id) ? null : badge(a.id), seal: a.seal, name: a.name, tier: t, label: `${a.name}，${tierName(t)}`,
+    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches, onLost: coin,
+  })).then(v => {
+    if (!v) return;
+    if (!dialog.open) return v.dispose(); // closed while three.js was loading
+    view = v; flat.hidden = true; flip.hidden = false;
+  }).catch(e => console.warn('[ach] 3D medal unavailable; the flat medal stays', e));
+  flip.addEventListener('click', () => view?.flip());
+  dialog.querySelector('[data-close]')!.addEventListener('click', () => dialog.close());
+  const isOutside = (e: PointerEvent) => { const b = dialog.getBoundingClientRect(); return e.target === dialog && (e.clientX < b.left || e.clientX > b.right || e.clientY < b.top || e.clientY > b.bottom); };
+  dialog.addEventListener('pointerdown', e => { outside = isOutside(e); });
+  dialog.addEventListener('pointerup', e => { if (outside && isOutside(e)) dialog.close(); outside = false; });
+  dialog.addEventListener('close', () => { view?.dispose(); view = null; dialog.remove(); if (focus?.isConnected) focus.focus({ preventScroll: true }); }, { once: true });
+  document.body.append(dialog); dialog.showModal();
+  dialog.querySelector<HTMLButtonElement>('[data-close]')!.focus();
 }
 // Not yet earned: only the label's outline, one row: what it is, what to do, how far along, and which stock it would print on.
 function todo(a: Ach) {
@@ -135,5 +179,9 @@ export function initAch() {
   // Tapping anywhere else puts the label away (on a phone it sits over the bottom of the mat); following its link goes to the page.
   document.addEventListener('pointerdown', e => { if (showing && !(e.target as Element).closest('#ach-pop')) next(); });
   $('ach-pop').addEventListener('click', () => { queue = []; next(); });
+  $('achs').addEventListener('click', e => {
+    const id = (e.target as Element).closest<HTMLElement>('[data-medal]')?.dataset.medal, a = ACH.find(x => x.id === id);
+    if (a && G.state.ach[a.id]) openMedal(a);
+  });
   flush();
 }

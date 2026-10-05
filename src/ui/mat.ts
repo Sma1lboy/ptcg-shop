@@ -13,7 +13,7 @@ import { mountTable, packFront, ready as threeReady } from '../table3d.js';
 import { bill } from '../debt.ts';
 import { toBook } from './binder.ts';
 import { inspectCard } from './inspect.ts';
-import { themeOf, dealShares, figureSVG, figureInk, figureLife } from '../series.ts';
+import { themeOf, dealShares, figureSVG, figureInk, figureLife, tearOf, tearFromGesture, tearAlong, tearFlight, tearPose, poseCss, tearClip, isTearId, DEFAULT_TEAR, type TearId } from '../series.ts';
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -99,7 +99,7 @@ export function renderMat() {
     if (!(set.id in fronts)) { fronts[set.id] = ''; packFront(set.id).then((u: string | null) => { if (u) { fronts[set.id] = u; if (mat.mode === 'pack' && mat.set === set.id && !el.querySelector('.pack:is(.dragging, .torn)')) renderMat(); } }); }
     el.innerHTML = `<div class="mat-head"><h2>${set.name}</h2><span class="pack-hint">点击撕开</span>${sndBtn()}</div>
       <div class="mat-pack"><button type="button" class="pack${art ? ' art' : ''}" data-act="tear" aria-label="撕开这包${set.name}"${art ? ` style="--art: url(${art})"` : ''}>
-        <span class="pack-crimp"></span>${art ? `<img class="pack-face" src="${art}" alt="">` : `<img src="${logoUrl(set.id)}" alt=""><span class="pack-name">${set.name}</span>`}<span class="pack-crimp bottom"></span></button></div>`;
+        <span class="pack-crimp"></span><span class="pack-side l"></span><span class="pack-side r"></span><span class="pack-half"></span>${art ? `<img class="pack-face" src="${art}" alt="" draggable="false">` : `<img src="${logoUrl(set.id)}" alt="" draggable="false"><span class="pack-name">${set.name}</span>`}<span class="pack-crimp bottom"></span></button></div>`;
     return;
   }
   if (mat.mode === 'cards') {
@@ -184,9 +184,9 @@ const nextUnlock = () => {
   const locked = SETS.filter(x => !G.unlocked(x.id)).sort((a, b) => G.unlockAt(a.id) - G.unlockAt(b.id));
   return locked.length ? `下一个解锁：${locked[0].name} · 营收 ${money(G.revenue())} / $${G.unlockAt(locked[0].id).toLocaleString('en-US')}` : '';
 };
-const HINT = { shelf: nextUnlock, pack: () => touch() ? '按住封口往右拖，撕开。点一下也行' : '按住封口往右拖，撕开。点一下或按空格也行',
+const HINT = { shelf: nextUnlock, pack: () => touch() ? '横拖封口或中间撕开，或沿侧边往下拖。点一下照上次撕法' : '横拖封口或中间撕开，或沿侧边往下拖。点一下或按空格照上次撕法',
   cards: () => touch() ? '点一下，或把最前面这张往右滑开' : '点一下、按空格，或把最前面这张往右滑开', done: () => '点桌上的卡，拿起来细看',
-  batch: () => touch() ? '点一下全部撕开，或按住从左往右划过这排包' : '点一下或按空格全部撕开，也可以按住从左往右划过这排包',
+  batch: () => touch() ? '点一下全部撕开，或横划封口、中间，或沿侧边往下划' : '点一下或按空格全部撕开，或横划封口、中间，或沿侧边往下划',
   batchCards: () => touch() ? '点一下，翻下一张' : '点一下或按空格，翻下一张',
   held: () => touch() ? '点一下，把卡放回桌上' : '点一下、按空格或 Esc，把卡放回桌上',
   run: () => `${runProg()} · 出新卡就停` }; // the header line is cut short on phones: the run's progress is repeated here
@@ -203,8 +203,15 @@ const head3D = () => {
 const idleLine = () => Object.values(G.state.stock).some(n => n > 0) ? '点桌上的包，开一包'
   : matchMedia('(max-width: 779px)').matches ? '先去「货柜」进货' : '仓库还空着：先去货柜进货，或点桌上的包现进现开';
 const hint3D = (k: keyof typeof HINT) => { const h = document.getElementById('s3-hint'); if (h) h.textContent = HINT[k](); };
+// The way a tap or Space tears a pack: the way one was torn last (a drag picks its own), kept in localStorage like the mute switch.
+// Presentation only: nothing here touches the game or the opening's random numbers.
+const TEAR_KEY = 'ptcg.tear';
+function lastTear(): TearId { try { const s = localStorage.getItem(TEAR_KEY); if (isTearId(s)) return s; } catch (e) { /* storage blocked: the way packs always tore */ } return DEFAULT_TEAR; }
+function setLastTear(id: TearId) { try { localStorage.setItem(TEAR_KEY, id); } catch (e) { /* ignore */ } }
 const on3D = {
-  onTear() {
+  tearStyle: () => lastTear(), // a tap, Space or flip(0) tears the way the last pack was torn
+  onTear(style?: string) {
+    if (isTearId(style)) setLastTear(style);
     if (batch()) { if (mat.torn) return; mat.torn = true; } else if (mat.mode === 'pack') mat.mode = 'cards'; else return;
     FX.tear(); head3D(); hint3D(run ? 'run' : batch() ? 'batchCards' : 'cards');
     if (run) table!.flipAll(); // 连开: the picks turn over together as soon as they're out, no tap per card
@@ -531,12 +538,23 @@ export function openBatch(id: string, keep = false) {
   renderMat(); if (!keep) frameMat();
   if (!mat.m3d) revealBatch(mat);
 }
+// Tears the pack in hand open the way a drag picked (data-tear, set while it was dragged), else the way the last one went. The
+// 2D mat's pieces: the top strip (.pack-crimp), a strip down an edge (.pack-side), the pack's top half (.pack-half); the body
+// keeps a ragged edge where the piece was (--cut). The 3D table tears the same ways (table3d.js cut, tearPack).
+// The piece of the 2D pack a style tears off: the top strip, the strip down one edge, the top half.
+const pieceOf = (b: HTMLElement, id: TearId) => { const t = tearOf(id); return b.querySelector<HTMLElement>(t.line === 'side' ? `.pack-side.${t.edge < 0 ? 'l' : 'r'}` : t.line === 'mid' ? '.pack-half' : '.pack-crimp:not(.bottom)'); };
 export function tear(b: HTMLElement) {
-  const tok = mat, theme = themeOf(tok.set); FX.tear(); b.classList.add('torn');
-  if (theme && !reduced()) b.querySelector('.pack-crimp:not(.bottom)')?.animate([
-    { transform: 'translate(0, 0) rotate(0deg)', opacity: 1 },
-    { transform: `translate(${40 + theme.strip.lift * 5}px, ${-theme.strip.lift * 12}px) rotate(${theme.strip.spin * 180 / Math.PI}deg)`, opacity: 0 },
-  ], { duration: 380, easing: 'ease-out', fill: 'forwards' });
+  if (b.classList.contains('torn')) return;
+  const tok = mat, id: TearId = isTearId(b.dataset.tear) ? b.dataset.tear : lastTear();
+  setLastTear(id); FX.tear();
+  if (b.dataset.tear !== id) { b.dataset.tear = id; b.style.setProperty('--cut', tearClip(id)); } // a tap or Space: nothing was dragged, the cut shows now
+  const piece = pieceOf(b, id), from = piece?.style.transform || poseCss(0, 0, 0);
+  if (piece) piece.style.transformOrigin = tearPose(id, 0).origin;
+  b.classList.add('torn');
+  if (piece && !reduced()) {
+    const f = tearFlight(id, themeOf(tok.set)?.strip); // lift and spin are the series' strip, as in 3D
+    piece.animate([{ transform: from, opacity: 1 }, { transform: poseCss(f.x, f.y, f.deg), opacity: 0 }], { duration: 380, easing: 'ease-out', fill: 'forwards' });
+  }
   setTimeout(() => { if (mat !== tok) return; mat.mode = 'cards'; mat.cur = 0; renderMat(); seriesFigure($('stage'), .4); }, reduced() ? 0 : 380);
 }
 export function peek(i: number) {
@@ -572,25 +590,45 @@ export function bindMatInput() {
   });
   document.addEventListener('click', e => { if (Date.now() - swiped < 120) e.stopPropagation(); }, true);
 
-  // Drag the top of the sealed pack to the right to rip it; a plain tap or Space still works.
-  const TEAR_PX = 150; let rip: { p: HTMLElement; x: number } | null = null, ripMoved = false;
+  // Drag a sealed pack open: where the drag starts on it and which way it goes pick the way it tears (series.ts tearFromGesture, the
+  // 3D table's rule): sideways from the top third rips the top strip, sideways from lower down tears it across the waist, down tears
+  // the strip along the nearer edge. The piece follows the finger (tearPose); a plain tap or Space tears it the way it was torn last.
+  type Rip = { p: HTMLElement; x: number; y: number; u: number; v: number; id: TearId | null; len: number; snd: number };
+  let rip: Rip | null = null, ripMoved = false, ripGo = false, ripBack = 0, ripEnd = 0;
+  const unrip = (p: HTMLElement) => { for (const el of p.querySelectorAll<HTMLElement>('.pack-crimp, .pack-side, .pack-half')) { el.style.transform = ''; el.style.transformOrigin = ''; } delete p.dataset.tear; p.style.removeProperty('--cut'); };
+  // let go short of the tear: the piece springs back (its CSS transition), then the cut is dropped
+  const springBack = (p: HTMLElement, id: TearId) => { const el = pieceOf(p, id); if (el) el.style.transform = tearPose(id, 0).transform; ripBack = window.setTimeout(() => unrip(p), 400); };
   document.addEventListener('pointerdown', e => {
     const p = (e.target as Element).closest<HTMLElement>('.pack'); if (!p || p.classList.contains('torn')) return;
-    rip = { p, x: e.clientX }; ripMoved = false; p.setPointerCapture?.(e.pointerId); p.classList.add('dragging');
+    clearTimeout(ripBack); unrip(p);
+    const b = p.getBoundingClientRect(), at = (v: number) => Math.min(1, Math.max(0, v));
+    rip = { p, x: e.clientX, y: e.clientY, u: at((e.clientX - b.left) / b.width), v: at((e.clientY - b.top) / b.height), id: null, len: 0, snd: 0 }; ripMoved = false;
+    FX.unlock(); p.setPointerCapture?.(e.pointerId); p.classList.add('dragging');
   });
   document.addEventListener('pointermove', e => {
-    if (!rip) return; const d = Math.max(0, e.clientX - rip.x);
+    if (!rip) return; const dx = e.clientX - rip.x, dy = e.clientY - rip.y, d = Math.hypot(dx, dy);
     if (d > 6) ripMoved = true;
-    rip.p.style.setProperty('--tear', Math.min(1, d / TEAR_PX).toFixed(2));
+    if (!rip.id && d > 9) {
+      const id = tearFromGesture(rip.u, rip.v, dx, dy); if (!id) return; // still going the wrong way (up): read again as it moves
+      const b = rip.p.getBoundingClientRect(); rip.id = id; rip.len = tearOf(id).line === 'side' ? Math.min(190, b.height * .6) : Math.min(150, b.width * .75);
+      rip.p.dataset.tear = id; rip.p.style.setProperty('--cut', tearClip(id));
+    }
+    if (!rip.id) return;
+    const t = Math.min(1, Math.max(0, tearAlong(rip.id, dx, dy)) / rip.len), el = pieceOf(rip.p, rip.id), pose = tearPose(rip.id, t);
+    if (el) { el.style.transform = pose.transform; el.style.transformOrigin = pose.origin; }
+    if (Math.abs(t - rip.snd) > .14) { rip.snd = t; FX.crinkle(); } // the foil crinkles along the drag, as on the 3D table
   });
   document.addEventListener('pointerup', e => {
-    if (!rip) return; const { p } = rip, done = e.clientX - rip.x >= TEAR_PX * .7; rip = null;
-    p.classList.remove('dragging'); if (!done) { p.style.removeProperty('--tear'); return; }
-    p.style.removeProperty('--tear'); ripMoved = true; ripGo = true; p.click();
+    if (!rip) return; const { p, id, len, x, y } = rip, done = !!id && tearAlong(id, e.clientX - x, e.clientY - y) >= len * .7; rip = null; ripEnd = Date.now();
+    p.classList.remove('dragging');
+    if (done) { ripMoved = true; ripGo = true; p.click(); } else if (id) springBack(p, id);
   });
-  // A drag ends in a native click on the pack; swallow it (ripGo lets our own click through once).
-  let ripGo = false;
-  document.addEventListener('click', e => { if (!ripMoved || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
+  document.addEventListener('pointercancel', () => {
+    if (!rip) return; const { p, id } = rip; rip = null;
+    p.classList.remove('dragging'); if (id) springBack(p, id);
+  });
+  // A drag ends in a native click on the pack; swallow it (ripGo lets our own click through once). Space or a later click is not it.
+  document.addEventListener('click', e => { if (!ripMoved || Date.now() - ripEnd > 400 || !(e.target as Element).closest('.pack')) return; if (ripGo) { ripGo = false; return; } e.stopPropagation(); }, true);
 
   // 放回 has no case in events.ts: the key is the mat's own, drawn by head3D and answered here.
   document.addEventListener('click', e => { if ((e.target as Element).closest('[data-act="putback"]')) putBack(); });

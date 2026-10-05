@@ -8,6 +8,8 @@ import { createGame } from '../src/game.ts';
 import * as A from '../src/achievements.ts';
 import * as ST from '../src/story.ts';
 import * as D from '../src/debt.ts';
+import * as BD from '../src/board.ts';
+import * as SR from '../src/series.ts';
 
 const N = 200000;
 for (const set of PTCG_SETS) {
@@ -186,10 +188,10 @@ console.log('ok luck percentile');
   st().singles.c = { ...hit, count: 1 }; G.list('c'); G.setCardPrice(st().shown.length - 1, 5);
   assert.equal(G.cardPct(st().shown.at(-1)), G.MAX_PCT, 'card price clamps');
 
-  // 5. Trophy: bounded and returned to stock. It changes who comes, not how many.
-  st().singles.b = { ...hit, price: 1e7, count: 1 }; G.setTrophy('b');
-  assert.ok(G.trophyBonus() < 0.5, 'trophy bonus is bounded');
-  const rate0 = G.rate(); G.clearTrophy(); assert.equal(G.rate(), rate0, 'trophy does not change walk-in rate'); assert.equal(st().singles.b.count, 1);
+  // 5. 镇店台: bounded and returned to stock. It changes who comes, not how many.
+  st().singles.b = { ...hit, price: 1e7, count: 1 }; G.toPedestal('b');
+  assert.ok(G.trophyBonus() < 0.5, 'the pedestal bonus is bounded');
+  const rate0 = G.rate(); G.uncollect(G.PEDESTAL); assert.equal(G.rate(), rate0, 'the pedestal does not change walk-in rate'); assert.equal(st().singles.b.count, 1);
 
   // 5b. Every walk-in is kept for the 顾客 panel and 店内动态: what they came for, the asking price, the most they would pay, how it
   //     ended. The records have to agree with the till and with the rule that decided the sale.
@@ -303,13 +305,13 @@ console.log('ok luck percentile');
     assert.equal(G.collect('sv08.5'), false, 'locked set cannot be collected');
     G.buy('sv08', 5); G.open('sv08', 5);
     const miss = G.missing('sv08'), first = miss[0], n0 = G.dexCount('sv08'), cash0 = st().cash;
-    const before = JSON.stringify([st().singles, st().shown, st().trophy, st().dex, st().pulled]);
+    const before = JSON.stringify([st().singles, st().shown, st().gallery, st().dex, st().pulled]);
     assert.ok(miss.every((c, i) => G.BUY_R.includes(c.r) && (!i || c.price >= miss[i - 1].price)), 'only hits are for sale, cheapest first');
     assert.ok(G.collect('sv08'));
     assert.equal(first.price, S.cardPrice('sv08', first.n, first.r)); assert.ok(Math.abs(cash0 - st().cash - first.price) < 1e-9, 'a card costs its market price');
     assert.equal(G.dexCount('sv08'), n0 + 1);
     assert.ok(G.collect('sv08', true)); assert.equal(G.missing('sv08').length, 0); assert.equal(G.collect('sv08'), false, 'nothing left to buy');
-    assert.equal(JSON.stringify([st().singles, st().shown, st().trophy, st().dex, st().pulled]), before, 'bought cards never become sellable (no buy-at-market, list-at-160% pump) and are not pulls');
+    assert.equal(JSON.stringify([st().singles, st().shown, st().gallery, st().dex, st().pulled]), before, 'bought cards never become sellable (no buy-at-market, list-at-160% pump) and are not pulls');
     assert.ok(G.luck().live, 'luck baseline untouched');
     assert.ok(!G.master('sv08'), 'C/U/R only come from packs');
     st().cash = 0; assert.equal(G.collect('sv10'), false, 'cannot afford it'); st().cash = 1e6;
@@ -436,13 +438,13 @@ console.log('ok luck percentile');
   st().cash = 1e6; G.repay(1e9); assert.equal(st().debt, 0); assert.ok(G.canBranch(), 'paid off: the branch opens'); st().up = { signage: 3, racks: 2 }; st().skills = { luck: 3, talk: 2 };
   G.buy('sv08', 60); G.open('sv08', 60); A.check(G);
   const hits = Object.keys(st().singles).filter(k => S.HITS.includes(st().singles[k].kind));
-  G.list(hits[0]); G.setTrophy(hits[1] ?? hits[0]);
-  const cards = () => Object.values(st().singles).reduce((a, c) => a + c.count, 0) + st().shown.length + (st().trophy ? 1 : 0);
+  G.list(hits[0]); G.toPedestal(hits[1] ?? hits[0]); A.check(G); // the pedestal stays through the branch, so its 镇店 achievement is earned before it, not paid after
+  const cards = () => Object.values(st().singles).reduce((a, c) => a + c.count, 0) + st().shown.length + st().gallery.filter(Boolean).length;
   const n0 = cards(), L0 = G.luck(), ach0 = { ...st().ach }, fame = G.fameFor();
   assert.ok(G.branch());
   const L1 = G.luck();
   assert.deepEqual([L1.packs, L1.value, L1.live, L1.expected, L1.pct], [L0.packs, L0.value, L0.live, L0.expected, L0.pct], '欧气 record unchanged by a branch');
-  assert.equal(cards(), n0, 'every card comes along'); assert.equal(st().shown.length + (st().trophy ? 1 : 0), 0, 'the case is emptied into the binder');
+  assert.equal(cards(), n0, 'every card comes along'); assert.equal(st().shown.length, 0, 'the case is emptied into the binder'); assert.ok(st().gallery[G.PEDESTAL] && G.trophyBonus() > 0, 'the pedestal stays in the room');
   assert.deepEqual(st().ach, ach0); assert.deepEqual(A.check(G), [], 'achievements are not paid twice');
   assert.deepEqual([st().cash, G.revenue(), st().up, st().skills, G.unlocked('sv08.5')], [G.START_CASH, 0, {}, {}, false], 'the new shop starts from zero, later sets lock again');
   assert.deepEqual([st().branch.n, st().branch.fame, st().branch.life], [1, fame, REV]); assert.equal(fame, Math.floor(Math.sqrt(REV / G.FAME_UNIT)));
@@ -1162,8 +1164,8 @@ console.log('ok luck percentile');
     ['a card taken at the counter', G => { G.state.intake = { n: 1, cost: 4 }; }],
     ['a card in the binder', G => { G.state.singles[key] = { ...card, count: 1 }; }],
     ['a card in the case', G => { G.state.shown.push({ ...card, key, pct: 1.1 }); }],
-    ['a trophy', G => { G.state.trophy = { ...card, key }; }],
-    ['a card in the gallery', G => { G.state.gallery[0] = { ...card, key }; }],
+    ['a card on the pedestal', G => { G.state.gallery[0] = { ...card, key }; }],
+    ['a card in a slot', G => { G.state.gallery[1] = { ...card, key }; }],
   ]) {
     const G = shop(), H = shop(); give(G); give(H);
     assert.ok(G.cardBranchReady() && G.growthLock('case') === '' && G.growthLock('luck') === '', `${what} opens both 柜台 roots`);
@@ -1297,7 +1299,7 @@ console.log('ok luck percentile');
   console.log(`ok 开张期: no 倒爷 in the first ${G.OPENING / 60} min, ≤ half a shelf until ${G.OPENING_CAP / 60} min (${sweeps.cap.length} sweeps, max ${Math.max(...sweeps.cap)}), then up to ${Math.max(...sweeps.after)}; 暂停 freezes the shop and hands the gap back`);
 }
 
-// ---------- 展厅 (state.gallery), its tickets and the 挂机 / 离线 bonus (src/game.ts) ----------
+// ---------- 收藏室 (state.gallery: the 镇店台 at 0, the 展位 at 1–5), its tickets and the 挂机 / 离线 bonus (src/game.ts) ----------
 // The gallery holds physical copies the player shows: no sale, no customer and no auto-fill ever touches it, and no move, branch or
 // bankruptcy makes or loses a copy. Ticket money and both bonuses go into the till and state.extra, never into earned, so they unlock no
 // set, earn no 名气 and lift no credit line; no random draw is added anywhere (same seed ⇒ same customers, with or without them).
@@ -1314,7 +1316,7 @@ console.log('ok luck percentile');
     w.noDebt = () => { w.st().owe = 0; w.st().debt = 0; return w; };
     return w;
   };
-  const copies = g => { const m = {}, add = (k, n = 1) => { m[k] = (m[k] || 0) + n; }; for (const [k, c] of Object.entries(g.state.singles)) add(k, c.count); for (const c of g.state.shown) add(c.key); if (g.state.trophy) add(g.state.trophy.key); for (const c of g.state.gallery) if (c) add(c.key); return m; };
+  const copies = g => { const m = {}, add = (k, n = 1) => { m[k] = (m[k] || 0) + n; }; for (const [k, c] of Object.entries(g.state.singles)) add(k, c.count); for (const c of g.state.shown) add(c.key); for (const c of g.state.gallery) if (c) add(c.key); return m; };
   const earned = g => g.state.earned.sealed + g.state.earned.singles;
   // A trading shop: level-2 clerk, 10 packs opened (bulk for the clerk to sell), a stocked shelf and 3 big cards in the case; the cash never runs short.
   const busy = (seed, skills = {}) => {
@@ -1323,40 +1325,41 @@ console.log('ok luck percentile');
     for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
     return w;
   };
-  const withRoom = w => { assert.ok(w.G.collectToGallery(w.give(pull('room', 100)), 0)); return w; }; // a $100 card: ticket $2, one visitor per 30 s
+  const withRoom = w => { assert.ok(w.G.collectToGallery(w.give(pull('room', 100)), 1)); return w; }; // a $100 card in a slot (not on the pedestal: no collectors): ticket $2, one visitor per 30 s
 
   // 1. Moves. Every copy stays accounted for through any sequence of moves, valid or not, in or out of a reveal.
   {
     const w = shop(1), G = w.G, st = w.st, A1 = pull('a', 100), B1 = pull('b', 50), C1 = pull('c', 0.1, 'C');
     const kA = w.give(A1, 2), kB = w.give(B1), kC = w.give(C1, 3), total = copies(G);
-    assert.deepEqual(st().gallery, Array(5).fill(null)); assert.equal(G.GALLERY_SLOTS, 5);
-    assert.ok(G.collectToGallery(kA, 0)); assert.equal(st().singles[kA].count, 1); assert.equal(st().gallery[0].key, kA);
-    assert.equal(G.collectToGallery(kA, 0), false, 'an occupied slot takes nothing');
-    assert.ok(G.collectToGallery(kA, 1)); assert.equal(st().singles[kA], undefined, 'the last copy leaves its pocket, not a pocket of 0');
-    assert.equal(G.collectToGallery(kA, 2), false, 'no copy left to place');
-    assert.ok(G.collectToGallery(kC, 4), 'any card the player owns can be shown, not only hits');
-    assert.ok(G.setTrophy(kB)); assert.ok(G.trophyBonus() > 0);
-    assert.ok(G.collectTrophy(3)); assert.equal(st().trophy, null); assert.equal(G.trophyBonus(), 0, 'the trophy itself moved: its collectors stop coming'); assert.equal(st().gallery[3].key, kB);
-    assert.equal(G.collectTrophy(2), false, 'no trophy left'); assert.deepEqual(copies(G), total);
-    assert.ok(G.moveCollect(1, 2)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [kA, null, kA, kB, kC], 'an occupied slot moves into an empty one');
-    assert.ok(G.moveCollect(0, 3)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [kB, null, kA, kA, kC], 'two cards swap');
+    assert.deepEqual(st().gallery, Array(6).fill(null)); assert.deepEqual([G.GALLERY_SLOTS, G.ROOM_SLOTS, G.PEDESTAL, st().v, 'trophy' in st()], [5, 6, 0, 2, false], 'one pedestal and five slots, no separate trophy');
+    assert.ok(G.collectToGallery(kA, 1)); assert.equal(st().singles[kA].count, 1); assert.equal(st().gallery[1].key, kA);
+    assert.equal(G.collectToGallery(kA, 1), false, 'an occupied slot takes nothing');
+    assert.ok(G.collectToGallery(kA, 2)); assert.equal(st().singles[kA], undefined, 'the last copy leaves its pocket, not a pocket of 0');
+    assert.equal(G.collectToGallery(kA, 3), false, 'no copy left to place');
+    assert.ok(G.collectToGallery(kC, 5), 'any card the player owns can be shown, not only hits'); assert.equal(G.trophyBonus(), 0, 'the slots draw no collectors');
+    assert.ok(G.toPedestal(kB)); assert.ok(G.trophyBonus() > 0); assert.equal(st().gallery[0].key, kB); assert.equal(G.toPedestal(kB), false, 'no copy of it left in the binder');
+    assert.ok(G.moveCollect(0, 4)); assert.equal(G.trophyBonus(), 0, 'the card moved off the pedestal: its collectors stop coming'); assert.equal(st().gallery[4].key, kB);
+    assert.deepEqual(copies(G), total);
+    assert.ok(G.moveCollect(2, 3)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [null, kA, null, kA, kB, kC], 'an occupied slot moves into an empty one');
+    assert.ok(G.moveCollect(1, 4)); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [null, kB, null, kA, kA, kC], 'two cards swap');
+    assert.ok(G.moveCollect(1, 0)); assert.ok(G.trophyBonus() > 0, 'a card moves onto the empty pedestal'); assert.deepEqual(st().gallery.map(c => c?.key ?? null), [kB, null, null, kA, kA, kC]);
     assert.ok(G.uncollect(3)); assert.equal(st().singles[kA].count, 1); assert.equal(G.uncollect(3), false, 'the slot is empty now');
     assert.equal(G.moveCollect(1, 3), false, 'two empty slots'); assert.equal(G.moveCollect(2, 2), false, 'a slot onto itself'); assert.deepEqual(copies(G), total);
     st().singles.pile = { ...pull('pile', 5), count: G.BINDER + 5 }; const full = copies(G);
-    assert.ok(G.uncollect(0), 'a full binder only stops 收卡, never a card coming home'); assert.deepEqual(copies(G), full); delete st().singles.pile;
+    assert.ok(G.uncollect(0), 'a full binder only stops 收卡, never a card coming home (the pedestal card too)'); assert.equal(G.trophyBonus(), 0); assert.deepEqual(copies(G), full); delete st().singles.pile;
     // a reveal: the cards just pulled are already in singles, so nothing may leave singles for the room until they are flipped
     st().cash = 1e6; G.buy('sv08', 1); const [pack] = G.open('sv08', 1), k0 = keyOf(pack[0]); G.tick(true);
     assert.equal(G.revealing(), true); const before = JSON.stringify(st());
-    assert.equal(G.collectToGallery(k0, 1), false, 'refused while packs are being revealed'); assert.equal(JSON.stringify(st()), before);
-    assert.ok(G.moveCollect(2, 4), 'moves inside the room are safe mid-reveal'); assert.ok(G.uncollect(4), 'and so is taking a card out of it'); G.tick(false);
+    assert.equal(G.collectToGallery(k0, 1), false, 'refused while packs are being revealed'); assert.equal(G.toPedestal(k0), false, 'the pedestal too'); assert.equal(JSON.stringify(st()), before);
+    assert.ok(G.moveCollect(4, 2), 'moves inside the room are safe mid-reveal'); assert.ok(G.uncollect(2), 'and so is taking a card out of it'); G.tick(false);
     assert.equal(G.revealing(), false); assert.ok(G.collectToGallery(k0, 1), 'and the card goes once the reveal is over');
-    // any sequence: valid and invalid slots and keys, trophy and case moves, ticks in and out of a reveal
+    // any sequence: valid and invalid slots and keys, pedestal and case moves, ticks in and out of a reveal
     const v = shop(2), V = v.G, vk = [v.give(A1, 2), v.give(B1, 2), v.give(C1, 2), 'nope'], vt = copies(V), rnd = S.rng(1234), pick = n => Math.floor(rnd() * n), slot = () => pick(8) - 1;
     let put = 0;
     for (let i = 0; i < 800; i++) {
       const op = pick(9), key = vk[pick(4)];
-      if (op <= 1) put += +V.collectToGallery(key, slot()); else if (op === 2) put += +V.collectTrophy(slot()); else if (op === 3) V.uncollect(slot()); else if (op === 4) V.moveCollect(slot(), slot());
-      else if (op === 5) V.setTrophy(key); else if (op === 6) V.clearTrophy(); else if (op === 7) V.list(key); else V.tick(pick(2) === 0);
+      if (op <= 1) put += +V.collectToGallery(key, slot()); else if (op === 2) put += +V.toPedestal(key); else if (op === 3) V.uncollect(slot()); else if (op === 4) V.moveCollect(slot(), slot());
+      else if (op === 5) V.moveCollect(slot(), 0); else if (op === 6) V.uncollect(0); else if (op === 7) V.list(key); else V.tick(pick(2) === 0);
       assert.deepEqual(copies(V), vt, `copy count after step ${i} (op ${op})`);
     }
     assert.ok(put > 10, `the sequence did put cards on show (${put})`); assert.deepEqual(copies(createGame({ ...v.env, random: S.rng(3) })), vt, 'and the save has the same copies');
@@ -1367,39 +1370,40 @@ console.log('ok luck percentile');
     const w = shop(3), G = w.G, st = w.st; st().cash = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); assert.ok(G.learn('apprentice'));
     G.buy('sv08', 120); G.place(0, 'sv08');
     const K = w.give(pull('s1', 60), 2), Z = w.give(pull('s2', 2, 'C'), 40);
-    assert.ok(G.collectToGallery(K, 0)); assert.ok(G.collectToGallery(Z, 1)); const room = JSON.stringify(st().gallery);
+    assert.ok(G.collectToGallery(K, 1)); assert.ok(G.collectToGallery(Z, 2)); const room = JSON.stringify(st().gallery);
     const cash0 = st().cash; assert.ok(G.sellBulk() > 0); near(st().cash - cash0, 39 * 2 * G.BUYLIST, 'only the 39 bulk cards in the binder sold');
     assert.equal(G.sell(Z), 0, 'no copy in singles: nothing to sell, whatever is on show');
     for (let i = 0; i < 2160 && (st().singles[K] || st().shown.some(c => c.key === K)); i++) w.run(10, 10);
     assert.ok(!st().singles[K] && !st().shown.some(c => c.key === K), 'the copy in the binder sold to a customer'); assert.equal(copies(G)[K], 1);
     assert.equal(JSON.stringify(st().gallery), room, 'and the one on show is still there');
-    assert.equal(G.sell(K), 0); assert.equal(G.list(K), false); assert.equal(G.setTrophy(K), false); G.fillCase(); w.run(600, 10);
-    assert.equal(JSON.stringify(st().gallery), room, 'selling, listing, trophy, 补满柜位 and ten more minutes of trade leave it alone');
+    assert.equal(G.sell(K), 0); assert.equal(G.list(K), false); assert.equal(G.toPedestal(K), false); G.fillCase(); w.run(600, 10);
+    assert.equal(JSON.stringify(st().gallery), room, 'selling, listing, the pedestal, 补满柜位 and ten more minutes of trade leave it alone');
   }
 
   // 3. Invalid input changes nothing: not the state, not the save, not a single listener call.
   {
     const w = shop(4), G = w.G, st = w.st, kA = w.give(pull('a', 100)), kB = w.give(pull('b', 50)), kT = w.give(pull('t', 70));
-    assert.ok(G.collectToGallery(kA, 0)); assert.ok(G.setTrophy(kT)); w.give(pull('z', 5), 0);
+    assert.ok(G.collectToGallery(kA, 1)); assert.ok(G.toPedestal(kT)); w.give(pull('z', 5), 0);
     let heard = 0; G.on(() => heard++); const snap = () => JSON.stringify([st(), w.store]), before = snap();
-    for (const bad of [-1, 5, 1.5, NaN, Infinity, '1', null, undefined, {}, [1]]) {
-      assert.equal(G.collectToGallery(kB, bad), false, `slot ${String(bad)}`); assert.equal(G.collectTrophy(bad), false); assert.equal(G.uncollect(bad), false);
-      assert.equal(G.moveCollect(bad, 0), false); assert.equal(G.moveCollect(0, bad), false);
+    for (const bad of [-1, 6, 1.5, NaN, Infinity, '1', null, undefined, {}, [1]]) {
+      assert.equal(G.collectToGallery(kB, bad), false, `slot ${String(bad)}`); assert.equal(G.toPedestal(bad), false); assert.equal(G.uncollect(bad), false);
+      assert.equal(G.moveCollect(bad, 1), false); assert.equal(G.moveCollect(1, bad), false);
     }
-    for (const key of ['nope', '', '__proto__', 'constructor', 'toString', 'hasOwnProperty', 42, null, undefined, {}, keyOf(pull('z', 5))]) assert.equal(G.collectToGallery(key, 1), false, `key ${String(key)}`);
-    assert.equal(G.collectToGallery(kB, 0), false, 'occupied'); assert.equal(G.collectTrophy(0), false, 'occupied'); assert.equal(G.uncollect(1), false, 'empty slot');
-    assert.equal(G.moveCollect(1, 2), false, 'two empty slots'); assert.equal(G.moveCollect(0, 0), false, 'same slot');
+    for (const key of ['nope', '', '__proto__', 'constructor', 'toString', 'hasOwnProperty', 42, null, undefined, {}, keyOf(pull('z', 5))]) { assert.equal(G.collectToGallery(key, 2), false, `key ${String(key)}`); assert.equal(G.toPedestal(key), false, `pedestal key ${String(key)}`); }
+    assert.equal(G.collectToGallery(kB, 1), false, 'occupied'); assert.equal(G.collectToGallery(kB, 0), false, 'the pedestal is occupied too'); assert.equal(G.uncollect(2), false, 'empty slot');
+    assert.equal(G.moveCollect(2, 3), false, 'two empty slots'); assert.equal(G.moveCollect(1, 1), false, 'same slot');
     assert.equal(snap(), before); assert.equal(heard, 0);
   }
 
   // 4. Ticket price: nothing for an empty room, $1 at least and $20 at most for a room with a card in it, from the prices the cards are shown at.
   {
-    const w = shop(5).noDebt(), G = w.G, st = w.st, room = (...prices) => { st().gallery = [...prices.map((p, i) => ({ key: `k${i}`, ...pull(`t${i}`, p) })), ...Array(5 - prices.length).fill(null)]; return G.ticketPrice(); };
+    const w = shop(5).noDebt(), G = w.G, st = w.st, room = (...prices) => { st().gallery = [...prices.map((p, i) => ({ key: `k${i}`, ...pull(`t${i}`, p) })), ...Array(6 - prices.length).fill(null)]; return G.ticketPrice(); };
     assert.deepEqual([G.ticketPrice(), G.galleryValue(), G.TICKET_MIN, G.TICKET_MAX], [0, 0, 1, 20]);
     w.run(3600, 10); assert.deepEqual(st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(st().galleryAcc, 0); assert.equal(st().cash, 1000, 'an empty room earns nothing, and nobody queues for it');
     G.leave(); w.T += 3600e3; G.tick(); G.back(); assert.equal(st().cash, 1000); assert.ok(st().offline.secs > 0 && st().offline.tickets === undefined && st().offline.bonus === undefined, 'no tickets or bonus on the receipt of an empty room');
     const table = [[[0.1], 1], [[0], 1], [[24.99], 1], [[99.99], 1], [[100], 2], [[400], 4], [[2500], 10], [[1000, 1500], 10], [[9999], 19], [[10000], 20], [[1e6], 20], [[2000, 2000, 2000, 2000, 2000], 20]];
     for (const [ps, want] of table) assert.equal(room(...ps), want, `a room worth ${ps.join(' + ')}`);
+    assert.equal(room(100, 0, 0, 0, 0, 0), 2, 'the pedestal counts toward the value and the ticket'); assert.equal(room(0, 0, 0, 0, 0, 100), 2, 'and so does the last slot');
     room(0.1, 0.2); near(G.galleryValue(), 0.3, 'the value is the sum of the shown prices'); st().gallery.fill(null); assert.equal(G.ticketPrice(), 0, 'emptied again: back to nothing');
   }
 
@@ -1414,7 +1418,7 @@ console.log('ok luck percentile');
     const d = createGame({ ...c.env, random: S.rng(1) }); near(d.state.galleryAcc, 0.5, 'saved with the carry'); c.T += 15e3; d.tick();
     assert.equal(d.state.extra.tickets, 4, 'a reload in the middle of a visitor loses none of it');
     // nobody queues for an empty room: the half visitor waiting when the last card leaves is gone with it
-    const e = mk(6), room = keyOf(pull('room', 100)); e.run(45, 45); assert.ok(e.G.uncollect(0)); e.run(600, 10); assert.equal(e.st().galleryAcc, 0); assert.ok(e.G.collectToGallery(room, 0)); e.run(20, 20);
+    const e = mk(6), room = keyOf(pull('room', 100)); e.run(45, 45); assert.ok(e.G.uncollect(1)); e.run(600, 10); assert.equal(e.st().galleryAcc, 0); assert.ok(e.G.collectToGallery(room, 1)); e.run(20, 20);
     assert.equal(e.st().extra.tickets, 2, 'the card put back starts with an empty queue: still only the first visitor');
     // a tick that pays a ticket tells the page (the cash on screen), even when no customer came in that second
     const f = mk(6); let seen = null, stale = 0; f.G.on(() => { seen = f.st().cash; }); for (let i = 0; i < 600; i++) { f.T += 1e3; f.G.tick(); if (f.st().extra.tickets && seen !== f.st().cash) stale++; }
@@ -1423,7 +1427,7 @@ console.log('ok luck percentile');
 
   // 6. Away: a closed shop is credited its offline cap and no more, tickets and bonus alike; a paused shop is credited nothing.
   {
-    const mk = (clerk, watch = 0) => { const w = shop(7).noDebt(), K = w.give(pull('big', 2500)); w.st().cash = 1e6; w.st().skills.watch = watch; if (clerk) w.G.upgrade('clerk'); assert.ok(w.G.collectToGallery(K, 0)); return w; };
+    const mk = (clerk, watch = 0) => { const w = shop(7).noDebt(), K = w.give(pull('big', 2500)); w.st().cash = 1e6; w.st().skills.watch = watch; if (clerk) w.G.upgrade('clerk'); assert.ok(w.G.collectToGallery(K, 1)); return w; };
     const visitors = secs => Math.floor(secs * 2 / 60 + 1e-9);
     const w = mk(true), G = w.G, st = w.st, cash0 = st().cash; assert.equal(G.ticketPrice(), 10);
     G.leave(); w.T += 10 * 3600e3; G.tick(); G.tick(); assert.equal(st().away.secs, G.OFFLINE_CAP, 'ten hours away with a clerk: six traded'); G.back();
@@ -1478,7 +1482,7 @@ console.log('ok luck percentile');
 
   // 8. Not product revenue: six hours of $20 tickets (14,400, past the 1,600 that unlocks a set and the 12,500 of the first 名气) change none of the revenue-driven numbers.
   {
-    const w = shop(15).noDebt(), G = w.G, st = w.st; for (let i = 0; i < 5; i++) assert.ok(G.collectToGallery(w.give(pull(`v${i}`, 2000)), i)); assert.equal(G.ticketPrice(), 20);
+    const w = shop(15).noDebt(), G = w.G, st = w.st; for (let i = 0; i < 5; i++) assert.ok(G.collectToGallery(w.give(pull(`v${i}`, 2000)), i + 1)); assert.equal(G.ticketPrice(), 20);
     w.run(6 * 3600, 10); assert.equal(st().extra.tickets, 14400); near(st().cash, 1000 + 14400, 'the till has it');
     assert.deepEqual([G.revenue(), st().best, G.fameFor(), G.unlocked('sv08.5'), G.creditLimit()], [0, 0, 0, false, G.LOAN_FLOOR]); assert.ok(st().week > 15, 'weeks went by (the credit line is judged each one)');
   }
@@ -1488,38 +1492,39 @@ console.log('ok luck percentile');
     const mk = seed => {
       const w = shop(seed), G = w.G; w.st().cash = 1e6; w.st().extra = { tickets: 5, idle: 3, offline: 2 };
       const gal = w.give(pull('p1', 200)), troph = w.give(pull('p2', 300)), both = w.give(pull('p3', 400), 3); w.give(pull('p4', 100));
-      assert.ok(G.collectToGallery(gal, 0)); assert.ok(G.setTrophy(troph)); assert.ok(G.collectToGallery(both, 2)); assert.ok(G.list(both)); return w; // room: p1 + p3; case: p3; trophy: p2; binder: p3, p4
+      assert.ok(G.collectToGallery(gal, 1)); assert.ok(G.toPedestal(troph)); assert.ok(G.collectToGallery(both, 2)); assert.ok(G.list(both)); return w; // room: p1 + p3 in slots, p2 on the pedestal; case: p3; binder: p3, p4
     };
     const w = mk(16), G = w.G, st = w.st, room = structuredClone(st().gallery), total = copies(G); st().owe = st().debt = 0;
-    assert.ok(G.branch()); assert.deepEqual(st().gallery, room, 'the room opens in the new shop'); assert.deepEqual(copies(G), total, 'and the case and the trophy came back to the binder: every copy is still there');
-    assert.deepEqual(st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(st().galleryAcc, 0); assert.equal(G.ticketPrice(), 4, 'a room worth 600');
-    const b = mk(17), B = b.G, held = 400 + 100 + 400 + 300, rm = structuredClone(b.st().gallery), value = B.galleryValue();
+    assert.ok(G.branch()); assert.deepEqual(st().gallery, room, 'the room opens in the new shop, the pedestal too'); assert.deepEqual(copies(G), total, 'and the case came back to the binder: every copy is still there'); assert.ok(G.trophyBonus() > 0, 'the pedestal still draws collectors');
+    assert.deepEqual(st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(st().galleryAcc, 0); assert.equal(G.ticketPrice(), 6, 'a room worth 900');
+    const b = mk(17), B = b.G, held = 400 + 100 + 400, rm = structuredClone(b.st().gallery), value = B.galleryValue();
     assert.ok(B.bankrupt()); assert.deepEqual(b.st().gallery, rm, '九姐 takes the shop, not the room');
-    near(b.st().wreck.cards, held, 'the statement counts the shop’s cards only'); assert.deepEqual(b.st().wreck.gallery, { n: 2, value }, 'and says what she left');
-    assert.deepEqual([b.st().singles, b.st().shown, b.st().trophy], [{}, [], null]); assert.deepEqual(b.st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(B.galleryValue(), 600);
+    near(b.st().wreck.cards, held, 'the statement counts the shop’s cards only'); assert.deepEqual(b.st().wreck.gallery, { n: 3, value }, 'and says what she left');
+    assert.deepEqual([b.st().singles, b.st().shown], [{}, []]); assert.deepEqual(b.st().extra, { tickets: 0, idle: 0, offline: 0 }); assert.equal(B.galleryValue(), 900); assert.ok(B.trophyBonus() > 0, 'the pedestal survived the bankruptcy');
     assert.deepEqual(createGame({ ...b.env, random: S.rng(1) }).state.gallery, rm, 'and it is saved so');
     const clean = shop(18); clean.st().cash = 1e6; clean.G.bankrupt(); assert.equal(clean.st().wreck.gallery, undefined, 'no room, nothing to say');
-    const r = mk(19); r.G.reset(); assert.deepEqual(r.st().gallery, Array(5).fill(null), '清空存档 is the one thing that clears it');
+    const r = mk(19); r.G.reset(); assert.deepEqual(r.st().gallery, Array(6).fill(null), '清空存档 is the one thing that clears it');
   }
 
   // 10. Save, reload and damaged saves.
   {
     const w = shop(20), G = w.G, st = w.st, kA = w.give(pull('r1', 300), 2), kB = w.give(pull('r2', 20)); assert.ok(G.collectToGallery(kA, 4)); assert.ok(G.collectToGallery(kB, 0));
-    st().extra = { tickets: 12, idle: 3.5, offline: 1.25 }; st().galleryAcc = 0.25; assert.ok(G.moveCollect(0, 2));
+    st().extra = { tickets: 12, idle: 3.5, offline: 1.25 }; st().galleryAcc = 0.25; assert.ok(G.moveCollect(4, 3));
     const H = createGame({ ...w.env, random: S.rng(1) });
-    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue()], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320], 'the room, its ledger and its carry come back as saved');
+    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue(), H.state.v], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320, 2], 'the room, its ledger and its carry come back as saved'); assert.equal(H.state.gallery[0].key, kB, 'the pedestal too'); assert.ok(!('trophy' in JSON.parse(w.store[KEY])), 'and no trophy field is written');
     const store = {}, env = { now: () => 1_700_000_000_000, random: S.rng(2), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
     store[KEY] = JSON.stringify({ cash: 10, singles: {} }); const O = createGame(env); // a save from before the room
-    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice()], [Array(5).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0]);
+    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice(), O.state.v], [Array(6).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0, 2]);
     const real = PTCG_DATA.sv08.cards[0], good = { key: keyOf(pull(real.n, 12, real.r)), ...pull(real.n, 12, real.r), name: 'old English name' };
-    store[KEY] = JSON.stringify({ cash: 10, gallery: [null, {}, good, { ...good, price: null }, 'x', { ...good, key: 3 }, good], extra: { tickets: 'a', idle: -1, offline: 7 }, galleryAcc: 5 });
+    store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: [null, {}, good, { ...good, price: null }, 'x', { ...good, key: 3 }, good], extra: { tickets: 'a', idle: -1, offline: 7 }, galleryAcc: 5 });
     const D = createGame(env);
-    assert.deepEqual(D.state.gallery.map(c => c?.key ?? null), [null, null, good.key, null, null], 'five slots; a damaged card is an empty slot, never half a card'); assert.equal(D.state.gallery[2].name, real.name, 'the loader refreshes names like it does for the binder');
+    assert.deepEqual(D.state.gallery.map(c => c?.key ?? null), [null, null, good.key, null, null, null], 'six places; a damaged card is an empty place, never half a card'); assert.equal(D.state.gallery[2].name, real.name, 'the loader refreshes names like it does for the binder');
+    assert.equal(D.state.singles[good.key].count, 1, 'a whole card past the last place goes home to the binder, not into the void');
     assert.deepEqual([D.state.extra, D.state.galleryAcc], [{ tickets: 0, idle: 0, offline: 7 }, 0]);
     // a card without its kind, or under another card's key, is no card of the room: back in the binder it would read as bulk and the clerk would sell it
     const { kind: _k, ...noKind } = good, { r: _r, ...noR } = good;
-    store[KEY] = JSON.stringify({ cash: 10, gallery: [noKind, noR, { ...good, key: 'sv08|other|SIR' }, { ...good, price: -1 }, good] });
-    assert.deepEqual(createGame(env).state.gallery.map(c => c?.key ?? null), [null, null, null, null, good.key], 'a card is whole and under its own key, or it is not there');
+    store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: [noKind, noR, { ...good, key: 'sv08|other|SIR' }, { ...good, price: -1 }, good] });
+    assert.deepEqual(createGame(env).state.gallery.map(c => c?.key ?? null), [null, null, null, null, good.key, null], 'a card is whole and under its own key, or it is not there');
     // an amount on a saved receipt that is not a finite number from zero up counts as none: the sums and the 离开 line stay whole
     const rc = { secs: 600, sales: 3, revenue: 30, lost: 0 }, damaged = (x, y) => JSON.stringify({ cash: 10, offline: { ...rc, tickets: x, bonus: y }, away: { ...rc, at: 1_700_000_000_000 - 600e3, tickets: y, bonus: x } });
     store[KEY] = damaged('1', 'x'); const Q = createGame(env);
@@ -1536,7 +1541,7 @@ console.log('ok luck percentile');
     G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX); G.buy('sv08', 15); G.open('sv08', 15);
     for (const [id, i] of [['sv08', 0], ['sv10', 1]]) { G.buy(id, G.depth()); G.place(i, id); }
     for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
-    assert.ok(G.collectToGallery(w.give(pull('r', 2500)), 0)); const c0 = st().cash, e0 = earned(G);
+    assert.ok(G.collectToGallery(w.give(pull('r', 2500)), 1)); const c0 = st().cash, e0 = earned(G);
     w.T += 1800e3; G.tick(); const o1 = structuredClone(st().offline); assert.equal(o1.tickets, 600); assert.ok(o1.bonus > 0);
     G.leave(); w.T += 1800e3; G.tick(); G.back(); const o2 = st().offline, d = o2.detail;
     assert.equal(o2.tickets, 1200); assert.ok(o2.bonus > o1.bonus, 'both absences paid 看店'); near(o2.tickets, st().extra.tickets, 'tickets: receipt = ledger'); near(o2.bonus, st().extra.offline, 'bonus: receipt = ledger'); assert.equal(st().extra.idle, 0);
@@ -1555,7 +1560,44 @@ console.log('ok luck percentile');
     const legacy = shop(23); legacy.st().cash = 1e6; legacy.st().skills.watch = 3; // a save from before the tree: 看店 with no clerk keeps the no-clerk cap until one is hired
     assert.equal(legacy.G.offlineCap(), legacy.G.NOCLERK_CAP); legacy.G.upgrade('clerk'); assert.equal(legacy.G.offlineCap(), legacy.G.OFFLINE_CAP + 3 * 2 * 3600);
   }
-  console.log('ok 展厅: moves keep every copy, the room is never sold, tickets and 挂机/离线 bonus are credited once and are not revenue, receipts add up, branch/bankruptcy keep the room');
+
+  // 12. The save format (state.v = 2): the old two-part room (a `trophy` beside five slots, no version) loads as the 镇店台 and five 展位, every card kept.
+  {
+    const store = {}, env = { now: () => 1_700_000_000_000, random: S.rng(2), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
+    const ex = (n, price) => { const c = pull(n, price); return { key: keyOf(c), ...c }; };
+    const T = ex('t', 300), a = ex('a', 200), b = ex('b', 100), c = ex('c', 50), d = ex('d', 40), e = ex('e', 30);
+    const keys = g => g.state.gallery.map(x => x?.key ?? null);
+    const held = raw => { const m = {}, add = (k, n = 1) => { m[k] = (m[k] || 0) + n; }; for (const [k, x] of Object.entries(raw.singles || {})) add(k, x.count); for (const x of raw.shown || []) add(x.key); if (raw.trophy) add(raw.trophy.key); for (const x of raw.gallery || []) if (x) add(x.key); return m; }; // the copies a raw save holds, however it is laid out
+    // a. a trophy and a partial gallery
+    const old = { cash: 10, singles: { [c.key]: { ...pull('c', 50), count: 2 } }, trophy: T, gallery: [a, null, b] };
+    store[KEY] = JSON.stringify(old); const P = createGame(env);
+    assert.deepEqual(keys(P), [T.key, a.key, null, b.key, null, null], 'the trophy is the pedestal, the slots follow it as 第 1–5 格');
+    assert.deepEqual([P.state.v, 'trophy' in P.state, P.state.gallery.length], [2, false, 6]); assert.deepEqual(copies(P), held(old), 'every copy is accounted for');
+    near(P.trophyBonus(), 300 / 450 * 0.5, 'the bonus reads the pedestal'); assert.equal(P.galleryValue(), 600); assert.equal(P.ticketPrice(), 4, 'the pedestal counts toward the ticket');
+    assert.ok(P.moveCollect(1, 2)); const raw = JSON.parse(store[KEY]); assert.deepEqual([raw.v, 'trophy' in raw, raw.gallery.length], [2, false, 6], 'it is saved in the new shape');
+    assert.deepEqual(keys(createGame(env)), keys(P), 'a new-format save round-trips');
+    // b. a trophy and all five slots
+    const full = { cash: 10, trophy: T, gallery: [a, b, c, d, e] }; store[KEY] = JSON.stringify(full); const F = createGame(env);
+    assert.deepEqual(keys(F), [T.key, a.key, b.key, c.key, d.key, e.key], 'trophy on the pedestal, all five kept in order'); assert.deepEqual(copies(F), held(full)); assert.deepEqual(F.state.singles, {});
+    // c. one of the two missing
+    store[KEY] = JSON.stringify({ cash: 10, gallery: [a] }); assert.deepEqual(keys(createGame(env)), [null, a.key, null, null, null, null], 'no trophy: the pedestal is empty and the slots still follow it');
+    store[KEY] = JSON.stringify({ cash: 10, trophy: T }); assert.deepEqual(keys(createGame(env)), [T.key, null, null, null, null, null], 'a trophy and no room');
+    // d. damage: each place is checked alone, a gallery that is no list is an empty room, a whole card past the end goes home
+    const { kind: _k, ...noKind } = T;
+    store[KEY] = JSON.stringify({ cash: 10, trophy: noKind, gallery: [a, b] }); assert.deepEqual(keys(createGame(env)), [null, a.key, b.key, null, null, null], 'a damaged trophy is an empty pedestal, the room is kept');
+    store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: [{ ...T, price: 'x' }, a] }); assert.deepEqual(keys(createGame(env)), [null, a.key, null, null, null, null], 'a damaged pedestal in a new save: empty');
+    store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: 'x' }); assert.deepEqual(keys(createGame(env)), Array(6).fill(null), 'a gallery that is no list: an empty room');
+    const over = { cash: 10, trophy: T, gallery: [a, b, c, d, e, ex('f', 20), ex('g', 10)] }; store[KEY] = JSON.stringify(over); const Ov = createGame(env);
+    assert.deepEqual(keys(Ov), [T.key, a.key, b.key, c.key, d.key, e.key]); assert.deepEqual(copies(Ov), held(over), 'the two cards past the room came home to the binder: none was dropped');
+    // e. the bonus is the pedestal's card; putting another on swaps the old one home; the 镇店 achievement reads the pedestal
+    const w = shop(30), G = w.G, st = w.st, kA = w.give(pull('x', 150)), kB = w.give(pull('y', 450)), kC = w.give(pull('z', 150)), kS = w.give(pull('s', 90), 2), tro = A.ACH.find(x => x.id === 'trophy');
+    assert.ok(G.collectToGallery(kC, 3)); assert.equal(G.trophyBonus(), 0, 'a slot is no pedestal'); assert.equal(A.done(tro, G), false);
+    assert.ok(G.toPedestal(kA)); near(G.trophyBonus(), 0.25, '150 / (150 + 150) × 0.5'); assert.ok(A.done(tro, G)); const total = copies(G);
+    assert.ok(G.toPedestal(kB)); near(G.trophyBonus(), 450 / 600 * 0.5, 'the new card sets the bonus'); assert.equal(st().singles[kA].count, 1, 'the card that stood there is back in the binder'); assert.deepEqual(copies(G), total);
+    assert.ok(G.toPedestal(kS)); const t2 = copies(G); assert.ok(G.toPedestal(kS)); assert.deepEqual(copies(G), t2, 'swapping a card with its own copy keeps the count'); assert.equal(st().singles[kS].count, 1);
+    assert.ok(G.uncollect(0)); assert.equal(A.done(tro, G), false, 'the achievement’s progress is the pedestal being occupied');
+  }
+  console.log('ok 收藏室: moves keep every copy, the 镇店台 is a place like the rest, the room is never sold, tickets and 挂机/离线 bonus are credited once and are not revenue, receipts add up, branch/bankruptcy keep the room, old saves load into the new layout');
 }
 
 // Follow the visible guide and shop notes through the third bill: growth must not need a loan.
@@ -1570,4 +1612,104 @@ console.log('ok luck percentile');
     assert.ok(third.shop.rate + 1e-9 >= first.shop.rate * 1.2, `seed ${seed}: at least 20% more walk-ins by bill 3`);
   }
   console.log('ok 第一小时: guide + shop notes, seeds 1–12 pay bills 1–3 without loans and gain levels, a shelf and ≥20% walk-ins');
+}
+
+// ---------- 排行 (src/board.ts): share codes, the checksum, the board ----------
+{
+  const mk = (seed, { packs = 0, life = 0, sealed = 0, got = 0, ach = 0 } = {}) => {
+    const G = createGame({ now: () => 1_700_000_000_000 + seed * 1000, random: S.rng(seed), storage: null }), st = G.state;
+    st.cash = 1e7;
+    for (let i = 0; packs && G.luck().packs < packs && i < 20; i++) { G.buy('sv08', 999); G.open('sv08', Math.min(st.stock.sv08, packs - G.luck().packs)); }
+    st.branch.life = life; st.branch.got = got; st.earned.sealed = sealed; st.ach = Object.fromEntries(Array.from({ length: ach }, (_, i) => [`a${i}`, 1]));
+    return G;
+  };
+  const ida = 'k3j2h1a9x0', idb = 'q8w7e6r5t4';
+
+  // what a snapshot reads from the game: lifetime sales across shops, 名气 earned, cards in every holder at market, 欧气 only from 30 packs
+  const young = mk(1, { life: 1000, sealed: 500.5, got: 7, ach: 3 });
+  young.state.earned.singles = 10; young.state.singles.k = { key: 'k', price: 12.5, count: 2 }; young.state.shown.push({ key: 's', price: 10 }); young.state.gallery[1] = { key: 'g', price: 40 };
+  const y = BD.snapshot(young, ida, '小智的店');
+  assert.deepEqual([y.rev, y.fame, y.ach, y.cards, y.packs, y.luck, y.shops, y.at], [151050, 7, 3, 7500, 0, null, 0, 1_700_000_001_000], 'snapshot reads the game');
+  const old = mk(2, { packs: 40, life: 5e6, sealed: 1e5, got: 90, ach: 20 }), o = BD.snapshot(old, idb, 'Brock');
+  assert.ok(o.packs >= 40 && Number.isInteger(o.luck) && o.luck >= 0 && o.luck <= 1000, 'luck is a permille once 30 packs are open');
+  assert.equal(o.dex, Object.keys(old.state.dexSeen).length); assert.ok(o.dex > 0);
+  const few = BD.snapshot(mk(3, { packs: 10 }), ida, 'x'); assert.ok(few.packs >= 10 && few.packs < BD.LUCK_MIN_PACKS && few.luck === null, 'no 欧气 on a handful of packs');
+
+  // round trip, whitespace and links
+  for (const s of [y, o, few]) { const code = BD.encode(s), d = BD.decode(code); assert.ok(code.startsWith('P1.') && code.length < 200); assert.deepEqual(d, { ok: true, snap: s }); }
+  const code = BD.encode(o), url = BD.link('file:///Users/x/dist/index.html?a=1#open', code);
+  assert.equal(url, `file:///Users/x/dist/index.html?board=${code}#board`);
+  for (const text of [url, ` ${code.slice(0, 20)}\n${code.slice(20)}\n`, `看 ?board=${code}&x=1`]) assert.deepEqual(BD.decode(text), { ok: true, snap: o });
+
+  // one wrong character anywhere (and any cut) is refused; a payload typo is the checksum's catch, even in the last base64 character
+  const alt = c => (c === 'A' ? 'B' : 'A'), dot = code.indexOf('.'), dot2 = code.lastIndexOf('.');
+  for (const swap of [alt, c => (c === 'a' ? 'b' : 'a')]) for (let i = 0; i < code.length; i++) assert.equal(BD.decode(code.slice(0, i) + swap(code[i]) + code.slice(i + 1)).ok, false, `a change at ${i} must not pass`);
+  assert.equal(BD.decode(code.slice(0, dot2 - 1) + alt(code[dot2 - 1]) + code.slice(dot2)).why, 'sum');
+  assert.equal(BD.decode(code.slice(0, -1) + (code.at(-1) === 'a' ? 'b' : 'a')).why, 'sum');
+  for (const n of [1, 5, dot2 - dot, 30]) assert.equal(BD.decode(code.slice(0, -n)).ok, false, `cut by ${n}`);
+  assert.equal(BD.decode(code.replace(/^P1/, 'P2')).why, 'version');
+
+  // garbage and hostile input: refused, never thrown
+  for (const g of ['', '   ', 'hello', 'P1.', 'P1..', 'P1.!!!.0000000', 'P1.abc', 'P1.e30.zzzzzzz', 'a.b.c.d', 'board=', '%%%', '\u0000', '{"id":1}', 'A'.repeat(5000), 'P1.' + 'A'.repeat(500) + '.0000000', null, undefined, 42, {}, []])
+    assert.equal(BD.decode(g).ok, false, `garbage ${String(g).slice(0, 20)}`);
+  assert.equal(BD.decode('A'.repeat(5000)).why, 'size'); assert.equal(BD.decode(' ').why, 'empty');
+  // a code whose checksum is right but whose numbers are not a player's (encode does not validate, so it signs anything)
+  for (const bad of [{ ...y, rev: -5 }, { ...y, rev: 1e20 }, { ...y, fame: 1.5 }, { ...y, luck: 1001 }, { ...y, id: 'X!' }, { ...y, name: '\u202e\u200b ' }, { ...y, ach: NaN }, { ...y, at: -5000 }])
+    assert.equal(BD.decode(BD.encode(bad)).why, 'data', JSON.stringify(bad));
+  assert.equal(BD.decode(BD.encode({ ...y, name: '\u202eevil' + 'a'.repeat(30) })).snap.name.length, BD.NAME_MAX);
+  assert.ok(!BD.decode(BD.encode({ ...y, name: '\u202eevil' })).snap.name.includes('\u202e'));
+
+  // the board: one entry per device id + nickname, replaced on re-import; a cap; rank order
+  let list = BD.upsert([], y).list; assert.equal(BD.upsert(list, o).how, 'added'); list = BD.upsert(list, o).list;
+  const again = BD.upsert(list, { ...o, rev: o.rev + 100, at: o.at + 5000 }); assert.equal(again.how, 'replaced'); assert.equal(again.list.length, 2); assert.equal(again.list.find(e => e.id === idb).rev, o.rev + 100);
+  assert.equal(BD.upsert(list, { ...o, name: 'Misty' }).how, 'added', 'same device, another nickname: another entry');
+  assert.deepEqual(BD.rank(list, 'rev').map(e => e.name), ['Brock', '小智的店']);
+  assert.deepEqual(BD.rank(list, 'luck').map(e => e.name), ['Brock', '小智的店'], 'no 欧气 ranks last');
+  assert.deepEqual(BD.rank(list, 'fame').map(e => e.name), ['Brock', '小智的店']); assert.deepEqual(BD.rank([...list].reverse(), 'ach').map(e => e.name), ['Brock', '小智的店']);
+  const tie = [{ ...y, id: 'bbbbbbbb', name: 'B', at: 20 }, { ...y, id: 'aaaaaaaa', name: 'A', at: 20 }, { ...y, id: 'cccccccc', name: 'C', at: 10 }];
+  assert.deepEqual(BD.rank(tie, 'dex').map(e => e.name), ['C', 'A', 'B'], 'ties: older snapshot, then name');
+  let full = []; for (let i = 0; i < BD.MAX_ENTRIES; i++) full = BD.upsert(full, { ...y, id: `id${String(i).padStart(6, '0')}` }).list;
+  assert.equal(BD.upsert(full, { ...y, id: 'zzzzzzzz' }).how, 'full'); assert.equal(BD.upsert(full, { ...full[0], rev: 1 }).how, 'replaced', 'a full board still takes updates');
+
+  // two saves swap codes: both end up on both boards, ranked
+  const mine = BD.snapshot(young, ida, '小智的店'), theirs = BD.snapshot(old, idb, 'Brock');
+  const mineBoard = BD.upsert([], BD.decode(BD.encode(theirs)).snap).list, theirsBoard = BD.upsert([], BD.decode(BD.encode(mine)).snap).list;
+  assert.deepEqual(BD.rank([mine, ...mineBoard], 'rev').map(e => e.name), ['Brock', '小智的店']);
+  assert.deepEqual(BD.rank([theirs, ...theirsBoard], 'rev').map(e => e.name), ['Brock', '小智的店']);
+
+  // what comes back from localStorage is checked like a pasted code
+  const blank = { id: '', name: '', metric: 'rev', entries: [] };
+  for (const raw of [null, '', 'not json', '[]', '"x"', 'null']) assert.deepEqual(BD.parseStore(raw), blank, String(raw));
+  const kept = BD.parseStore(JSON.stringify({ id: ida, name: ' 小智\u0007 ', metric: 'luck', entries: [y, { ...y, rev: -1, id: 'bad00000x' }, 'junk', null, { ...o, rev: 'many' }, o, o] }));
+  assert.deepEqual([kept.id, kept.name, kept.metric, kept.entries.length], [ida, '小智', 'luck', 2]);
+  assert.deepEqual(BD.parseStore(JSON.stringify({ id: 'BAD ID', metric: 'zzz' })), blank);
+  assert.equal(BD.parseStore(JSON.stringify({ entries: Array.from({ length: 500 }, (_, i) => ({ ...y, id: `id${String(i).padStart(6, '0')}` })) })).entries.length, BD.MAX_ENTRIES);
+  console.log('ok 排行: snapshot, code round trip, checksum rejects any one-character change, garbage refused, board replace/cap/rank, two saves exchange');
+}
+
+// 撕包: the drag picks how a sealed pack tears, one rule for the 3D table and the 2D mat (series.ts; pure, no game state, no random numbers)
+{
+  const pick = SR.tearFromGesture;
+  assert.equal(pick(.5, .1, 60, 4), 'top-ltr'); assert.equal(pick(.5, .1, -60, -4), 'top-rtl'); // sideways from the top third: the crimp strip, the way the finger goes
+  assert.equal(pick(.5, .6, 60, 0), 'mid-ltr'); assert.equal(pick(.5, .6, -60, 10), 'mid-rtl'); // sideways from lower down: across the waist
+  assert.equal(pick(.2, .2, 4, 60), 'side-l'); assert.equal(pick(.8, .2, -4, 60), 'side-r'); // down: the strip on the edge it started nearer
+  assert.equal(pick(.8, .2, 0, -60), null, 'up is not a way to tear: undecided');
+  assert.equal(pick(.5, .2, 30, 35), 'top-ltr', 'a diagonal within 1.25 : 1 counts as sideways');
+  assert.equal(pick(.5, .2, 30, 38), 'side-r', '…and one steeper counts as down');
+  for (const u of [0, .5, 1]) for (const v of [0, .32, .34, 1]) for (let dx = -80; dx <= 80; dx += 20) for (let dy = -80; dy <= 80; dy += 20) {
+    const id = pick(u, v, dx, dy);
+    if (id) assert.ok(SR.isTearId(id) && SR.tearAlong(id, dx, dy) > 0 || !dx && !dy, `${id} must tear further as the finger goes on (${dx}, ${dy})`);
+  }
+  assert.deepEqual(SR.TEAR_IDS.map(id => SR.tearOf(id).line), ['top', 'top', 'mid', 'mid', 'side', 'side']);
+  assert.deepEqual(SR.tearOf('nope'), SR.tearOf('top-ltr'), 'an unknown id (a stale localStorage value) tears the way packs always did');
+  for (const bad of ['', 'toString', '__proto__', 'top', 7, null, undefined]) assert.equal(SR.isTearId(bad), false, String(bad));
+  assert.equal(SR.tearAlong('top-ltr', 50, 9), 50); assert.equal(SR.tearAlong('top-rtl', 50, 9), -50); assert.equal(SR.tearAlong('side-r', 3, 40), 40);
+  // the torn piece leaves by the side it tore from, with the series' own lift and spin; the top strip keeps the flight it always had
+  const f = SR.tearFlight('top-ltr', SR.themeOf('sv08').strip);
+  assert.deepEqual([f.lift, f.x, f.y, Math.round(f.deg)], [9, 40 + 9 * 5, -9 * 12, 1080]);
+  assert.deepEqual(['top-rtl', 'side-l', 'side-r'].map(id => Math.sign(SR.tearFlight(id).x)), [-1, -1, 1]);
+  assert.ok(SR.tearFlight('mid-ltr').spin < SR.tearFlight('top-ltr').spin, 'a half pack turns less than a strip');
+  assert.equal(SR.tearClip('top-ltr'), SR.tearClip('top-rtl')); assert.notEqual(SR.tearClip('top-ltr'), SR.tearClip('mid-ltr')); assert.notEqual(SR.tearClip('side-l'), SR.tearClip('side-r'));
+  for (const id of SR.TEAR_IDS) assert.match(SR.tearClip(id), /^polygon\((\d+(\.\d)?% \d+(\.\d)?%(, )?)+\)$/, id);
+  console.log('ok 撕包: the gesture picks one of six tears, progress follows the finger, flights go out the torn side');
 }

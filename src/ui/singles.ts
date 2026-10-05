@@ -1,4 +1,4 @@
-// 卡本 (单卡库存): hits for seekers at 单卡标价; list in the case, make trophy, collect or sell to peers.
+// 卡本 (单卡库存): hits for seekers at 单卡标价; list in the case, put on the 收藏室's 镇店台, collect or sell to peers.
 // Each pocket holds the card, its mark and market price, copy count, and its moves.
 // While viewing the case, emptied pockets stay put and new cards append: another card's sell button must not move under a tap.
 // Re-entering the page sorts and closes the gaps. Only seeker sales show the LIVE receipt animation; manual transfers do not.
@@ -49,7 +49,7 @@ export function renderSingles() {
           <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${chip(k)}</button>
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
           <span class="sb-btns"><button type="button" data-act="col-take" data-key="${k}" ?disabled=${gone || !canCollect()} title="放进收藏室：只看不卖，不标价">收藏</button><button type="button" data-act="list" data-key="${k}" ?disabled=${gone || full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
-            <button type="button" data-act="trophy" data-key="${k}" ?disabled=${gone} title="当镇店之宝，吸引收藏党，但不再出售">镇店</button>
+            <button type="button" data-act="pedestal" data-key="${k}" ?disabled=${gone} title="摆上收藏室的镇店台，吸引收藏党，但不再出售；台上原来的卡回卡本">镇店</button>
             <button type="button" data-act="sell" data-key="${k}" data-n="${c.count}" ?disabled=${gone} title="一次卖出这 ${c.count} 张给同行">卖 ${c.count} 张 ${money(c.price * G.BUYLIST * c.count, 'exact')}</button></span></li>`;
       })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡可能按收卡价卖给你，自己开出的闪卡也放这里。</p>`}`, $('singles'));
 }

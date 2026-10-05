@@ -1,9 +1,8 @@
-// 展示柜 · 镇店之宝: the case as furniture, the second wall of the shop next to the shelf wall (shelf.ts), read as a BW PC box: one
+// 展示柜: the case as furniture, the second wall of the shop next to the shelf wall (shelf.ts), read as a BW PC box: one
 // cell per slot (frame rim, card-back navy under the faint diagonal stripe), the card standing on an acrylic stand, and the
 // player's yellow ask clipped to the cell's lip between its − / ＋. An empty slot is the empty stand; the next 展示柜 upgrade is a
-// dashed cell at the end, like the wall's unbuilt bay. The trophy has its own cell on a riser, the lighter navy. Above: the two
-// single-card prices (单卡标价 for the case and the binder, 收卡价 for counter sellers,
-// GAMEPLAY §14) and 补满柜位.
+// dashed cell at the end, like the wall's unbuilt bay. Above: the two single-card prices (单卡标价 for the case and the binder,
+// 收卡价 for counter sellers, GAMEPLAY §14) and 补满柜位. The 收藏室 (collection.ts, 镇店台 included) is its own room above this panel.
 import { html, render, nothing } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
 import type { Shown } from '../game.ts';
@@ -78,27 +77,17 @@ function slot(c: Shown, i: number, k: number, miss?: { dear: number; broke: numb
 }
 
 export function renderCase() {
-  const s = G.state, t = s.trophy, pct = G.casePct(), buy = G.buyPct(), slots = G.slots(), free = slots - s.shown.length;
+  const s = G.state, pct = G.casePct(), buy = G.buyPct(), slots = G.slots(), free = slots - s.shown.length;
   const cubes = place(slots), miss = balked(), named = new Set<string>();
   const n = G.caseMoves(), fillText = free > 0 ? `补满柜位（${n} 张）` : `换上大卡（${n} 张）`, up = G.upgradeCost('case');
-  render(html`<h2>展示柜 ${s.shown.length}/${slots} · 镇店之宝</h2>
+  render(html`<h2>展示柜 ${s.shown.length}/${slots}</h2>
       <div class="case-bar"><span class="cb-k">单卡标价<span class="pricer"><button type="button" data-act="caseprice" data-d="-1" aria-label="单卡降价" ?disabled=${pct <= G.MIN_PCT + 1e-9}>−</button><b>${Math.round(pct * 100)}%</b>
           <button type="button" data-act="caseprice" data-d="1" aria-label="单卡涨价" ?disabled=${pct >= G.MAX_PCT - 1e-9}>＋</button></span></span>
         <span class="cb-k">收卡价<span class="pricer"><button type="button" data-act="buyprice" data-d="-1" aria-label="收卡价降一档" ?disabled=${buy <= G.BUY_MIN + 1e-9}>−</button><b>${Math.round(buy * 100)}%</b>
           <button type="button" data-act="buyprice" data-d="1" aria-label="收卡价提一档" ?disabled=${buy >= G.BUY_MAX - 1e-9}>＋</button></span></span>
-        <a class="case-link" href="#collection">收藏室 ${G.state.gallery?.filter(Boolean).length ?? 0}/${G.GALLERY_SLOTS}<span class="visually-hidden">：只看不卖的五个展位</span></a>
         <button type="button" class="primary" data-act="fillcase" ?disabled=${!n} title="先补空柜位，再用卡本里更贵的闪卡换掉柜里最便宜的">${n ? fillText : free ? '卡本里没有闪卡' : '柜里已是最贵的'}</button></div>
-      <p class="case-note" title="找卡的翻展示柜和卡本（一次最多带走 ${G.SEEK_N} 张）；拆包玩家当场拆出的闪卡按收卡价卖给你（他们心里平均要 ${Math.round(G.SELLER.tol * 100)}%，同行收 ${Math.round(G.BUYLIST * 100)}%）；卡本满 ${G.BINDER} 张、欠着九姐的账时不收；九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机里先留够那张账">卡本里的闪卡按市价的 ${Math.round(pct * 100)}% 卖，上柜的卡按各自价签卖。收藏党只看柜里市价 $${G.BIG_CARD} 以上的卡，大卡上柜。拆包玩家当场拆出的闪卡，可能按市价的 ${Math.round(buy * 100)}% 卖给你。</p>
+      <p class="case-note" title="找卡的翻展示柜和卡本（一次最多带走 ${G.SEEK_N} 张）；拆包玩家当场拆出的闪卡按收卡价卖给你（他们心里平均要 ${Math.round(G.SELLER.tol * 100)}%，同行收 ${Math.round(G.BUYLIST * 100)}%）；卡本满 ${G.BINDER} 张、欠着九姐的账时不收；九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机里先留够那张账">卡本里的闪卡按市价的 ${Math.round(pct * 100)}% 卖，上柜的卡按各自价签卖。收藏党只看柜里市价 $${G.BIG_CARD} 以上的卡，大卡上柜；上面收藏室镇店台上的卡让他们更常来、也更肯多付。拆包玩家当场拆出的闪卡，可能按市价的 ${Math.round(buy * 100)}% 卖给你。</p>
       <div class="vitrine">
-        <div class="v-trophy ${t ? '' : 'none'}">
-          <button type="button" class="v-cube inspect-trigger" aria-label=${t ? `欣赏${t.name}` : '镇店之宝空位'} ?disabled=${!t} @click=${() => { if (t) inspectCard(t); }}>${t ? face(t, 'show', true) : nothing}${stand}</button>
-          <p class="v-plaque">镇店之宝</p>
-          <div class="v-say">${t ? html`<span class="v-name">${t.name}</span>
-              <small>${mark(t, false)}${rarLabel(t.kind)} · 市价 <b>${money(t.price)}</b></small>
-              <small>不卖。收藏党更常来，肯多付 ${Math.round(G.trophyBonus() * 60)} 个百分点</small>
-              <button type="button" data-act="untrophy">收回卡本</button>`
-            : html`<small>空着。在卡本里给一张卡按「镇店」：卡越值钱，来的收藏党越多、也越肯多付；这张不卖。</small>`}</div>
-        </div>
         <ol class="v-slots">${cubes.map((c, k) => { const m = c && !named.has(c.name) ? (named.add(c.name), miss.get(c.name)) : undefined;
             return c ? slot(c, s.shown.indexOf(c), k, m) : html`<li class="v-slot empty">
             <div class="v-cube">${stand}<span class="v-empty">空柜位</span>${stamp(k)}</div><p class="v-lip"></p></li>`; })}${up != null ? html`<li class="v-slot ghost">

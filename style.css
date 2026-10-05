@@ -122,7 +122,7 @@ a { color: inherit; }
 .muted { color: var(--muted); }
 small { font-size: var(--fs-cap); }
 .gain { color: var(--gain); } .loss { color: var(--loss); }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection) h2 { font: 400 var(--fs-h)/1.3 var(--font-pixel); margin: 0 0 8px; color: var(--ink); text-shadow: 1px 1px 0 var(--ink-shadow); text-wrap: balance; }
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board) h2 { font: 400 var(--fs-h)/1.3 var(--font-pixel); margin: 0 0 8px; color: var(--ink); text-shadow: 1px 1px 0 var(--ink-shadow); text-wrap: balance; }
 /* BW text: every pixel line casts a hard shadow one pixel right and down (two at 2x size) */
 :where(.px) { font-family: var(--font-pixel); font-weight: 400; text-shadow: 1px 1px 0 var(--ink-shadow); }
 
@@ -194,15 +194,15 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 :is(.col, .rail) > section:not([hidden]) ~ section:not([hidden]) { margin-top: 20px; }
 /* panels (DESIGN.md「面板」): each group is a BW menu window — the rounded double frame (--frame rim, a gap of the fill, a
    --frame-in rule) around a --panel face; its h2 is the window's title bar, the dark plate of the BW Bag / PC screens */
-:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
+:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group, #board > section) {
   position: relative; min-width: 0; padding: 14px 18px 18px; border: 3px solid var(--frame); border-radius: var(--r-frame);
   background: var(--panel); box-shadow: inset 0 0 0 3px var(--panel), inset 0 0 0 4px var(--frame-in), 0 4px 0 rgba(0, 0, 0, .08); }
-:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child {
+:is(#rail, #playmode, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group, #board > section) > h2:first-child {
   --ink: var(--hud-ink); --muted: var(--hud-muted); --ink-shadow: #0B0D10;
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin: -14px -18px 14px; padding: 9px 18px 9px; color: var(--ink);
   font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow);
   border-radius: calc(var(--r-frame) - 3px) calc(var(--r-frame) - 3px) 0 0; background: var(--hud); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .25); }
-:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child :is(small, span) {
+:is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group, #board > section) > h2:first-child :is(small, span) {
   font-family: var(--font-body); font-weight: 400; text-shadow: none; }
 .page p { text-wrap: pretty; }
 .page details p { max-width: 42em; }
@@ -213,7 +213,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
    pack buyers | clerk + log. 展示柜: case + singles | case browsers. Across the top a bar with the two view tabs (the main menu's
    tab plates, one size down; the count on each is who left that half empty-handed) and the customers' head for both */
 .page-shelf { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.page-shelf > :is(.shelf, .views) { grid-column: 1 / -1; }
+.page-shelf > :is(.shelf, .views, #playmode) { grid-column: 1 / -1; }
 :root:not([data-page="case"]) .page-shelf > [data-view="case"], :root[data-page="case"] .page-shelf > [data-view="shelf"] { display: none; }
 .views { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
 .subnav { display: flex; gap: 6px; }
@@ -287,29 +287,29 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* game buttons (DESIGN.md「按钮」): BW command buttons — a rounded face with a darker lip underneath, a dark rim, pixel print.
    Secondary is the pale command, primary the card-border yellow (one per group), danger deep red (清空存档 only). Hover lifts
    the face under the blue cursor ring, pressed drops onto the lip, disabled is a flat grey face. All CSS: no images to miss */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) {
   --lip: color-mix(in oklab, var(--btn-face) 72%, var(--frame));
   min-height: 34px; padding: 6px 16px 8px; border: 2px solid var(--frame); border-radius: 8px;
   background: var(--btn-face); color: var(--btn-ink); box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5);
   font: 400 var(--fs-cap)/1.5 var(--font-pixel); text-decoration: none; text-shadow: 1px 1px 0 color-mix(in oklab, var(--btn-ink) 16%, var(--btn-face));
   transition: box-shadow .12s, transform .08s, background-color .12s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 0 2px var(--sel); }
 /* pressed: the face drops onto its lip */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   box-shadow: inset 0 -1px 0 var(--lip), inset 0 2px 0 rgba(0, 0, 0, .12); transform: translateY(2px); padding-bottom: 6px; }
 /* primary = the card-border yellow command: dark print, dark rim */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
   --lip: #C9A018; background-color: var(--sticker); color: var(--sticker-ink); border-color: var(--sticker-ink); text-shadow: 1px 1px 0 #FCE68A; }
 /* danger: the one irreversible button, a deep red command so it can't pass for a normal one */
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-collection, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled,
-:where(#luck, #dex, #singles, #casepanel, #case-cust)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled,
+:where(#luck, #dex, #singles, #casepanel, #case-cust, #board)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
-:where(.page-shelf, .page-luck, .page-grow, .page-ach, .rail) .primary:disabled { color: var(--sticker-ink); }
+:where(.page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .rail) .primary:disabled { color: var(--sticker-ink); }
 
 /* shelf (src/ui/shelf.ts): no boxes. Cards two-up by default; from 1340px of shelf width one table-like row per set under a single header,
    so a long lineup of sets reads as a list, not a wall of blocks (the rows share the header's columns through subgrid) */
@@ -562,6 +562,23 @@ button:disabled { cursor: not-allowed; }
 .pack.art .pack-face { display: block; width: 100%; border-radius: inherit; }
 .pack.art .pack-crimp { height: 7%; border-radius: 3px 3px 0 0; background: var(--art) top / 100% auto no-repeat; }
 .pack.art .pack-crimp.bottom { display: none; }
+/* the other ways to tear (series.ts TEAR_IDS): mat.ts sets data-tear on the pack once a drag or tap has picked one. The strip down an
+   edge and the top half are copies of the printed front laid over the place that comes off (sizes = series.ts TEAR_CUT), shown only
+   then; the body keeps a ragged edge where the piece was (--cut, series.ts tearClip). Their pose while dragged and in flight is
+   mat.ts's (series.ts tearPose, tearFlight); the top strip is .pack-crimp as it always was */
+.pack-side, .pack-half { display: none; position: absolute; top: 0; transition: transform .3s ease-out, opacity .38s; }
+.pack-side { bottom: 0; width: 12%; background: repeating-linear-gradient(0deg, var(--foil-3) 0 4px, var(--foil-2) 4px 8px); }
+.pack-side.l { left: 0; border-radius: 6px 0 0 6px; }
+.pack-side.r { right: 0; border-radius: 0 6px 6px 0; }
+.pack-half { left: 0; right: 0; height: 46%; border-radius: 6px 6px 0 0; background: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1)); }
+.pack[data-tear="side-l"] .pack-side.l, .pack[data-tear="side-r"] .pack-side.r, .pack[data-tear^="mid"] .pack-half { display: block; }
+.pack[data-tear^="mid"] .pack-crimp:not(.bottom) { display: none; }
+.pack[data-tear^="side"].torn .pack-crimp:not(.bottom) { transform: none; opacity: 1; } /* a side tear leaves the top crimp on */
+.pack.torn .pack-side, .pack.torn .pack-half { opacity: 0; }
+.pack.art .pack-side { border-radius: 0; background: var(--art) 100% 0 / 833.33% 100% no-repeat; }
+.pack.art .pack-side.l { background-position: 0 0; }
+.pack.art .pack-half { border-radius: 3px 3px 0 0; background: var(--art) 0 0 / 100% 217.39% no-repeat; }
+.pack.art[data-tear] .pack-face { clip-path: var(--cut); }
 
 /* what the pack came to is the BW battle message box under the field: the white text box (the same in both themes, like the
    story's), the double frame, ink text. Its money colours are the receipt's (--paper-*), since it sits on paper, not on the mat */
@@ -763,10 +780,9 @@ button:disabled { cursor: not-allowed; }
 .v-info { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; font-size: var(--fs-cap); color: var(--muted); }
 .v-info .v-name { grid-column: 1 / -1; }
 .page .v-info button { padding: 2px 10px; min-height: 28px; font-size: var(--fs-cap); }
-.v-say { display: grid; min-width: 0; font-size: var(--fs-cap); color: var(--muted); }
 .v-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-body); font-weight: 600; color: var(--ink); }
-:is(.v-info, .v-say) b { color: var(--ink); font-weight: 600; }
-:is(.v-info, .v-say) .mk { margin-right: 3px; vertical-align: -1px; }
+.v-info b { color: var(--ink); font-weight: 600; }
+.v-info .mk { margin-right: 3px; vertical-align: -1px; }
 .v-ctl button { flex: none; }
 /* a card sold out of its cell (case.ts place): the picture lifts off the stand and fades under a flash of the cursor's glow, and the
    till chip of the shelf wall (.r-beat) rises from the cell's foot, over whatever stands there now. Reduced motion: chip only */
@@ -781,43 +797,61 @@ button:disabled { cursor: not-allowed; }
 .v-slot.ghost .v-cube { border: 2px dashed var(--line-strong); background: none; box-shadow: none; }
 .v-slot.ghost .v-empty { color: var(--muted); }
 .v-slot.ghost .v-ctl { padding-top: 0; } .v-slot.ghost .v-ctl button { flex: 1; }
-/* the trophy: its own cell on a riser, the lighter navy of a picked PC-box cell, an engraved plaque on its lip instead of a price (it isn't for sale) */
-.v-trophy { display: grid; grid-template-columns: 168px minmax(0, 1fr); column-gap: 16px; align-items: center; }
-.v-trophy .v-cube { grid-row: 1; height: 196px;
-  background: linear-gradient(to top, color-mix(in oklab, var(--back-1) 40%, var(--back-2)) 0 18px, transparent 18px),
-    repeating-linear-gradient(135deg, transparent 0 6px, rgba(255, 255, 255, .06) 6px 12px), var(--back-1); } /* the trophy's cell: the lighter navy, like a PC box's picked cell */
-.v-trophy .v-cube > .cf { width: 110px; }
-.v-plaque { grid-row: 2; margin: 0; padding: 7px 8px; text-align: center; font: 400 var(--fs-cap)/1.2 var(--font-pixel); letter-spacing: .3em; color: var(--hud-ink);
-  background: var(--hud); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
-.v-say { grid-column: 2; grid-row: 1 / 3; gap: 4px; align-content: center; justify-items: start; }
-.v-say button { margin-top: 6px; }
-.v-trophy.none .v-cube { height: 120px; } .v-trophy.none .v-plaque { color: var(--hud-muted); }
 @container (max-width: 420px) {
   .v-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .v-trophy { grid-template-columns: 140px minmax(0, 1fr); column-gap: 12px; }
-  .v-trophy .v-cube > .cf { width: 96px; }
 }
 .s-btns { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
-.page-collection { grid-template-columns: minmax(0, 1fr); }
-.col-slots { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
-.col-slots .v-cube { height: 224px; }
-.col-slots .v-cube > .cf { width: min(132px, 90%); }
+/* 收藏室 (collection.ts): the room above the 展示柜 on the 货柜 page — a BW window like the case's, its cells the case's cells (PC-box wallpaper, the
+   card leaning on an acrylic stand, a dark lip under each). One row on a wide window: the 镇店台 first, a little wider and taller on a riser (the lighter
+   navy of a picked PC-box cell, an engraved plaque on a dark step instead of a number), then the five 展位 with their numbers on the lip. Narrower, the
+   pedestal takes a row of its own, sideways (card | name and bonus) and the 展位 follow in five, then in two columns. The window is its own container: its
+   width, not the screen's, decides. */
+#gallery { container-type: inline-size; }
+.page-shelf > #gallery { grid-column: 1 / -1; }
+#gallery > h2:first-child :is(small, span) { font-family: var(--font-body); font-weight: 400; text-shadow: none; }
+#gallery .case-bar { margin-bottom: 6px; }
+#gallery .case-note { margin-bottom: 14px; }
+.room-slots { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1.3fr) repeat(5, minmax(0, 1fr)); gap: 16px 14px; align-items: start; }
+.room-slot .v-cube { height: 192px; }
+.room-slot .v-cube > .cf { width: min(104px, 84%); }
+.v-ped .v-cube { height: 224px;
+  background: linear-gradient(to top, color-mix(in oklab, var(--back-1) 40%, var(--back-2)) 0 18px, transparent 18px),
+    repeating-linear-gradient(135deg, transparent 0 6px, rgba(255, 255, 255, .06) 6px 12px), var(--back-1); }
+.v-ped .v-cube > .cf { width: min(124px, 84%); }
+.v-plaque { margin: 0; padding: 7px 8px; text-align: center; font: 400 var(--fs-cap)/1.2 var(--font-pixel); letter-spacing: .3em; color: var(--hud-ink);
+  background: var(--hud); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
+.v-ped.empty .v-plaque { color: var(--hud-muted); }
+.v-riser { display: block; height: 10px; margin: 0 -6px; border-radius: 0 0 6px 6px; background: color-mix(in oklab, var(--hud) 84%, var(--back-1));
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .14), inset 0 -3px 0 rgba(0, 0, 0, .28); }
+.v-bonus { grid-column: 1 / -1; }
+@container (max-width: 859px) {
+  .room-slots { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .v-ped { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 176px) minmax(0, 1fr); column-gap: 16px; align-items: center; }
+  .v-ped .v-cube { grid-column: 1; grid-row: 1; height: 204px; }
+  .v-ped .v-plaque { grid-column: 1; grid-row: 2; }
+  .v-ped .v-riser { grid-column: 1; grid-row: 3; }
+  .v-ped .v-ctl { grid-column: 2; grid-row: 1 / 4; padding-top: 0; align-self: center; }
+}
+@container (max-width: 559px) {
+  .room-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .room-slot .v-cube { height: 184px; }
+  .v-ped { grid-template-columns: minmax(0, 144px) minmax(0, 1fr); column-gap: 12px; }
+  .v-ped .v-cube { height: 192px; }
+  .v-ped .v-cube > .cf { width: min(104px, 84%); }
+}
 .col-no { color: var(--hud-ink); font: 400 var(--fs-cap)/1.4 var(--font-body); }
 .col-cube { width: 100%; cursor: pointer; }
-.col-slot.picked .v-cube, .col-src.picked { outline: 3px solid var(--sel); outline-offset: 2px; }
+.room-slot.picked .v-cube, .col-src.picked { outline: 3px solid var(--sel); outline-offset: 2px; }
 .col-arrange { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--line-strong); }
 .col-hint { min-height: 2.8em; max-width: 65ch; }
 .col-msg { min-height: 1.5em; margin: 12px 0 0; }
 .col-msg.bad { color: var(--ink); font-weight: 600; }
-.case-link { color: var(--ink); text-underline-offset: 4px; }
 .col-rar { color: var(--muted); font-size: var(--fs-cap); }
 #playmode { font-size: var(--fs-cap); }
 #playmode p { margin: 8px 0; }
 #playmode summary { cursor: pointer; }
 @media (max-width: 779px) {
-  .col-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
-  .col-slots .v-cube { height: 204px; }
-  .page-collection button, .inspect button { min-height: 44px; }
+  #gallery button, .inspect button { min-height: 44px; }
 }
 
 /* footer: sources and game settings folded away; the reset lives here, far from the shop's buttons */
@@ -975,11 +1009,11 @@ button:disabled { cursor: not-allowed; }
 .stage .slot.quick { animation-duration: .12s; }
 .stage .slot.away { position: absolute; inset: 0; z-index: 2; pointer-events: none; animation: away .26s cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes away { to { transform: translate(-75%, 6%) rotate(-12deg); opacity: 0; } }
-.pack { touch-action: pan-y; cursor: grab; user-select: none; }
+.pack { touch-action: none; cursor: grab; user-select: none; } /* a drag any way, down included, tears it: the page doesn't scroll under the finger */
+.pack img { -webkit-user-drag: none; } /* …and the picture isn't dragged off as a file, which cancels the pointer */
 .pack.dragging { transition: none; cursor: grabbing; }
-.pack.dragging .pack-crimp:not(.bottom) { transition: none; }
-.pack:not(.torn) .pack-crimp:not(.bottom) { transform: translate(calc(var(--tear, 0) * 90px), calc(var(--tear, 0) * -22px)) rotate(calc(var(--tear, 0) * 14deg)); transform-origin: 0 100%; }
-.pack-hint::after { content: "，或向右拖动撕开"; }
+.pack.dragging :is(.pack-crimp, .pack-side, .pack-half) { transition: none; }
+.pack-hint::after { content: "，或拖动：封口、中间横拖，侧边往下拖"; }
 @media (prefers-reduced-motion: reduce) { .stage .slot.away { display: none; } }
 /* polish pass: mat semantic colours, narrow-panel fixes, phone tap targets */
 .mat .gain, .mat .summary .gain, .mat-head b.gain { color: var(--mat-gain); }
@@ -1612,9 +1646,9 @@ button:disabled { cursor: not-allowed; }
   .pops:has(> #notice:not([hidden])) > .ach-pop:not([hidden]),
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])) > .ach-pop:not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 8px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
   /* panels keep the double frame but thinner, so a 390 screen still has ~330px of content */
-  :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
+  :is(#rail, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > #grow-top, .page-grow > section, .ach-head, .ach-group) {
     padding: 12px 12px 14px; border-width: 8px; border-image-width: 12px; margin-inline: -6px; }
-  :is(#rail, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
+  :is(#rail, #gallery, .page-shelf > .shelf, .page-shelf .col > section, .page-luck .col > section, .page-luck > #dex, .page-grow > section, .ach-group) > h2:first-child { margin: -12px -12px 12px; padding: 8px 12px; }
   /* phones: the slot spans the screen under the top bar. The receipt shows only its stub — one line (关店 N 小时 · the net);
      tapping it prints the rest */
   /* 28px lower than the bar's edge: the +$ tag under the cash (.delta, ~22px) stays in sight while a box hangs (it was covered) */
@@ -1634,7 +1668,7 @@ button:disabled { cursor: not-allowed; }
   :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
   /* Keep the paper below both fixed header rows, including 全部翻开. The canvas itself does not reflow with the notice. */
   :root[data-page="open"] .pops { top: calc(var(--top-h) + 132px); }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 156px; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory;
     margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
@@ -1737,6 +1771,23 @@ button:disabled { cursor: not-allowed; }
 .medal b.long { font-size: var(--fs-cap); }
 .medal b.tag { font: 400 var(--fs-lg)/1 var(--font-tag); }
 .t-black .medal b { text-shadow: 1px 1px 0 #0B0D10; }
+/* the badge art sits inside the medal's ring of foil (the tier stays readable); its word is only for when the art is missing */
+.medal.art b { display: none; }
+.medal img { position: absolute; inset: 5px; width: calc(100% - 10px); height: calc(100% - 10px); border-radius: 50%; object-fit: cover; user-select: none; }
+/* on the page the medal is a button (opens the 3D medal): no button skin, the cursor ring follows the medal's round */
+.page-ach .medal-btn { all: unset; box-sizing: border-box; flex: none; border-radius: 50%; cursor: pointer; }
+.page-ach .medal-btn:is(:hover, :active) { box-shadow: none; transform: none; }
+.page-ach .medal-btn:hover .medal { filter: brightness(1.1); }
+.page-ach .medal-btn:focus-visible { outline: 3px solid var(--sel); outline-offset: 2px; }
+/* the 3D medal's window (badge3d.js): the BW window of .inspect, the coin on the dark upper-screen colour */
+.medal-view { width: min(440px, calc(100vw - 24px)); }
+.medal-view [hidden] { display: none !important; }
+.mv-stage { position: relative; width: min(100%, 360px, 50dvh); aspect-ratio: 1; margin: 0 auto 12px; overflow: hidden; border-radius: 8px; background: var(--mat); }
+.mv-flat { position: absolute; inset: 0; display: grid; place-items: center; }
+.mv-flat .medal { width: 62%; height: auto; aspect-ratio: 1; border-width: 6px; }
+.mv-flat .medal img { inset: 10px; width: calc(100% - 20px); height: calc(100% - 20px); }
+.mv-flat .medal b { font-size: clamp(24px, 9vw, 44px); }
+.medal-view .m-foot { margin-top: 4px !important; }
 /* the medal's window: a small BW window, the medal half over its left edge */
 .medal-row { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 12px; align-items: center; margin: 0; padding: 10px 12px; color: var(--ink);
   border: 2px solid var(--frame); border-radius: var(--r-frame); background: var(--panel); box-shadow: inset 0 0 0 2px var(--panel), inset 0 0 0 3px var(--frame-in), 0 3px 0 rgba(0, 0, 0, .08); }
@@ -1953,3 +2004,50 @@ div.rs-list { padding-top: 12px; }
 .gt-back { display: grid; justify-items: start; gap: 2px; margin: 0; }
 .gt-back small { font-size: var(--fs-cap); color: var(--muted); }
 .lg-back { display: grid; gap: 8px; margin-top: 10px; } .lg-back > p { margin: 0; font-size: var(--fs-cap); color: var(--muted); }
+
+/* 排行 (src/ui/board.ts, #board): three BW windows (the frame and title bar come from the panel lists up top): my card with the share
+   buttons, the paste field, and the ranked table. The metric switch is a row of command buttons; the pressed one wears the cursor blue
+   (where you are), never the yellow, which stays on the one primary of each window. The row of you is tinted the same blue. */
+.page-board { grid-template-columns: minmax(0, 1fr); }
+#board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px 24px; align-items: start; }
+@media (min-width: 1000px) {
+  #board { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+  #board > .bd-rank { grid-column: 2; grid-row: 1 / span 2; }
+}
+.bd-nick, .bd-out { display: grid; gap: 4px; margin: 0 0 12px; }
+.bd-nick > span, .bd-out > span { font-size: var(--fs-cap); color: var(--muted); }
+#board input[type="text"] { width: 100%; min-width: 0; min-height: 36px; padding: 4px 10px; border: 2px solid var(--frame); border-radius: 8px; background: var(--panel); color: var(--ink);
+  font: inherit; box-shadow: inset 0 2px 0 rgba(0, 0, 0, .08); }
+#board input[type="text"]:focus-visible { outline: 3px solid var(--sel); outline-offset: 1px; }
+.bd-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 0 14px; }
+.bd-stats div { padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+.bd-stats dt { font-size: var(--fs-cap); color: var(--muted); }
+.bd-stats dd { margin: 0; font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow); overflow-wrap: anywhere; }
+.bd-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
+.bd-note { margin: 10px 0 0; font-size: var(--fs-cap); color: var(--muted); }
+.bd-form { display: flex; gap: 8px; }
+.bd-form input { flex: 1; }
+.bd-msg { min-height: 1.55em; margin: 8px 0 0; font-size: var(--fs-body); color: var(--ink); } /* a sentence, not money: no gain/loss colour */
+.bd-msg b { margin-right: 4px; }
+.bd-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.bd-tabs button[aria-pressed="true"] { box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 0 3px var(--sel); }
+.bd-scroll { overflow-x: auto; position: relative; } /* positioned: the visually-hidden header labels must not escape the scroller and widen the page */
+.bd-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.bd-table :is(th, td) { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+.bd-table thead th { font: 500 var(--fs-cap)/1.4 var(--font-body); color: var(--muted); }
+.bd-table td { font: 400 var(--fs-cap)/1.5 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow); }
+.bd-table :is(.n, th:nth-child(2), tbody th) { text-align: left; }
+.bd-table .n { width: 3.5em; }
+.bd-table :is(th, td).on { color: var(--ink); background: var(--hover); box-shadow: inset 2px 0 0 var(--line-strong), inset -2px 0 0 var(--line-strong); }
+.bd-table td.on { font-size: var(--fs-h); }
+.bd-table tbody th { font-weight: 400; }
+.bd-name { font: 400 var(--fs-h)/1.3 var(--font-pixel); text-shadow: 1px 1px 0 var(--ink-shadow); }
+.bd-table tbody th small { display: block; font: 400 var(--fs-cap)/1.4 var(--font-body); color: var(--muted); }
+.bd-table tr.me > * { background-color: color-mix(in oklab, var(--sel) 12%, transparent); }
+.bd-table .at { font-family: var(--font-body); color: var(--muted); text-shadow: none; }
+.bd-you { padding: 0 4px; border-radius: 3px; background: var(--ink); color: var(--panel); font: 400 var(--fs-cap)/1.4 var(--font-pixel); text-shadow: none; vertical-align: 2px; } /* the 新 chip, inverted */
+.page-board .bd-table .rm button { min-height: 32px; padding: 2px 10px 4px; font-size: var(--fs-cap); }
+@media (max-width: 779px) {
+  .page-board .bd-table .rm button { min-height: 44px; }
+  .bd-stats { gap: 8px 12px; }
+}

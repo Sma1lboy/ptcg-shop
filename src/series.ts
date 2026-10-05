@@ -52,6 +52,71 @@ export const THEME: Record<SeriesId, SeriesTheme> = {
 // The theme of a set id; undefined for an id this file doesn't know (the table then plays the plain show it always had).
 export const themeOf = (id: string): SeriesTheme | undefined => (Object.hasOwn(THEME, id) ? THEME[id as SeriesId] : undefined);
 
+// ---------- how a pack is torn open ----------
+// Three lines to tear along, six ways in all; the gesture picks one (where the drag starts on the pack and which way it goes), a tap
+// or Space uses the last one used (ui/mat.ts keeps it). The 3D table cuts its pack along the style's line (table3d.js cut) and the
+// 2D mat moves the matching piece (ui/mat.ts tear; style.css .pack-crimp, .pack-side, .pack-half), so both open the same way.
+// Presentation only: nothing here reads the game or the opening's random numbers.
+export const TEAR_IDS = ['top-ltr', 'top-rtl', 'mid-ltr', 'mid-rtl', 'side-l', 'side-r'] as const;
+export type TearId = typeof TEAR_IDS[number];
+export interface Tear {
+  line: 'top' | 'mid' | 'side'; // the top crimp strip · the waist: the pack torn in two across the middle · a strip down one edge
+  dir: 1 | -1; // top, mid: the tear runs left→right (1) or right→left (-1); side: always 1 = top→bottom
+  edge: -1 | 0 | 1; // side: which edge the strip is on (-1 left, 1 right)
+}
+const TEARS: Record<TearId, Tear> = {
+  'top-ltr': { line: 'top', dir: 1, edge: 0 }, 'top-rtl': { line: 'top', dir: -1, edge: 0 },
+  'mid-ltr': { line: 'mid', dir: 1, edge: 0 }, 'mid-rtl': { line: 'mid', dir: -1, edge: 0 },
+  'side-l': { line: 'side', dir: 1, edge: -1 }, 'side-r': { line: 'side', dir: 1, edge: 1 },
+};
+export const DEFAULT_TEAR: TearId = 'top-ltr'; // the way packs always tore, and what a first tap does
+export const isTearId = (x: unknown): x is TearId => typeof x === 'string' && Object.hasOwn(TEARS, x);
+export const tearOf = (id: string): Tear => TEARS[isTearId(id) ? id : DEFAULT_TEAR];
+
+// Where on the pack a drag began (u: 0 left … 1 right, v: 0 top … 1 bottom) and where it has got to (dx, dy: pixels, y down) pick
+// the way to tear. Mostly sideways: along the top crimp (the top third) or across the waist (anywhere lower), running the way the
+// finger goes. Mostly down: the strip down the edge the finger started nearer, torn top to bottom. Mostly up: no way to tear
+// yet (null; the drag keeps being read as it moves).
+export const TOP_BAND = .33;
+export function tearFromGesture(u: number, v: number, dx: number, dy: number): TearId | null {
+  if (Math.abs(dy) > Math.abs(dx) * 1.25) return dy > 0 ? (u < .5 ? 'side-l' : 'side-r') : null;
+  return `${v < TOP_BAND ? 'top' : 'mid'}-${dx >= 0 ? 'ltr' : 'rtl'}` as const;
+}
+// How far the finger has gone along the style's travel (pixels, positive = torn further): sideways with the tear, or down the edge.
+export const tearAlong = (id: string, dx: number, dy: number) => { const t = tearOf(id); return t.line === 'side' ? dy : t.dir * dx; };
+
+// How the torn piece flies off. lift and spin are the series' strip numbers (the plain show's when it has none), the waist's half
+// pack turning less than a strip; x, y (px) and deg are the same flight for the 2D mat, out the side it tore from, up and away.
+export function tearFlight(id: string, strip?: SeriesTheme['strip']) {
+  const t = tearOf(id), mid = t.line === 'mid', lift = strip?.lift ?? 7, spin = (strip?.spin ?? Math.PI * 4) * (mid ? .4 : 1);
+  const out = t.line === 'side' ? t.edge : t.dir;
+  return { lift, spin, x: out * (40 + lift * 5) * (mid ? 1.4 : 1), y: -lift * 12, deg: out * spin * 180 / Math.PI };
+}
+export const poseCss = (x: number, y: number, deg: number) => `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) rotate(${deg.toFixed(1)}deg)`; // one format for the drag and the flight, so the browser turns the full spin between them
+// Where the 2D piece is while the finger has torn it t (0…1) of the way: hinged at the end still attached, lifting away from the
+// pack. The top strip keeps the pose it always had (left→right); the others are the same move turned to their line.
+export function tearPose(id: string, t: number): { transform: string; origin: string } {
+  const s = tearOf(id);
+  if (s.line === 'side') return { transform: poseCss(s.edge * 26 * t, -12 * t, s.edge * 12 * t), origin: '50% 100%' };
+  const mid = s.line === 'mid';
+  return { transform: poseCss(s.dir * 90 * t, (mid ? -26 : -22) * t, s.dir * (mid ? 13 : 14) * t), origin: s.dir > 0 ? '0 100%' : '100% 100%' };
+}
+// Share of the pack that comes off, for the 2D mat (style.css sizes its pieces to the same numbers): the top strip and the waist
+// half as a share of the height, a side strip as a share of the width.
+export const TEAR_CUT = { top: .07, mid: .46, side: .12 } as const;
+// The 2D pack's body once the piece is gone, as a CSS polygon over the pack's picture: a ragged edge along the cut (a fixed pattern,
+// not random: the same style always tears the same way).
+export function tearClip(id: string): string {
+  const t = tearOf(id), at = t.line === 'side' ? (t.edge > 0 ? 1 - TEAR_CUT.side : TEAR_CUT.side) : TEAR_CUT[t.line];
+  const N = 14, pts = Array.from({ length: N + 1 }, (_, i) => {
+    const a = (at + (hash(i * 3.7 + at * 40) - .5) * .012) * 100, b = i / N * 100;
+    return t.line === 'side' ? [a, b] : [b, a];
+  });
+  const f = (p: number[]) => `${p[0].toFixed(1)}% ${p[1].toFixed(1)}%`, ring = pts.map(f);
+  if (t.line === 'side') return `polygon(${(t.edge > 0 ? ['0% 0%', ...ring, '0% 100%'] : [...ring, '100% 100%', '100% 0%']).join(', ')})`;
+  return `polygon(${[...ring, '100% 100%', '0% 100%'].join(', ')})`;
+}
+
 // ---------- the deal ----------
 const hash = (x: number) => { const s = Math.sin(x * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }; // fixed, not random: the same n deals the same way every time
 // When each of n things comes, 0 (first) … 1 (last), in this deal's order. A deal changes who is first and who comes together; the

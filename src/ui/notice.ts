@@ -12,7 +12,7 @@ import { bill, owed } from '../debt.ts';
 import { SETS } from '../sets.ts';
 import { HITS } from '../sim.ts';
 
-// A collector needs a case card, not just any missing seeker tier. Offer the least valuable eligible card, never a trophy.
+// A collector needs a case card, not just any missing seeker tier. Offer the least valuable eligible card from the binder; the 收藏室 is never touched.
 function collectorCard() {
   if (hold || G.state.shown.length >= G.slots() || G.state.shown.some(c => c.price >= G.BIG_CARD)) return null;
   return Object.entries(G.state.singles).filter(([, c]) => c.count > 0 && HITS.includes(c.kind) && c.price >= G.BIG_CARD)

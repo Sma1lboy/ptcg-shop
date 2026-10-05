@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
 </head>
 <body>
-<!-- Six pages stay in the DOM; layout.ts selects #open #shelf #case #luck #grow #ach #collection. #case is the second shelf view.
+<!-- Six pages stay in the DOM; layout.ts selects #open #shelf #case #luck #grow #ach #board (old #collection links land on #case). #case is the second shelf view.
      The nav sits in the top bar on wide screens and docks to the bottom on phones. -->
 <header class="top">
   <h1 class="brand" data-text="PTCG卡店">PTCG卡店</h1>
@@ -18,7 +18,7 @@
     <a href="#luck" title="数字表示尚未查看的卡册新卡">欧气<b class="tab-n tab-dot" id="luck-n" hidden></b></a>
     <a href="#grow">成长<b class="tab-n" id="grow-n" hidden></b></a>
     <a href="#ach" title="数字表示尚未查看的新成就">成就<b class="tab-n tab-dot" id="ach-n" hidden></b></a>
-    <a href="#collection">收藏室</a>
+    <a href="#board">排行</a>
   </nav>
   <a class="due" id="due" href="#grow" hidden></a>
   <div class="stats" id="stats"></div>
@@ -29,7 +29,6 @@
     <section class="mat" id="mat" aria-live="polite"></section>
     <aside class="rail">
       <section id="rail"></section>
-      <section id="playmode" aria-label="挂机与离线收益"></section>
     </aside>
   </section>
   <!-- 货柜 has two views by product line, each with its own half of the customers next to the controls they call for:
@@ -44,6 +43,7 @@
       <p class="cust-head" id="cust-head"></p>
       <div class="floor" id="floor" aria-hidden="true"></div>
     </div>
+    <section id="playmode" aria-label="挂机与离线收益"></section>
     <section class="shelf" data-view="shelf" aria-labelledby="shelf-h">
       <h2 id="shelf-h">货架 · 进货</h2>
       <div id="shelf"></div>
@@ -55,6 +55,7 @@
       <section id="clerk"></section>
       <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
     </div>
+    <section class="room" id="gallery" data-view="case" aria-label="收藏室"></section>
     <div class="col" data-view="case">
       <section id="casepanel"></section>
       <section id="singles"></section>
@@ -78,8 +79,8 @@
   <section class="page page-ach" id="page-ach" aria-label="成就" hidden>
     <section id="achs"></section>
   </section>
-  <section class="page page-collection" id="page-collection" aria-label="收藏室" hidden>
-    <section id="gallery"></section>
+  <section class="page page-board" id="page-board" aria-label="排行" hidden>
+    <section id="board"></section>
   </section>
 </main>
 <dialog class="story" id="story" aria-label="剧情"></dialog>

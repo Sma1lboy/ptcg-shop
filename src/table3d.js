@@ -6,8 +6,11 @@
 // What each series adds to the show (the figure its big hits draw, the order its packs tear and cards leave them, how its torn strip
 // flies, how a held hit sways and how hard the table shakes) is src/series.ts's data; this file only plays it.
 // Plain JS (tsconfig allowJs, not type-checked). Interface, used by src/ui/mat.ts:
-//   mountTable(el, { onTear, onFlip(i, card, quiet), onDone, onPick?(k), onLost?, onHold?, onLook?(k), reducedMotion })
+//   mountTable(el, { onTear(style), onFlip(i, card, quiet), onDone, onPick?(k), onLost?, onHold?, onLook?(k), tearStyle?(), reducedMotion })
 //     → { showShelf(items), hover(k), showPack(set, cards), showBatch(set, packs, picks), lookAt(k), putBack(), flip(i), flipAll(), resize(), dispose() } | null
+//   (tearStyle: the way a tap, Space or flip(0) tears a sealed pack, a series.ts TearId; called when the pack is dealt and again at the tap. A drag picks its own from where it starts
+//    on the pack and which way it goes (series.ts tearFromGesture): along the top crimp left→right or right→left, across the waist, or a strip down the nearer edge top→bottom;
+//    onTear(style): the pack is open, torn that way (the caller keeps it as the next tearStyle))
 //   (quiet: turned in a sweep with others, no caption or flip sound of its own; onHold: a batch's best card is being lifted face down, the caption of the previous one should go;
 //    onLook(k): in a finished batch pick k is held up to the eye (a tap on it, or lookAt) — fired once it's up; k = -1 the moment it is let go (a tap, putBack, another card taking its place: -1, then that card's k);
 //    onPick(k): shelf item k's pack was tapped. showShelf items: [{ set, n (packs in the stack), off (can't be opened) }])
@@ -19,7 +22,7 @@ import { SETS, LOOK } from './sets.ts'; // LOOK: each set's pack colours and cha
 import { FOIL, EMBLEM, cap, toHTML, back as backSVG, energy as energySVG, stock as stockSVG } from './ui/card.ts';
 import { wordmark, SHORT } from './brand.ts';
 import { money } from './ui/common.ts';
-import { themeOf, strokes, figureInk, figureLife, life as figLife, dealShares } from './series.ts';
+import { themeOf, strokes, figureInk, figureLife, life as figLife, dealShares, tearOf, isTearId, tearAlong, tearFlight, tearFromGesture, DEFAULT_TEAR } from './series.ts';
 // Animation-synced sounds (crinkle, slide, swell) come from src/fx.ts; flip and tear sounds are ui/mat.ts's, via the callbacks.
 const FX = () => fx;
 let T, M;
@@ -222,50 +225,86 @@ function puff(x, y) {
   const sx = 1 - smooth(PW / 2 - .8, PW / 2 - .04, Math.abs(x)), sy = smooth(CRIMP, CRIMP + 1.5, PH / 2 - Math.abs(y));
   return PUFF * Math.sqrt(sx * sy) * (1 + .05 * Math.sin(x * 1.7 + y * .6));
 }
-function sheet(yA, yB, jA, jB, side, rows, COLS) {
+// A patch of the pack's skin, nc × nr cells; at(c, r) is where grid point (c, r) sits on the flat pack. side 1 faces the camera.
+function grid(at, nc, nr, side) {
   const pos = [], uv = [], idx = [];
-  for (let r = 0; r <= rows; r++) for (let c = 0; c <= COLS; c++) {
-    const x = -PW / 2 + PW * c / COLS, a = yA + jA(c), b = yB + jB(c), y = a + (b - a) * r / rows;
+  for (let r = 0; r <= nr; r++) for (let c = 0; c <= nc; c++) {
+    const [x, y] = at(c, r);
     pos.push(x, y, side * (.012 + puff(x, y))); uv.push(side > 0 ? x / PW + .5 : .5 - x / PW, y / PH + .5);
   }
-  for (let r = 0; r < rows; r++) for (let c = 0; c < COLS; c++) {
-    const a = r * (COLS + 1) + c, b = a + 1, d = a + COLS + 1, e = d + 1;
+  for (let r = 0; r < nr; r++) for (let c = 0; c < nc; c++) {
+    const a = r * (nc + 1) + c, b = a + 1, d = a + nc + 1, e = d + 1;
     if (side > 0) idx.push(a, b, e, a, e, d); else idx.push(a, e, b, a, d, e);
   }
   const geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx); geo.computeVertexNormals(); return geo;
 }
+// A band across the pack, full width in COLS columns, between two edges: y = yA + jA(c) below, yB + jB(c) above.
+const sheet = (yA, yB, jA, jB, side, rows, COLS) => grid((c, r) => {
+  const a = yA + jA(c), b = yB + jB(c); return [-PW / 2 + PW * c / COLS, a + (b - a) * r / rows];
+}, COLS, rows, side);
 // cols/rows: mesh density. A pack held up to the camera gets 60×64 and its foil lining; the ten packs of a batch, small
 // on screen, far fewer vertices and no lining (40 draw calls saved, never visible from above).
-function buildPack(setId, cols = 60, rows = 64, lining = true) {
-  const mats = packArt(setId), pack = new T.Group(), strip = new T.Group(), ph = Math.random() * 9, f = 60 / cols;
-  const teeth = c => (c % 2 ? .09 : 0), tearJ = c => .06 * Math.sin(c * f * .9 + ph) + .04 * Math.sin(c * f * 2.3 + ph * 2), zero = () => 0;
-  const SC = (TEAR + PH / 2) / 2, stripGeos = [];
-  for (const side of [1, -1]) {
-    const body = sheet(-PH / 2, TEAR, teeth, tearJ, side, rows, cols), top = sheet(TEAR, PH / 2, tearJ, c => -teeth(c), side, Math.max(4, rows / 6 | 0), cols);
-    top.translate(0, -SC, 0); stripGeos.push({ geo: top, orig: top.attributes.position.array.slice() });
-    for (const [geo, parent] of [[body, pack], [top, strip]]) {
-      const outer = new T.Mesh(geo, side > 0 ? mats.front : mats.back); outer.castShadow = true;
-      parent.add(outer); if (lining) parent.add(new T.Mesh(geo, shared.inner));
-    }
-  }
-  strip.position.y = SC; pack.add(strip);
-  Object.assign(pack.userData, { strip, stripGeos, tearY: TEAR - SC, zero });
+// id: the series.ts TearId it is cut for; cut() can cut it again for another one as long as it is sealed.
+function buildPack(setId, cols = 60, rows = 64, lining = true, id = DEFAULT_TEAR) {
+  const pack = new T.Group(), strip = new T.Group();
+  Object.assign(pack.userData, { strip, parts: [], build: { mats: packArt(setId), cols, rows, lining, ph: Math.random() * 9 } });
+  pack.add(strip); cut(pack, id);
   return pack;
 }
-// Tear progress p (0..1) runs the tear front from left to right; the loose end behind it swings up about the front
-// (more the further back, so the flap curls) and lifts off the pack a little.
+// Cuts the sealed pack in two along the style's line: the body, which stays, and the strip (the top crimp, the pack's top half at
+// the waist, or a band down one edge), a group of its own that tears off and flies away. The two pieces meet along a ragged line
+// with the same wobble on both sides, so a sealed pack looks whole. Everything the tear needs is kept in userData.cut.
+const SIDE_W = .9, MIDY = .6; // cm: a side strip's width; the height of the waist tear
+function cut(pack, id) {
+  const u = pack.userData, { mats, cols, rows, lining, ph } = u.build, t = tearOf(id), f = 60 / cols, strip = u.strip;
+  const teeth = c => (c % 2 ? .09 : 0), tearJ = c => .06 * Math.sin(c * f * .9 + ph) + .04 * Math.sin(c * f * 2.3 + ph * 2); // the crimps' zigzag, the torn edge's wobble
+  const lo = c => -PH / 2 + teeth(c), hi = c => PH / 2 - teeth(c); // the pack's bottom and top edge, crimp teeth in
+  let body, top, cx = 0, cy = 0, pivot, out = [0, 1], lift = .28;
+  if (t.line === 'side') {
+    const ns = Math.max(3, Math.round(SIDE_W * cols / PW)), nb = cols - ns, e = t.edge, g = 64 / rows;
+    const xs = -PW / 2 + PW * (e > 0 ? nb : ns) / cols, jx = r => .05 * Math.sin(r * g * .55 + ph) + .03 * Math.sin(r * g * 1.4 + ph * 2); // where the strip's inner edge runs, wobbling down the pack
+    const col = (xa, xb, n, c0) => side => grid((c, r) => [xa(r) + (xb(r) - xa(r)) * c / n, lo(c0 + c) + (hi(c0 + c) - lo(c0 + c)) * r / rows], n, rows, side);
+    const edgeX = r => xs + jx(r), left = () => -PW / 2, right = () => PW / 2;
+    if (e > 0) { body = col(left, edgeX, nb, 0); top = col(edgeX, right, ns, nb); cx = (xs + PW / 2) / 2; } else { top = col(left, edgeX, ns, 0); body = col(edgeX, right, nb, ns); cx = (xs - PW / 2) / 2; }
+    pivot = xs - cx; out = [e, 0];
+  } else {
+    const mid = t.line === 'mid', y0 = mid ? MIDY : TEAR, dens = rows / (TEAR + PH / 2), n = len => Math.max(4, Math.round(len * dens));
+    body = side => sheet(-PH / 2, y0, teeth, tearJ, side, mid ? n(y0 + PH / 2) : rows, cols);
+    top = side => sheet(y0, PH / 2, tearJ, c => -teeth(c), side, mid ? n(PH / 2 - y0) : Math.max(4, rows / 6 | 0), cols);
+    cy = (y0 + PH / 2) / 2; pivot = y0 - cy; if (mid) lift = .45;
+  }
+  for (const m of u.parts) { m.removeFromParent(); m.geometry.dispose(); }
+  u.parts = []; u.stripGeos = [];
+  for (const side of [1, -1]) {
+    const b = body(side), s = top(side);
+    s.translate(-cx, -cy, 0); u.stripGeos.push({ geo: s, orig: s.attributes.position.array.slice() });
+    for (const [geo, parent] of [[b, pack], [s, strip]]) {
+      const outer = new T.Mesh(geo, side > 0 ? mats.front : mats.back); outer.castShadow = true;
+      parent.add(outer); u.parts.push(outer);
+      if (lining) { const inner = new T.Mesh(geo, shared.inner); parent.add(inner); u.parts.push(inner); }
+    }
+  }
+  strip.position.set(cx, cy, 0);
+  u.tear = 0; u.cut = { id, line: t.line, dir: t.dir, edge: t.edge, cx, cy, pivot, out, lift };
+}
+// Tear progress p (0..1) runs the tear front along the line (left→right or right→left, or down the edge); the loose end behind it
+// swings away about the front (more the further back, so the flap curls) and lifts off the pack a little.
 function setTear(run, p) { run.tear = p; tearPack(run.pack, p); }
 function tearPack(pack, p) {
-  pack.userData.tear = p;
-  const ty = pack.userData.tearY, xf = -PW / 2 + p * PW;
-  for (const { geo, orig } of pack.userData.stripGeos) {
+  const u = pack.userData, c = u.cut, horiz = c.line !== 'side';
+  u.tear = p;
+  const front = horiz ? c.dir * (-PW / 2 + p * PW) : PH / 2 - p * PH - c.cy; // the front's x, or its y, in the strip's own frame
+  for (const { geo, orig } of u.stripGeos) {
     const a = geo.attributes.position.array;
     for (let i = 0; i < a.length; i += 3) {
-      const x = orig[i], y = orig[i + 1], z = orig[i + 2], k = clamp((p - (x + PW / 2) / PW) / .3, 0, 1), th = -k * k * .6, dx = x - xf, dy = y - ty;
+      const x = orig[i], y = orig[i + 1], z = orig[i + 2];
+      const s = horiz ? (c.dir > 0 ? x + PW / 2 : PW / 2 - x) / PW : (PH / 2 - y - c.cy) / PH; // how far along the tear this point lies, 0…1
+      const k = clamp((p - s) / .3, 0, 1), th = -k * k * .6 * (horiz ? c.dir : c.edge);
       if (!k) { a[i] = x; a[i + 1] = y; a[i + 2] = z; continue; }
-      a[i] = xf + dx * Math.cos(th) - dy * Math.sin(th); a[i + 1] = ty + dx * Math.sin(th) + dy * Math.cos(th) + k * .1; a[i + 2] = z + k * .28;
+      const px = horiz ? front : c.pivot, py = horiz ? c.pivot : front, dx = x - px, dy = y - py, cs = Math.cos(th), sn = Math.sin(th);
+      a[i] = px + dx * cs - dy * sn + (horiz ? 0 : c.edge * k * .1); a[i + 1] = py + dx * sn + dy * cs + (horiz ? k * .1 : 0); a[i + 2] = z + k * c.lift;
     }
     geo.attributes.position.needsUpdate = true; geo.computeVertexNormals();
   }
@@ -621,13 +660,26 @@ function flyTo(obj, pos, quat, ms, lift = 4, spin = 0) {
 }
 
 // ---------- the run: one pack from drop-in to spread ----------
+// The way a tap or Space tears the pack: what the caller says (its last), else the way packs always tore.
+const defaultTear = () => { const id = opts?.tearStyle?.(); return isTearId(id) ? id : DEFAULT_TEAR; };
 function build(set, cards) {
-  const run = { set, theme: themeOf(set), data: cards, tiers: cards.map(tierOf), n: cards.length, stage: 'enter', cur: 0, busy: false, tear: 0, slide: 0, pile: 0 };
-  run.pack = buildPack(set); grip.add(run.pack);
+  const id = defaultTear(), run = { set, theme: themeOf(set), data: cards, tiers: cards.map(tierOf), n: cards.length, stage: 'enter', cur: 0, busy: false, tear: 0, slide: 0, pile: 0, cutId: id };
+  run.pack = buildPack(set, 60, 64, true, id); grip.add(run.pack);
   run.stack = new T.Group(); run.stack.position.set(0, -.4, -.14); grip.add(run.stack);
   run.cards = cards.map((c, k) => { const m = cardMesh(c); m.position.z = -k * CT * 1.06; run.stack.add(m); return m; });
+  backUp(run, id);
   run.faces = Promise.all(run.cards.map(m => m.userData.ready));
   return run;
+}
+// A waist tear leaves the top of the cards showing above what is left of the pack: they lie back up in it (as a ten-pack's do),
+// so the tear shows no card, and turn over as the stack comes out (extract). The other tears never open far enough to see them.
+const backUp = (run, id) => { if (!run.batch) for (const m of run.cards) m.rotation.y = tearOf(id).line === 'mid' ? Math.PI : 0; };
+// Cut the sealed pack(s) along another line before a tear starts (a drag has picked a way, or a tap uses the default).
+function restyle(run, id) {
+  if (run.cutId === id || run.tear > 0 || (run.stage !== 'pack' && run.stage !== 'enter')) return;
+  run.cutId = id;
+  for (const p of packsOf(run)) cut(p, id);
+  backUp(run, id);
 }
 // from: the world matrix of the shelf pack it was picked from; that pack rises off the mat into the hand, else one drops in.
 async function enter(run, from) {
@@ -656,6 +708,11 @@ async function autoTear(run) {
   await tween(460 * (1 - p0) + 60, k => { const p = p0 + (1 - p0) * k; setTear(run, p); if (p - lastC > .14) { lastC = p; FX().crinkle(); } }, E.in);
   if (R === run) rip(run);
 }
+// A tap, Space or flip(0): tear the sealed pack(s) the default way (a drag that lets go has already cut its own).
+function tearDefault(run) {
+  if (!run.tear) restyle(run, defaultTear());
+  return run.batch ? tearAll(run) : autoTear(run);
+}
 // Where the torn strip lands, the empty pack rests and the seen cards pile, for this aspect (relayout() moves them on resize).
 function spots() {
   const st = stages().reveal, wide = camera.aspect > 1;
@@ -665,21 +722,31 @@ function spots() {
 }
 function rip(run) {
   run.stage = 'extract';
-  const s = run.pack.userData.strip;
-  const sf = run.theme?.strip; flyTo(s, spots().strip, flatQ(sf?.yaw ?? Math.random() * 2 - 1), 950, sf?.lift ?? 7, sf?.spin ?? Math.PI * 4); // how the strip flies and lands is the series'
-  opts.onTear();
+  const s = run.pack.userData.strip, c = run.pack.userData.cut, sf = tearFlight(c.id, run.theme?.strip); // how the strip flies and lands is the series'
+  const yaw = (run.theme?.strip.yaw ?? Math.random() * 2 - 1) + (c.line === 'side' ? Math.PI / 2 : 0); // a side strip is long the other way: turn it to lie like the others
+  flyTo(s, spots().strip, flatQ(yaw), 950, sf.lift, sf.spin);
+  if (c.line === 'mid') tween(950, k => s.scale.setScalar(1 - .3 * k), E.out); // the half pack crumples a little on the way, or it would cover the pile
+  opts.onTear(c.id);
   extract(run);
 }
+// The cards leave the pack through its torn side: up through the top (the top and the waist), or sideways out of a stripped edge.
 async function extract(run) {
   await Promise.race([run.faces, wait(1500)]); if (R !== run) return;
-  const st = stages();
-  camTo({ ...st.pack, d: st.pack.d * 1.12 }, 800);
-  FX().slide(); opts.onFlip(0, run.data[0]);
-  await tween(800, k => { run.stack.position.y = -.4 + 7.2 * k; run.pack.position.y = -5 * k; }, E.io);
+  const st = stages(), c = run.pack.userData.cut, [ox, oy] = c.out, turn = c.line === 'mid';
+  camTo({ ...st.pack, d: st.pack.d * (ox ? 1.5 : 1.12) }, 800); // sideways, the stack comes out of a narrow (portrait) frame
+  FX().slide(); if (!turn) opts.onFlip(0, run.data[0]);
+  await tween(800, k => {
+    run.stack.position.x = ox * 5.6 * k; run.stack.position.y = -.4 + (oy ? 7.2 : .4) * k;
+    run.pack.position.x = -ox * 3.2 * k; run.pack.position.y = -(oy ? 5 : 1.5) * k;
+  }, E.io);
   if (R !== run) return;
   const sp = spots(); run.pileAt = sp.pile;
   flyTo(run.pack, sp.rest, flatQ(-.35 + Math.random() * .2), 850, 3);
-  tween(700, k => { run.stack.position.y = 6.8 * (1 - k); run.stack.position.z = -.14 * (1 - k); }, E.io);
+  if (turn) opts.onFlip(0, run.data[0]); // the stack turns face up once it is clear of the pack
+  tween(700, k => {
+    run.stack.position.x = ox * 5.6 * (1 - k); run.stack.position.y = (oy ? 6.8 : 0) * (1 - k); run.stack.position.z = -.14 * (1 - k);
+    if (turn) for (const m of run.cards) m.rotation.y = Math.PI * (1 - k);
+  }, E.io);
   await camTo(st.reveal, 850);
   if (R !== run) return;
   run.stage = 'cards'; run.cur = 0;
@@ -927,10 +994,10 @@ function fanOf(n, np) {
   return { poses, tight, wrap, pts, cam: frameOn(pts, new V3(0, 0, fz), room ? SPREAD_PITCH : SPREAD_PITCH_TALL, .94, tall ? -.56 : -.74, .98) };
 }
 function buildBatch(set, packs, picks, news) {
-  const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]);
-  const run = { set, theme: themeOf(set), batch: true, data, news, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length) };
+  const jit = packs.map(() => [Math.random() - .5, Math.random() - .5]), grid = packGrid(packs.length, jit), data = picks.map(([p, i]) => packs[p][i]), id = defaultTear();
+  const run = { set, theme: themeOf(set), batch: true, data, news, tiers: data.map(tierOf), n: data.length, stage: 'enter', cur: -1, busy: false, grid, jit, fan: fanOf(data.length, packs.length), cutId: id };
   run.shot = run.grid.cam;
-  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false); p.visible = false; Object.assign(p.userData, { col: grid.col[k], yaw: (Math.random() - .5) * .2, wy: (Math.random() - .5) * .12 }); scene.add(p); return p; });
+  run.packs = packs.map((_, k) => { const p = buildPack(set, 24, 24, false, id); p.visible = false; Object.assign(p.userData, { col: grid.col[k], yaw: (Math.random() - .5) * .2, wy: (Math.random() - .5) * .12 }); scene.add(p); return p; });
   const inPack = {};
   run.cards = picks.map(([p, i]) => {
     const m = cardMesh(packs[p][i]), k = inPack[p] = (inPack[p] || 0) + 1;
@@ -956,11 +1023,19 @@ async function enterBatch(run, froms = []) {
   run.stage = 'pack';
   if (run.wantTear) tearAll(run);
 }
-// Drag progress g (0..1 across the whole grid) tears column c while the finger is over it.
-function zipTear(run, g) { run.tear = g; for (const p of run.packs) tearPack(p, clamp(g * run.grid.cols - p.userData.col, 0, 1)); }
+// Drag progress g (0..1) tears the packs: along the row for the top and the waist (column c while the finger is over it, from
+// the side the finger started on), all of them down their edge for a side strip (a little behind each other, left to right).
+function zipTear(run, g) {
+  run.tear = g;
+  const t = tearOf(run.cutId), n = run.grid.cols;
+  for (const p of run.packs) {
+    const c = p.userData.col;
+    tearPack(p, clamp(t.line === 'side' ? g * 1.3 - .3 * c / Math.max(1, n - 1) : g * n - (t.dir > 0 ? c : n - 1 - c), 0, 1));
+  }
+}
 async function tearAll(run) {
   if (run.stage !== 'pack') { if (run.stage === 'enter') run.wantTear = true; return; }
-  run.stage = 'tearing'; opts.onTear();
+  run.stage = 'tearing'; opts.onTear(run.cutId);
   const colAt = dealAt(run, run.grid.cols);
   await Promise.all(run.packs.map(p => wait(colAt(p.userData.col) * 75).then(async () => {
     if (R !== run) return;
@@ -968,7 +1043,7 @@ async function tearAll(run) {
     await tween(300 * (1 - t0) + 40, e => tearPack(p, t0 + (1 - t0) * e), E.in); if (R !== run) return;
     const s = p.userData.strip, at = s.getWorldPosition(tmpV()), side = at.x < 0 ? -1 : 1; // off the side it tore on: back at z −34 was through the showcase glass
     const to = at.clone().add(new V3(side * (46 + Math.random() * 10), 7, 4 + Math.random() * 6));
-    const sf = run.theme?.strip; flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, sf ? sf.lift * .45 : 3, sf ? sf.spin * .75 : Math.PI * 3).then(() => { s.visible = false; });
+    const sf = tearFlight(run.cutId, run.theme?.strip); flyTo(s, to, s.getWorldQuaternion(new T.Quaternion()), 750, sf.lift * .45, sf.spin * .75).then(() => { s.visible = false; });
   })));
   if (R === run) extractBatch(run);
 }
@@ -985,8 +1060,8 @@ async function extractBatch(run) {
   await Promise.all(run.cards.map((m, i) => wait(200 + cardAt(i) * step).then(async () => {
     if (R !== run) return;
     FX().slide();
-    const y0 = m.position.y, pack = m.parent;
-    await tween(240, e => { m.position.y = y0 + e * CH * .8; }, E.out); if (R !== run) return; // out through the torn top
+    const x0 = m.position.x, y0 = m.position.y, pack = m.parent, [ox, oy] = pack.userData.cut.out;
+    await tween(240, e => { m.position.x = x0 + e * CW * .9 * ox; m.position.y = y0 + e * CH * .8 * oy; }, E.out); if (R !== run) return; // out through the torn side: up for the top and the waist, sideways for a stripped edge
     const P = run.fan.poses[i], fly = flyTo(m, P.p, faceDown(P.q), 640, 6);
     if (empty(pack)) flatten(pack);
     await fly;
@@ -1249,6 +1324,23 @@ function screenW(obj, w) {
   const a = obj.localToWorld(new V3(-w / 2, 0, 0)).project(camera), b = obj.localToWorld(new V3(w / 2, 0, 0)).project(camera);
   return Math.max(40, Math.abs(b.x - a.x) / 2 * canvas.clientWidth);
 }
+function screenH(obj, h) { // …and the height of a pack's edge, for a drag down it
+  const a = obj.localToWorld(new V3(0, -h / 2, 0)).project(camera), b = obj.localToWorld(new V3(0, h / 2, 0)).project(camera);
+  return Math.max(40, Math.abs(b.y - a.y) / 2 * canvas.clientHeight);
+}
+// Where a drag began on the pack it began on (the one under it, else the nearest): 0…1 across, 0…1 down, for series.ts tearFromGesture.
+function startOnPack(run, x, y) {
+  const r = canvas.getBoundingClientRect();
+  let best = null, bd = Infinity;
+  for (const p of packsOf(run)) {
+    const ps = [[-1, -1], [1, -1], [-1, 1], [1, 1]].map(([a, b]) => p.localToWorld(new V3(a * PW / 2, b * PH / 2, 0)).project(camera)), xs = ps.map(q => q.x), ys = ps.map(q => q.y);
+    const box = { l: r.left + (Math.min(...xs) + 1) / 2 * r.width, r: r.left + (Math.max(...xs) + 1) / 2 * r.width, t: r.top + (1 - Math.max(...ys)) / 2 * r.height, b: r.top + (1 - Math.min(...ys)) / 2 * r.height };
+    const d = Math.hypot(x - (box.l + box.r) / 2, y - (box.t + box.b) / 2);
+    if (x >= box.l && x <= box.r && y >= box.t && y <= box.b) { best = box; break; }
+    if (d < bd) { bd = d; best = box; }
+  }
+  return [clamp((x - best.l) / (best.r - best.l), 0, 1), clamp((y - best.t) / (best.b - best.t), 0, 1)];
+}
 function onDown(e) {
   if (!R || e.button > 0) return;
   FX().unlock();
@@ -1259,13 +1351,21 @@ function onMove(e) {
   if (R?.shelf) { if (R.stage === 'shelf' && e.pointerType === 'mouse') shelfHover(R, shelfHit(e)); return; }
   if (!drag || e.pointerId !== drag.id || !R) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y, run = R;
-  if (!drag.mode && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-    drag.mode = run.stage === 'pack' ? 'tear' : run.stage === 'cards' && !run.batch && !run.busy && run.cur < run.n - 1 ? 'slide' : 'none';
-    if (drag.mode !== 'none') { canvas.setPointerCapture?.(e.pointerId); drag.w = run.batch ? spanW(run.packs) : screenW(drag.mode === 'tear' ? run.pack : run.cards[run.cur], drag.mode === 'tear' ? PW : CW); drag.c = 0; }
-    if (drag.mode === 'slide') { run.dragging = true; if (run.cur + 1 >= run.n - 3) { mood('hush', 400); camD(stages().reveal.d * .93, 800); } }
+  if (!drag.mode) {
+    if (run.stage === 'pack') { // a sealed pack: where the drag began on it and which way it goes pick the way to tear it
+      const id = Math.hypot(dx, dy) > 9 ? tearFromGesture(...startOnPack(run, drag.x, drag.y), dx, dy) : null;
+      if (id) {
+        drag.mode = 'tear'; canvas.setPointerCapture?.(e.pointerId);
+        restyle(run, id); drag.tid = run.cutId; // (a pack still springing back from the last drag keeps the cut it has)
+        drag.len = tearOf(drag.tid).line === 'side' ? screenH(packsOf(run)[0], PH) : run.batch ? spanW(run.packs) : screenW(run.pack, PW); drag.c = 0;
+      }
+    } else if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+      drag.mode = run.stage === 'cards' && !run.batch && !run.busy && run.cur < run.n - 1 ? 'slide' : 'none';
+      if (drag.mode === 'slide') { canvas.setPointerCapture?.(e.pointerId); drag.w = screenW(run.cards[run.cur], CW); drag.c = 0; run.dragging = true; if (run.cur + 1 >= run.n - 3) { mood('hush', 400); camD(stages().reveal.d * .93, 800); } }
+    }
   }
   if (drag.mode === 'tear') {
-    const p = clamp(dx / (drag.w * .95), 0, 1); if (run.batch) zipTear(run, p); else setTear(run, p);
+    const p = clamp(tearAlong(drag.tid, dx, dy) / (drag.len * .95), 0, 1); if (run.batch) zipTear(run, p); else setTear(run, p);
     if (Math.abs(p - drag.c) > .12) { drag.c = p; FX().crinkle(); }
   }
   if (drag.mode === 'slide') { run.slide = clamp(dx / (drag.w * 1.1), 0, 1.15); slideFront(run.cards[run.cur], run.slide); }
@@ -1293,7 +1393,7 @@ function onCancel(e) {
 function tap(e) {
   const run = R;
   if (run.shelf) { const k = run.stage === 'shelf' ? shelfHit(e) : -1; if (k >= 0 && !run.items[k].off) opts.onPick?.(k); return; }
-  if (run.stage === 'pack' || run.stage === 'enter') return run.batch ? tearAll(run) : autoTear(run);
+  if (run.stage === 'pack' || run.stage === 'enter') return tearDefault(run);
   if (run.stage === 'cards') return advance(run);
   if (run.stage === 'spread') {
     const r = canvas.getBoundingClientRect(), ray = new T.Raycaster();
@@ -1317,6 +1417,8 @@ function tick(t) {
   if (relay && !tws.length && !drag && now >= relay) relayout();
   placeCam(camera, cam);
   const k = Math.min(1, dt * 6), run = R, tx = ptr.in ? ptr.x : 0, ty = ptr.in ? ptr.y : 0, leanTo = run && (run.stage === 'enter' || run.stage === 'pack' || run.stage === 'tearing') ? 1 : 0;
+  const ta = run && (run.stage === 'enter' || run.stage === 'pack') ? 'none' : ''; // a sealed pack is torn by dragging any way, down included, so the page doesn't scroll under the finger (read at touchstart)
+  if (canvas.style.touchAction !== ta) canvas.style.touchAction = ta;
   tilt.x += (tx - tilt.x) * k; tilt.y += (ty - tilt.y) * k;
   const s = t / 1000; let sway = 0;
   if (run && run.show) { const a = (t - run.show.t0) / 1000, w = run.show.sw || [3.4, 0, 1]; sway = run.show.tilt ? -TILT * Math.sin(a * 5.2) * Math.exp(-a * 1.8) : (Math.sin(a * w[0]) + w[1] * Math.sin(a * w[0] * w[2])) / (1 + w[1]) * run.show.amp * Math.exp(-a * .9); if (a > 5) run.show = null; }
@@ -1754,7 +1856,7 @@ function mountTable(el, o) {
     // Move the table on to card i: tears a sealed pack, uncovers the next card, or (i ≥ cards) lays the pack out.
     flip(i) {
       const run = R; if (opts !== o || !run || run.shelf) return false;
-      if (run.stage === 'enter' || run.stage === 'pack') { if (run.batch) tearAll(run); else autoTear(run); return true; }
+      if (run.stage === 'enter' || run.stage === 'pack') { tearDefault(run); return true; }
       return i > run.cur && advance(run);
     },
     flipAll() { if (opts === o && !R?.shelf) revealAll(R); },

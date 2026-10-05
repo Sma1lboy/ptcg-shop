@@ -9,7 +9,7 @@ import { branchClick } from './upgrades.ts';
 import { loanClick } from './ledger.ts';
 import { resetStory } from './story.ts';
 
-const CARD_ACTIONS = new Set(['shareluck', 'sell', 'bulk', 'list', 'fillcase', 'caseprice', 'buyprice', 'unlist', 'trophy', 'untrophy', 'cprice', 'collect']);
+const CARD_ACTIONS = new Set(['shareluck', 'sell', 'bulk', 'list', 'fillcase', 'caseprice', 'buyprice', 'unlist', 'pedestal', 'cprice', 'collect']);
 
 export function bindEvents() {
   let resetArmed = 0;
@@ -39,8 +39,7 @@ export function bindEvents() {
       case 'caseprice': G.setCasePct(G.casePct() + +b.dataset.d! * G.PCT_STEP); break;
       case 'buyprice': G.setBuyPct(G.buyPct() + +b.dataset.d! * G.PCT_STEP); break;
       case 'unlist': G.unlist(+b.dataset.i!); break;
-      case 'trophy': G.setTrophy(b.dataset.key!); break;
-      case 'untrophy': G.clearTrophy(); break;
+      case 'pedestal': G.toPedestal(b.dataset.key!); break;
       case 'shelve': G.shelve(id, +b.dataset.n!); break;
       case 'refill': { // Snapshot every quoted quantity before the first purchase emits and can repaint this button.
         const ns = b.dataset.n!.split(',').map(Number), ids = id.split(',');

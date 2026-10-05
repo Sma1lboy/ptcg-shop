@@ -5,13 +5,17 @@ import { SETS } from '../sets.ts';
 import { G, $ } from './common.ts';
 import { growCount } from './upgrades.ts';
 
-const PAGES = ['open', 'shelf', 'case', 'collection', 'luck', 'grow', 'ach'];
+const PAGES = ['open', 'shelf', 'case', 'luck', 'grow', 'ach', 'board'];
 // a view that lives on another page's section: #case is 货柜's 展示柜 view (index.html data-view), the nav lamp stays on 货柜
 const HOME: Record<string, string> = { case: 'shelf' };
-export const currentPage = () => (PAGES.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'open');
+// retired hashes still in players' bookmarks: the 收藏室 page became the room above the 展示柜
+const ALIAS: Record<string, string> = { collection: 'case' };
+const hashPage = () => { const h = location.hash.slice(1); return ALIAS[h] ?? h; };
+export const currentPage = () => (PAGES.includes(hashPage()) ? hashPage() : 'open');
 
 // Page ids are page-<name>, not <name>: #shelf and #luck are also panel ids, and a same-named target would make the browser scroll to it.
 function route() {
+  if (ALIAS[location.hash.slice(1)]) history.replaceState(null, '', `#${hashPage()}`);
   const id = currentPage();
   if (document.documentElement.dataset.page === id) return;
   document.documentElement.dataset.page = id; // the view: guide.ts reads it, style.css shows that view's panels
