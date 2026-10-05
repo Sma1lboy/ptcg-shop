@@ -14,10 +14,18 @@ import { printSlip } from './notice.ts';
 import { closing } from './binder.ts';
 import * as FX from '../fx.ts';
 
-const KEY = 'ptcg.story';
+// Which scenes were seen lives in the save (G.state.feat, keys 'story:<id>'), so a save moved to another browser doesn't replay them
+// (a reviewer's moved save replayed 「return」). Saves from before keep their progress in localStorage 'ptcg.story': read once into
+// the save, then the old key goes.
+const KEY = 'ptcg.story', PRE = 'story:';
 let seen: Seen = {};
-try { seen = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the opening plays each visit */ }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(seen)); } catch (e) { /* ignore */ } };
+for (const [k, v] of Object.entries(G.state.feat)) if (k.startsWith(PRE)) seen[k.slice(PRE.length)] = v;
+try {
+  if (!Object.keys(seen).length) seen = JSON.parse(localStorage.getItem(KEY) || '{}');
+  localStorage.removeItem(KEY);
+} catch (e) { /* storage blocked: whatever the save holds */ }
+const save = () => { const f = G.state.feat; for (const k of Object.keys(f)) if (k.startsWith(PRE)) delete f[k]; for (const [k, v] of Object.entries(seen)) f[PRE + k] = +v || 0; };
+save();
 
 const queue: { id: string; ctx: Ctx; key?: string }[] = [];
 let cur: { id: string; ctx: Ctx; scene: number; line: number; typed: number } | null = null, timer = 0;

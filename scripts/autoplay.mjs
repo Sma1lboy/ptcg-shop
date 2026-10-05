@@ -310,8 +310,11 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const collectorCard = () => (!uiNotes || hold || st().shown.length >= G.slots() || st().shown.some(c => c.price >= G.BIG_CARD) ? null
     : Object.entries(st().singles).filter(([, c]) => c.count > 0 && S.HITS.includes(c.kind) && c.price >= G.BIG_CARD).sort((a, b) => a[1].price - b[1].price)[0] ?? null);
   const rackedIds = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id))];
-  const fix = id => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
-  const outIds = () => { const all = [...out], fx = all.map(fix), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
+  // ui/common.ts deepFill: with a clerk, the box naming one set also stocks the back room with what the 闲钱 covers (the clerk shelves it)
+  const deepFill = id => { const f = shelfFill(id), w = G.wholesale(id), s = st().stock[id] || 0; if (process.env.NODEEP || !G.lvl('clerk') || !st().auto[id] || f.n <= 1) return f;
+    const n = Math.min(G.WAREHOUSE - s, f.n + Math.max(0, Math.floor((G.spare() - f.n * w) / w))); return n <= f.n ? f : { n, full: f.full }; };
+  const fix = (id, alone = true) => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = alone ? deepFill(id) : shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
+  const outIds = () => { const all = [...out], fx = all.map(x => fix(x, false)), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || STEPS[current()]?.h !== '补货'; // guide.ts guideShelf: only the guide's own 补货 step speaks for an empty shelf
   // The lowest-priority warehouse invitation. This player accepts it; the real UI also offers a session-long dismissal.
   const keptAvailable = id => st().stock[id] === 1 && G.unlocked(id) && !G.master(id);
@@ -378,7 +381,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
-        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
         const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind;
         if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash)) printed = { ident, cost, fixes, sets };
       }

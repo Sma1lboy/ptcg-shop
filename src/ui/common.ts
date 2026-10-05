@@ -67,4 +67,13 @@ export function shelfFill(id: string) {
   const n = Math.min(want, Math.floor(G.state.cash / G.wholesale(id)));
   return { n, full: n === want, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * G.wholesale(id), 'exact')}，数量按货架缺口、仓库空间和现金计算` };
 }
+// The sold-out box's quote once a clerk is hired: the shelf's worth (shelfFill) plus as much more for the back room as the 闲钱 covers,
+// up to its room. The clerk carries the back room onto the shelf between rounds, so one press lasts many sell-outs instead of one
+// (a reviewer pressed restock ~14 times in minutes 30→60). Capped by 闲钱, not cash: it never eats the bill or the next 下一步 money set aside.
+export function deepFill(id: string) {
+  const f = shelfFill(id), w = G.wholesale(id), stock = G.state.stock[id] || 0;
+  if (!G.lvl('clerk') || !G.state.auto[id] || f.n <= 1) return f;
+  const n = Math.min(G.WAREHOUSE - stock, f.n + Math.max(0, Math.floor((G.spare() - f.n * w) / w)));
+  return n <= f.n ? f : { n, full: f.full, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * w, 'exact')}：一架的量，加上闲钱够的仓库存货，店员会接着搬上架` };
+}
 export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };

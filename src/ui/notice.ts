@@ -2,7 +2,7 @@
 // receipt (below). Both print out of the shared slot (#pops, style.css) above any achievement labels.
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
-import { G, $, money, shelfFill, toShelf } from './common.ts';
+import { G, $, money, shelfFill, deepFill, toShelf } from './common.ts';
 import { nextStep, growCount } from './upgrades.ts';
 import { go, currentPage } from './layout.ts';
 import { guiding, guideShelf } from './guide.ts';
@@ -196,13 +196,14 @@ const known = new Set(unlocked());
 const away = () => hold && document.documentElement.dataset.page !== 'open';
 // Restock one empty set: move spare warehouse packs, or buy and shelve the quoted quantity (events.ts 'refill').
 // Cash may cover only part of the shelf; no quote when neither spare stock nor a purchase of at least 2 packs is available.
-function fix(id: string) {
+// alone: the box names this set only, so with a clerk it may stock the back room as well (deepFill); several sets share the cash a shelf each.
+function fix(id: string, alone = true) {
   const up = toShelf(id); if ((G.state.stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货` };
-  const f = shelfFill(id); return f.n > 1 ? { ...f, cost: f.n * G.wholesale(id), up: 0 } : null;
+  const f = alone ? deepFill(id) : shelfFill(id); return f.n > 1 ? { ...f, cost: f.n * G.wholesale(id), up: 0 } : null;
 }
 // every sold-out set at once when each has a fix and the cash covers them together; else the first one alone
 function outIds() {
-  const all = [...out], fixes = all.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+  const all = [...out], fixes = all.map(x => fix(x, false)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   return all.length > 1 && fixes.every(Boolean) && cost <= G.state.cash ? all : all.slice(0, 1);
 }
 function holds(m: Memo) {
@@ -274,7 +275,7 @@ function showMemo() {
   if (el.hidden) return;
   // Keep the quoted quantity while cash changes. A different set, restock method, unit price, or unaffordable quote
   // gets a new order; the current bill balance refreshes separately without moving the purchase button.
-  const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(fix), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+  const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}`
     : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'kept' ? `kept:${m.id}` : m.kind === 'dex' ? `dex:${m.id}:${m.need}` : m.kind;
   if (!was && el.dataset.ident === ident && +(el.dataset.cost || 0) <= G.state.cash) { refreshBill(el); return; } // keep quantities, refresh the bill balance
