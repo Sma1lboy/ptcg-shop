@@ -50,7 +50,7 @@ function flush() {
   seen[q.id] = 1; if (q.key) seen[q.key] = 1; save(); // marked on start, so skipping counts as seen
   cur = { id: q.id, ctx: q.ctx, scene: 0, line: 0, typed: 0 };
   G.pause(true); // the shop's clock stops while a scene plays: no walk-ins, no bill countdown (game.ts pause)
-  draw(); dlg().showModal(); type();
+  draw(); dlg().showModal(); type(); watchIdle();
   document.dispatchEvent(new Event('ptcg:story'));
 }
 function type() {
@@ -65,12 +65,22 @@ function type() {
 }
 function next() {
   if (!cur) return;
+  watchIdle();
   if (cur.typed < text(cur).length) { cur.typed = text(cur).length; clearInterval(timer); draw(); return; }
   const sc = SCENES[cur.id];
   if (++cur.line >= sc[cur.scene].lines.length) { cur.line = 0; if (++cur.scene >= sc.length) return end(); }
   cur.typed = 0; draw(); type();
 }
-function end() { clearInterval(timer); cur = null; G.pause(false); if (dlg().open) dlg().close(); document.dispatchEvent(new Event('ptcg:story')); setTimeout(flush, 400); }
+// A scene nobody answers for IDLE_RESUME lets the shop trade on underneath (an idle player on another monitor came back to a shop
+// frozen for four minutes by an unlock scene); the next press pauses it again and the scene goes on where it was.
+const IDLE_RESUME = 60e3;
+let idleT = 0, left = false;
+function watchIdle() {
+  clearTimeout(idleT);
+  if (left) { left = false; G.pause(true); draw(); }
+  idleT = window.setTimeout(() => { if (!cur) return; left = true; G.pause(false); draw(); }, IDLE_RESUME);
+}
+function end() { clearInterval(timer); clearTimeout(idleT); left = false; cur = null; G.pause(false); if (dlg().open) dlg().close(); document.dispatchEvent(new Event('ptcg:story')); setTimeout(flush, 400); }
 
 const SIDE: Partial<Record<Who, string>> = { adou: 'left', jiu: 'right' };
 function draw() {
@@ -81,7 +91,7 @@ function draw() {
   render(html`${keyed(`${cur.id}.${cur.scene}`, html`<div class="st-scene" data-bg=${sc.bg}></div>`)}
     ${sc.seal && cur.ctx.setId ? keyed(`${cur.id}.${cur.scene}.book`, closing(cur.ctx.setId, sc.seal)) : nothing}
     ${cast.map(w => html`<img class="st-who ${SIDE[w]} ${w === line.who ? 'on' : ''}" src="gen/story/${w}.webp" alt="" @error=${(e: Event) => ((e.target as HTMLElement).hidden = true)}>`)}
-    <p class="st-pause">对话期间暂停经营与账单计时</p>
+    <p class="st-pause">${left ? `一分钟没人看，店照常营业；点一下接着看，再暂停` : '对话期间暂停经营与账单计时'}</p>
     <button type="button" class="ghost st-skip" @click=${(e: Event) => { e.stopPropagation(); end(); }}>跳过</button>
     <div class="st-box ${line.who ? '' : 'narr'}">
       ${line.who ? html`<p class="st-name ${SIDE[line.who] ?? ''}">${NAMES[line.who]}</p>` : nothing}
