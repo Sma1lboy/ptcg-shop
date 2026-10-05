@@ -311,7 +311,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const rackedIds = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id))];
   const fix = id => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
   const outIds = () => { const all = [...out], fx = all.map(fix), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
-  const shelfMine = () => hold || !guiding();
+  const shelfMine = () => hold || STEPS[current()]?.h !== '补货'; // guide.ts guideShelf: only the guide's own 补货 step speaks for an empty shelf
   // The lowest-priority warehouse invitation. This player accepts it; the real UI also offers a session-long dismissal.
   const keptAvailable = id => st().stock[id] === 1 && G.unlocked(id) && !G.master(id);
   const keptAllowed = () => uiNotes && !hold && !guiding() && page !== 'open' && (page !== 'grow' || yellow().length === 0) && G.shelves().some(s => s.id && s.qty > 0);

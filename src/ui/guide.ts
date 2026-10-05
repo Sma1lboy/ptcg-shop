@@ -12,7 +12,7 @@ import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; bill?: 1; luck?: 1; off?: 1; share?: 1; done?: 1; badges?: 1 }; // done: every guide step reached; badges: the missed-customer explanation was visible when the player acted
+type Rec = { price?: 1; bill?: 1; off?: 1; share?: 1; done?: 1; badges?: 1; luck?: 1 }; // done: every guide step reached; badges: the missed-customer explanation was visible when the player acted; luck: legacy, read once into the save
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -80,7 +80,7 @@ const STEPS: Step[] = [
       return (G.state.stock[id] || 0) > 1 ? inRow(id, '[data-act="shelve"]:not(:disabled)') : inRow(id, '.primary[data-act="buy"]') ?? inRow(id, '[data-act="buy"]:not(:disabled)'); },
     p: el => { const key = `「${el?.textContent?.trim() || '进一架'}」`;
       return el?.matches('[data-act="shelve"]') ? `仓库里有货，货架是空的：点${key}。` : `货架卖空了。空货架不进钱，想买的顾客空手走（「货柜」页签上的数字）。点${key}进一架，再摆上货架。`; } },
-  { page: 'luck', h: '测欧气', done: () => !!rec.luck, at: () => pick('#luck h2', '#luck'),
+  { page: 'luck', h: '测欧气', done: () => !!G.state.feat.luckSeen, at: () => pick('#luck h2', '#luck'), // luckSeen lives in the save, not in `rec`: a save moved to another browser has no ptcg.guide, and the step came back for a player who had been there
     alt: () => (rec.share || page() !== 'open' ? null : pick('#mat .summary [data-act="sharemat"]')),
     p: el => ((el as HTMLElement | null)?.dataset.act === 'sharemat' ? '点「分享这次开包」，把这包的价值和排名做成一张图；想看你在几千个模拟玩家里排第几，去「欧气」页。'
       : '看看你累计开的包在几千个模拟玩家里排第几，还能生成分享图。') },
@@ -91,6 +91,9 @@ let replay = -1; // index while replaying from the footer, else -1
 const current = () => (replay >= 0 ? replay : rec.off || rec.done || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
 // the guide still has a step to show (notice.ts leaves a sold-out shelf to the guide's own 补货 until then)
 export const guiding = () => current() >= 0;
+// ...and whether it speaks for a sold-out shelf itself: only its 补货 step does. On any earlier step (a player who skipped 定价 left the
+// shelves empty for minutes) notice.ts's 「X卖空了」 box says so, with its restock key
+export const guideShelf = () => replay >= 0 || STEPS[current()]?.h === '补货';
 // 新手 n/6: the numbered steps skip 补货, which only turns up when a shelf is empty (the numbers jumped 4 → 6 → 5 on a phone)
 const NUMBERED = STEPS.filter(s => s.h !== '补货');
 
@@ -98,6 +101,15 @@ let anchor: Element | null = null;
 const phone = () => innerWidth < 780;
 // what the popover may not cover from below: the phone's bottom tabs
 const floor = () => (phone() ? Math.min(innerHeight, document.querySelector('.nav')?.getBoundingClientRect().top ?? innerHeight) : innerHeight);
+// The phone's 店里的话 box is a strip of the page (style.css), not a corner of the screen: it scrolls away with the page top. The bubble
+// gives way to it only while a good part of it is on screen; scrolled off, the bubble is back (it used to vanish with the box 1200px up)
+let memoSeen = false;
+function memoOnScreen() {
+  const m = document.getElementById('memo');
+  if (!phone() || !m || m.hidden) return false;
+  const r = m.getBoundingClientRect(), bar = document.querySelector('.top')?.getBoundingClientRect().bottom ?? 0;
+  return Math.min(r.bottom, floor()) - Math.max(r.top, bar) > Math.min(48, r.height);
+}
 // On the mat the thing to look at sits above the button (the 3D pack above its label, the cards and the pack's value above the
 // share button), so opening above would cover it. Desktop: on the mat beside the anchor, bottom edges level, and in a summary past
 // its text too; a button on a page gets the docked message box (below). Phone: a strip without the heading, below the button,
@@ -114,6 +126,10 @@ function place() {
   // bottom of the screen, the way BW's tutorials talk in the text box, and the button (dashed ring) is scrolled into the upper part.
   // A bubble beside it always covered something the step was about: the row's name and stock, the next set's keys, the pickers.
   const dock = !phone() && !onMat && !tab && !anchor.matches('#due');
+  // The same on a phone: a bubble beside the button lay over the row's own keys (定价's, 300×310, opened above the price and hid 进 1 /
+  // 进 10 / 进 N / 上架 while the shelf stood empty). So the box sits above the bottom tabs, like the bill's, and the button (dashed
+  // ring) is scrolled into the part of the screen above it.
+  const free = phone() && !onMat && !tab;
   if ((phone() && onMat) || tab) pop.dataset.strip = tab ? 'tab' : 'mat'; else if (dock) pop.dataset.strip = 'dock'; else delete pop.dataset.strip;
   if (onMat && !phone()) pop.dataset.side = 'right'; else pop.dataset.side = 'below'; // measured at the width it opens with
   const a = anchor.getBoundingClientRect(), gap = 12, vw = innerWidth, vh = floor();
@@ -124,9 +140,10 @@ function place() {
   // on every scroll step.
   if (performance.now() < seek && !tab && !anchor.matches('.s3-shelf > :not(.in), #due')) { // a tab, #due: the fixed top bar, always in view
     const need = pop.dataset.strip === 'mat' ? a.bottom + gap + h + 24 - vh : 0; // 16px to spare: the 3D labels settle a few px after the scroll
-    const room = dock ? Math.min(vh - h - 40, vh * .55) : innerHeight - 70; // docked: the button (and the row under it) stays well above the box
+    const room = dock || free ? Math.min(vh - h - 40, vh * .55) : innerHeight - 70; // docked: the button (and the row under it) stays well above the box
+    const t = (free ? anchor.closest('.set') ?? anchor : anchor).getBoundingClientRect(); // a phone: the button's whole row stays above the box, its other keys too
     if (need > 0) { seek = 0; scrollBy({ top: need, behavior: 'smooth' }); }
-    else if (a.top < 70 || a.bottom > room) { seek = 0; scrollBy({ top: a.top - Math.max(90, (70 + room - a.height) / 2), behavior: 'smooth' }); }
+    else if ((free ? t.top : a.top) < 70 || a.bottom > room) { seek = 0; scrollBy({ top: free ? Math.max(t.top - 90, a.bottom - room) : a.top - Math.max(90, (70 + room - a.height) / 2), behavior: 'smooth' }); }
   }
   if (dock) { pop.style.left = ''; pop.style.top = ''; return; } // style.css places it
   if (onMat && !phone()) {
@@ -144,14 +161,13 @@ function place() {
     }
     pop.dataset.side = 'below'; w = pop.offsetWidth; h = pop.offsetHeight; // no room beside it (tablets): the narrow popover, measured again
   }
-  // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable. The bill chip on a phone:
-  // above the bottom tabs, not under the chip (it lay over the first row of the cards just turned)
-  const bill = phone() && anchor.matches('#due');
+  // a button in a pack's summary: open above the whole summary, so the pack's value and rank stay readable. A button on a phone's page
+  // (the bill chip too): above the bottom tabs, centred, not under the button (it lay over the first row of the cards just turned)
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
-  const below = !bill && (a.bottom + gap + h <= vh - 8 || top - gap - h < 8); // phones: the tabs sit at the bottom, so tab steps open upward
-  const x = clamp(a.left + a.width / 2 - w / 2, 8, vw - w - 8);
-  pop.style.left = `${x}px`; pop.style.top = `${bill ? vh - h - 8 : below ? a.bottom + gap : top - gap - h}px`;
-  pop.dataset.side = bill ? 'free' : below ? 'below' : 'above'; // free: no arrow (the chip is at the top, the box at the bottom; the dashed ring shows which)
+  const below = !free && (a.bottom + gap + h <= vh - 8 || top - gap - h < 8); // phones: the tabs sit at the bottom, so tab steps open upward
+  const x = free ? (vw - w) / 2 : clamp(a.left + a.width / 2 - w / 2, 8, vw - w - 8);
+  pop.style.left = `${x}px`; pop.style.top = `${free ? vh - h - 8 : below ? a.bottom + gap : top - gap - h}px`;
+  pop.dataset.side = free ? 'free' : below ? 'below' : 'above'; // free: no arrow (the button is up on the page, the box at the bottom; the dashed ring shows which)
   pop.style.setProperty('--ax', `${clamp(a.left + a.width / 2 - x, 16, w - 16)}px`);
 }
 
@@ -162,8 +178,10 @@ export function renderGuide() {
   const pop = $('coach'), i = current(), step = STEPS[i];
   if (i < 0 && replay < 0 && !rec.off && !rec.done && !graduated() && sum(G.state.opened) > 0) { rec.done = 1; save(); document.dispatchEvent(new Event('ptcg:guidedone')); } // the last step just done: once, said by notice.ts
   anchor?.classList.remove('coach-on'); anchor = null; follow.disconnect();
-  // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜; on a phone the shop's message box too
-  const printing = document.getElementById('ach-pop')?.hidden === false || (phone() && document.getElementById('memo')?.hidden === false);
+  // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜; on a phone the shop's message box too,
+  // but only while it is on screen (it hangs at the top of the page and scrolls away: the bubble used to vanish with the box far above)
+  memoSeen = memoOnScreen();
+  const printing = document.getElementById('ach-pop')?.hidden === false || memoSeen;
   if (!step || hold || storyOpen() || printing) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button wherever it is visible (at() only finds shown ones: 开一包's 「开 1 包」 right there on 货柜, the top bar's
   // bill chip on any page), else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
@@ -196,10 +214,12 @@ export function renderGuide() {
 }
 
 export function bindGuide() {
-  const sawLuck = () => { if (page() === 'luck' && !rec.luck && sum(G.state.opened)) { rec.luck = 1; save(); } };
+  const sawLuck = () => { if (page() === 'luck' && !G.state.feat.luckSeen && sum(G.state.opened)) G.state.feat.luckSeen = 1; };
+  if (rec.luck) G.state.feat.luckSeen = 1; // the flag used to live in ptcg.guide: a player who saw 欧气 before the move keeps step 6 done
   sawLuck(); // a reload straight onto #luck counts too
   addEventListener('hashchange', () => { sawLuck(); renderGuide(); });
-  addEventListener('resize', place); addEventListener('scroll', place, { passive: true });
+  const sync = () => (memoOnScreen() !== memoSeen ? renderGuide() : place()); // the phone's box scrolled into or out of view: the bubble gives way or comes back
+  addEventListener('resize', sync); addEventListener('scroll', sync, { passive: true });
   document.addEventListener('ptcg:release', renderGuide); document.addEventListener('ptcg:story', renderGuide); document.addEventListener('ptcg:memo', renderGuide);
   document.addEventListener('click', e => {
     const t = e.target as Element, b = t.closest<HTMLElement>('[data-coach], [data-act]'); if (!b) return;

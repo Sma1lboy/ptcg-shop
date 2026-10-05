@@ -53,4 +53,4 @@ export function renderSingles() {
             <button type="button" data-act="sell" data-key="${k}" data-n="${c.count}" ?disabled=${gone} title="一次卖出这 ${c.count} 张给同行">卖 ${c.count} 张 ${money(c.price * G.BUYLIST * c.count, 'exact')}</button></span></li>`;
       })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡可能按收卡价卖给你，自己开出的闪卡也放这里。</p>`}`, $('singles'));
 }
-addEventListener('hashchange', () => { if (!hold) { positions.clear(); renderSingles(); } });
+addEventListener('hashchange', () => { positions.clear(); if (!hold) renderSingles(); }); // entering or leaving always forgets the old order, even mid-reveal: the render that follows the release then sorts afresh

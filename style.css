@@ -833,11 +833,20 @@ button:disabled { cursor: not-allowed; }
   .v-ped .v-ctl { grid-column: 2; grid-row: 1 / 4; padding-top: 0; align-self: center; }
 }
 @container (max-width: 559px) {
-  .room-slots { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
-  .room-slot .v-cube { height: 184px; }
-  .v-ped { grid-template-columns: minmax(0, 144px) minmax(0, 1fr); column-gap: 12px; }
-  .v-ped .v-cube { height: 192px; }
-  .v-ped .v-cube > .cf { width: min(104px, 84%); }
+  /* a phone: three columns of the case's own 96px cards (the room was two columns of 184px cells and ran ~1000px), the 镇店台 a little
+     bigger than a 展位 on its row; each cell's button takes the cell's whole width (44px tall, the label does not fit beside the rarity) */
+  .room-slots { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 8px; }
+  .room-slot .v-cube { height: 152px; }
+  .room-slot .v-cube > .cf { width: min(96px, 92%); }
+  .room-slot:not(.v-ped) .v-info { grid-template-columns: minmax(0, 1fr); }
+  .room-slot:not(.v-ped) .v-ctl { padding-top: 6px; }
+  .room-slot:not(.v-ped) .v-info button { width: 100%; padding-inline: 4px; }
+  .room-slot:not(.v-ped) .v-lip { min-height: 30px; padding-block: 2px; }
+  .room-slot.empty:not(.v-ped) .v-ctl { display: none; } /* the empty cube already says 空格 / 放这里 and carries the cell's name; the line under it only repeated it */
+  .v-ped { grid-template-columns: minmax(0, 120px) minmax(0, 1fr); column-gap: 12px; }
+  .v-ped .v-cube { height: 166px; }
+  .v-ped .v-cube > .cf { width: min(104px, 88%); }
+  .col-arrange { margin-top: 16px; padding-top: 12px; }
 }
 .col-no { color: var(--hud-ink); font: 400 var(--fs-cap)/1.4 var(--font-body); }
 .col-cube { width: 100%; cursor: pointer; }
@@ -933,7 +942,7 @@ button:disabled { cursor: not-allowed; }
 .coach::before { content: ""; position: absolute; left: calc(var(--ax, 50%) - 16px); width: 16px; height: 9px; background: var(--frame); }
 .coach[data-side="below"]::before { top: -17px; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
 .coach[data-side="above"]::before { bottom: -17px; clip-path: polygon(0 0, 100% 0, 50% 100%); }
-.coach[data-side="free"]::before { display: none; } /* the phone's bill step: the box sits above the tabs, far from the chip it's about */
+.coach[data-side="free"]::before { display: none; } /* a phone's page steps and the bill: the box sits above the tabs, away from the key it's about (the dashed ring shows which) */
 .coach:is([data-side="right"], [data-side="left"]) { width: 400px; } /* beside a mat button: wider and shorter, so it stays within the summary's height, clear of the price tags above */
 .coach:is([data-side="right"], [data-side="left"]) :is(.co-k, h3) { display: inline; margin-right: 8px; } /* 新手 5/5 and the heading on one line */
 .coach:is([data-side="right"], [data-side="left"])::before { left: auto; top: calc(var(--ay, 50%) - 16px); width: 9px; height: 16px; }
@@ -955,6 +964,8 @@ button:disabled { cursor: not-allowed; }
 .coach[data-strip="dock"] .co-btns { grid-column: 2; grid-row: 1 / span 3; margin: 0; }
 .coach[data-strip="dock"]::before { display: none; }
 :root:has(#coach[data-strip="dock"]:popover-open) body { padding-bottom: 160px; } /* the page's end scrolls clear of the box */
+/* both up (the box sits left of the corner memo): the later 160px above beat the memo's own room and left the page's last row under it */
+:root:not([data-page="open"]):has(#memo:not([hidden])):has(#coach[data-strip="dock"]:popover-open) body { padding-bottom: max(160px, calc(var(--memo-h, 160px) + 40px)); }
 /* a label printing bottom right (the slot hangs there when no receipt is up, .pops): the box moves left of it instead of under it */
 :root:has(#pops > :not([hidden])):not(:has(#notice:not([hidden]))) .coach[data-strip="dock"]:popover-open { left: 16px; translate: none; width: min(760px, calc(100vw - 372px)); }
 .coach .co-k { margin: 0; font: 400 var(--fs-cap)/1.5 var(--font-pixel); color: var(--muted); }

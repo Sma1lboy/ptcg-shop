@@ -5,7 +5,7 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money, shelfFill, toShelf } from './common.ts';
 import { nextStep, growCount } from './upgrades.ts';
 import { go, currentPage } from './layout.ts';
-import { guiding } from './guide.ts';
+import { guiding, guideShelf } from './guide.ts';
 import { hold } from './mat.ts';
 import { storyOpen } from './story.ts';
 import { bill, owed } from '../debt.ts';
@@ -160,9 +160,11 @@ function keptPack(): string | null {
   }
   return id;
 }
-// who speaks for a sold-out shelf: the guide's 补货 step while the guide runs — except during a reveal, when the guide's bubble is put
-// away and the shelf would stand empty unsaid until the last card (~a minute of walk-outs)
-const shelfMine = () => hold || !guiding();
+// who speaks for a sold-out shelf: the guide's own 补货 step, once it has got that far — except during a reveal, when the guide's bubble
+// is put away and the shelf would stand empty unsaid until the last card (~a minute of walk-outs). On any earlier step (a player
+// who never answered 定价 had empty shelves for four minutes, the box dropped the moment a reveal ended and the later notes took its
+// place) the box speaks, and while the shelf stays empty it comes before every note
+const shelfMine = () => hold || !guideShelf();
 // the 下一步 the box names, once per item: when the 闲钱 covers it, or covers something else on 成长 while it waits (cash piled up
 // with 「3 项买得起」 on the tab and nothing said, because the 下一步 itself was still out of reach)
 const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || growCount() > 0) ? `${g.k}:${g.lv}` : ''; };

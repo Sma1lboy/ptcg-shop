@@ -1849,7 +1849,7 @@ function mountTable(el, o) {
     },
     // Lets go of the card held up in the spread, as a tap on it would (one still rising lands first). Resolves once it is back on the mat.
     async putBack() {
-      const run = R; if (opts !== o || !run?.batch || run.stage !== 'spread') return;
+      const run = R; if (opts !== o || !run || run.stage !== 'spread') return;
       while (R === run && run.look && run.busy) await wait(60);
       if (R === run && run.look) await look(run, null);
     },

@@ -154,12 +154,36 @@ function click(a: string, b: HTMLElement) {
   pick = { t: 'single', key }; msg = null;
 }
 
+// On a phone the room's cells and the binder list are more than a screen apart, so a pick lands the other half of the move on screen: a
+// card taken from the list brings the empty cells (and the hint) up, an empty cell chosen brings the list down. Scrolls only when the
+// part to act on is not already wholly visible (a wide window never moves) and just far enough: `lead` goes to the top edge if `from`..`to`
+// still fits under the sticky top bar and above the fixed tab bar; `from` wins when it does not. Reduced motion jumps instead of gliding.
+const calm = matchMedia('(prefers-reduced-motion: reduce)');
+function reveal(lead: Element | null, from: Element | null, to: Element | null) {
+  if (!lead || !from || !to) return;
+  const nav = document.querySelector('.nav')!, pad = 8;
+  const top = document.querySelector('.top')!.getBoundingClientRect().bottom + pad;
+  const bottom = (getComputedStyle(nav).position === 'fixed' ? nav.getBoundingClientRect().top : innerHeight) - pad;
+  const a = from.getBoundingClientRect().top, z = to.getBoundingClientRect().bottom;
+  if (a >= top && z <= bottom) return;
+  const dy = Math.min(Math.max(lead.getBoundingClientRect().top - top, z - bottom), a - top);
+  scrollBy({ top: dy, behavior: calm.matches ? 'auto' : 'smooth' });
+}
+function follow(before: Pick | null) {
+  if (!pick || pick === before) return;
+  const root = $('gallery');
+  if (pick.t === 'single') reveal(root.querySelector('.room-slots'), root.querySelector('.room-slot.empty'), root.querySelector('.col-hint'));
+  else if (!pick.card) reveal(root.querySelector('.col-arrange'), root.querySelector('.col-hint'), root.querySelector('.col-src'));
+}
+
 // Parent calls this once with the other binders (main.ts). The acts are col-*: events.ts's switch ignores them.
 export function initCollection() {
   document.addEventListener('click', e => {
     const b = (e.target as Element).closest<HTMLButtonElement>('[data-act^="col-"]'); if (!b || b.disabled) return;
+    const before = pick;
     click(b.dataset.act!, b);
     renderCollection();
+    follow(before);
   });
   // Leaving the 展示柜 view is the display again: 布置 does not wait behind another page.
   addEventListener('hashchange', () => { if (location.hash !== '#case' && (arranging || pick || msg)) { arranging = false; pick = null; msg = null; renderCollection(); } });
