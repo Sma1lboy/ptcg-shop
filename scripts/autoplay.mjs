@@ -460,7 +460,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const rows = [], init0 = new Set(unlockedIds());
   watchShop(); seen.sets = init0.size; play('opening');
   for (t = 1; t <= N; t++) {
-    G.setIdle(page === 'open'); advance(1); G.tick(hold); cashPrev = st().cash;
+    G.setIdle(page === 'shelf' || page === 'case'); advance(1); G.tick(hold); cashPrev = st().cash; // 挂机 counts on 货柜 (main.ts syncIdle)
     const round = st().clerkRound;
     if (round) {
       sp.refill += round.spent - (round.at === clerkAt ? clerkSpent : 0);
@@ -477,7 +477,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     const racked = G.shelves().filter(r => r.id); if (racked.some(r => !r.qty)) bare.any++; if (racked.length && racked.every(r => !r.qty)) bare.all++;
     if (series) ser.push({ t, cash: Math.round(st().cash), spare: Math.round(G.spare()), gate: gate ? Math.round(gate.cost) : null, gateName: gate ? `${gate.name} Lv${gate.lv + 1}` : null, rev: Math.round(G.revenue()), ...spent(), bareAny: bare.any, none: st().cust.none, sold: st().cust.sold });
     watchShop(); guideSync();
-    if (hold) { if (--holdLeft <= 0) { hold = false; achFlush(); storyFlush(); watchShop(); guideSync(); } }
+    if (hold) { if (--holdLeft <= 0) { hold = false; page = 'shelf'; achFlush(); storyFlush(); watchShop(); guideSync(); } } // cards flipped: back to 货柜, where 挂机 counts and #playmode says so
     else {
       achFlush(); storyFlush(); watchShop();
       if (!cur) {
