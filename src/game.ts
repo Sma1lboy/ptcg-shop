@@ -817,11 +817,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // two, so a round made with the till emptied by an upgrade leaves them bare until the next one: the 店员没本钱 pit (GAMEPLAY §12).
   const clerkGoal = () => lvl('clerk') >= 2 ? depth() : Math.ceil(depth() / 2);
   const clerkNeed = () => lvl('clerk') ? cents(shelves().reduce((a, sh) => a + (sh.id && state.auto[sh.id] && unlocked(sh.id) ? Math.max(0, clerkGoal() - sh.qty) * wholesale(sh.id) : 0), 0)) : 0;
+  // The bill is left in the till in its last BILL_KEEP seconds, as 收卡 does. Looking further ahead (10 minutes on every round, or only
+  // on the first round after hiring) cost the long-run regressions (街口 fourth shop past 34 h; 店员没本钱 blind player down to 2 shops).
+  const clerkKeep = () => (dueIn() < BILL_KEEP ? nextBill()?.amount || 0 : 0);
   function clerkBuy() {
     let packs = 0, spent = 0;
-    // the last BILL_KEEP seconds before a bill the round leaves 九姐's money in the till, as 收卡 does (a reviewer's first round took
-    // $3,394 down to $6 two minutes before the bill)
-    const keep = dueIn() < BILL_KEEP ? nextBill()?.amount || 0 : 0;
+    const keep = clerkKeep();
     for (const sh of shelves()) {
       if (!sh.id || !state.auto[sh.id] || sh.qty >= clerkGoal()) continue;
       const n = Math.min(clerkGoal() - sh.qty, Math.floor(Math.max(0, state.cash - keep) / wholesale(sh.id))), cost = n > 0 ? stockUp(sh.id, n, sh) : 0;
@@ -1131,7 +1132,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     ackCardSale,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
-    clerkNeed, clerkNow, clerkShort, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
+    clerkNeed, clerkNow, clerkShort, clerkKeep, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     pause, paused: () => pausedAt !== null, OPENING, OPENING_CAP, FLIP_SHARE,
     GALLERY_SLOTS, ROOM_SLOTS, PEDESTAL, GALLERY_RATE, TICKET_MIN, TICKET_MAX, IDLE_BONUS, OFFLINE_BONUS, galleryValue, ticketPrice, collectToGallery, toPedestal, uncollect, moveCollect, setIdle, idling, revealing,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,

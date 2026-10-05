@@ -55,7 +55,8 @@ function goal() {
   const [t0, s0] = spareSeen[0], per = now - t0 >= 60e3 ? (spare - s0) / ((now - t0) / 60e3) : 0, left = g.cost - spare;
   return html`<p class="pm-goal"><span>下一个目标：<b>${g.name} Lv ${g.lv + 1}</b> ${money(g.cost)}</span>
     ${bar(spare / g.cost, `闲钱 ${money(Math.max(0, spare))} / ${money(g.cost)}`)}
-    <small>${left <= 0 ? html`闲钱够了 · <a href="#grow">去成长升级</a>` : `还差 ${money(left)}${per > 0 ? `，照最近几分钟闲钱涨的速度约 ${Math.max(1, Math.ceil(left / per))} 分钟` : ''}（闲钱 = 留好账款后的现金）`}</small></p>`;
+    <small>${left <= 0 ? html`闲钱够了 · <a href="#grow">去成长升级</a>` : `还差 ${money(left)}${per > 0 ? `，照最近几分钟闲钱涨的速度约 ${Math.max(1, Math.ceil(left / per))} 分钟` : ''}（闲钱 = 留好账款后的现金）`}${g.k === 'case' && G.state.shown.length < G.slots()
+      ? ` · 展示柜还空着 ${G.slots() - G.state.shown.length} 格${G.caseMoves() ? '，先在展示柜页「补满柜位」，不花钱' : '，摆满了再扩也不迟'}` : ''}</small></p>`;
 }
 export function renderEarnings() {
   const active = G.idling(), extra = G.state.extra, offline = G.skill('watch') * G.OFFLINE_BONUS;

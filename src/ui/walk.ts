@@ -19,8 +19,8 @@ function sprite(who: string, cls = '') {
   el.className = `walker ${cls}`; el.style.cssText = `--fw:${w};--fh:${h};background-image:url(gen/walk/w-${who}.webp)`;
   return el;
 }
-function say(el: HTMLElement, text: string, ms: number) {
-  const b = document.createElement('b'); b.className = 'say'; b.textContent = text; el.append(b); setTimeout(() => b.remove(), ms);
+function say(el: HTMLElement, text: string | (() => string), ms: number) { // a function: read when the balloon pops, not when the person walked in
+  const b = document.createElement('b'); b.className = 'say'; b.textContent = typeof text === 'string' ? text : text(); el.append(b); setTimeout(() => b.remove(), ms);
 }
 // walk from where it stands to x (px from the floor's left), facing the way it goes, then next()
 function walk(el: HTMLElement, x: number, next: () => void) {
@@ -30,7 +30,7 @@ function walk(el: HTMLElement, x: number, next: () => void) {
   setTimeout(() => { el.classList.remove('go'); next(); }, secs * 1000 + 40);
 }
 // one person in through the door, to x, a line over the head, and out again
-function visit(who: string, text: string, x: number, wait = 1100, cls = 'guest') {
+function visit(who: string, text: string | (() => string), x: number, wait = 1100, cls = 'guest') {
   const el = sprite(who, cls), door = floor.clientWidth - 30;
   const gone = () => { el.classList.add('out'); setTimeout(() => el.remove(), 320); };
   floor.append(el);
@@ -53,7 +53,8 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const w = floor.clientWidth, room = w - 200; // the shelves: between the counter and the door
   if (fresh.length <= 3) for (const v of fresh.slice(0, 2)) {
     if (floor.querySelectorAll('.walker.guest').length >= MAX || !SPRITE[v.t]) break;
-    visit(v.t, SAY[v.r] ?? (v.t === 'opener' && v.set && !G.shelfQty(v.set) ? `${G.setById(v.set).name}?` : '?'), 140 + Math.random() * room);
+    // a pack buyer names the set they came for only if it is still on no shelf when the balloon pops (a restock in between: plain ?)
+    visit(v.t, SAY[v.r] ?? (() => (v.t === 'opener' && v.set && !G.shelfQty(v.set) ? `${G.setById(v.set).name}?` : '?')), 140 + Math.random() * room);
   }
   const b = debtBeat(ev, G);
   if (b && (b.kind === 'paid' || b.kind === 'last' || b.kind === 'missed')) { // 九姐 at the counter, 阿豆 a step behind her

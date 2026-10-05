@@ -35,7 +35,7 @@ export function billNote(cost: number, k: string) {
   const bill = b && left < b.amount, stock = left < clerk;
   if (cash < cost || (!bill && !stock && !hire)) return '';
   return html`<p class="gt-bill">仅扣本次费用后剩 ${moneyOf(left)}${bill ? html`，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b!.amount)}` : ''}${stock
-    ? html`${bill ? '；' : '，'}店员一轮进货要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}${hire ? html`。雇用后马上巡一轮货架，另用现金补到半满；只在账单前 ${G.BILL_KEEP / 60} 分钟留下账款。` : ''}</p>`;
+    ? html`${bill ? '；' : '，'}店员一轮进货要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}${hire ? html`。雇用后马上巡一轮货架，另用现金补到半满；只在账单前 ${G.BILL_KEEP / 60} 分钟留下账款，更早雇用时这一轮可能把账款也花掉。` : ''}</p>`;
 }
 
 // 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.
@@ -205,7 +205,7 @@ function node(n: Node, next: string | undefined) {
     ${got ? html`<p class="gt-fx luck-got" role="status">${luckUpText(got)}</p>` : ''}
     <p class="gt-desc">${n.desc}</p>
     ${done ? html`<p class="gt-done">满级</p>` : n.blocked ? html`<div class="gt-buy gt-lock"><small>${n.blocked}</small>${n.gate ? html`${bar(n.gate[0] / n.gate[1], `口碑 ×${n.gate[0].toFixed(2)} / ×${n.gate[1]}`)}<small>现在 ×${n.gate[0].toFixed(2)} · 首级 ${money(n.cost!)}</small>` : ''}</div>`
-      : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can}><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
+      : html`<div class="gt-buy"><button type="button" data-act="${n.act}" data-k="${n.k}" ?disabled=${!can} aria-label="${n.name} 升到 Lv ${n.lv + 1}，${money(n.cost!)}"><span class="gb-lv">升到 Lv ${n.lv + 1} · </span>${money(n.cost!)}</button>
         ${can ? (perk ? '' : billNote(n.cost!, n.k)) : html`${bar(cash / n.cost!, `攒了 ${Math.round(cash / n.cost! * 100)}%`)}<small>还差 ${money(n.cost! - cash)}</small>`}</div>`}
     ${back ? refundBtn(back.k, n.name, n.lv, back.cost) : ''}
     ${held ? html`<p class="gt-held"><small>${held}</small></p>` : ''}

@@ -876,16 +876,16 @@ console.log('ok luck percentile');
   console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
 }
 
-// 店员留账款: inside the last BILL_KEEP seconds before a bill the clerk's buying (a round or 现在补货) leaves the bill in the till,
-// like 收卡; before that window he spends what the till holds.
+// 店员留账款: the clerk's buying (a round or 现在补货) leaves the bill in the till in its last BILL_KEEP seconds; further out he spends the till.
 {
-  const mk = due => { const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(5), storage: null });
+  const mk = (due, round = false) => { const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(5), storage: null });
     Z.state.up.depth = 1; Z.state.up.clerk = 1; Z.state.shelves = [{ id: 'sv08', qty: 0 }]; Z.state.auto = { sv08: true };
-    Z.state.shopT = Z.state.week * Z.WEEK - due; Z.state.cash = Z.nextBill().amount + 40; Z.clerkNow(); return Z; };
-  const late = mk(60), early = mk(60 * 10);
+    if (round) Z.state.clerkRound = { at: 0, need: 0, spent: 0 }; Z.state.shopT = Z.state.week * Z.WEEK - due; Z.state.cash = Z.nextBill().amount + 40; Z.clerkNow(); return Z; };
+  const late = mk(60 * 4), early = mk(60 * 6), last = mk(60 * 4, true);
   assert.ok(late.state.cash >= late.nextBill().amount, `in the last minutes the clerk keeps the bill: cash ${late.state.cash} vs bill ${late.nextBill().amount}`);
-  assert.ok(early.state.cash < early.nextBill().amount, `ten minutes out he spends past it: cash ${early.state.cash}`);
-  console.log('ok 店员留账款: the clerk never spends the bill in its last 5 minutes, and does before them');
+  assert.ok(early.state.cash < early.nextBill().amount, `six minutes out he spends past it: cash ${early.state.cash}`);
+  assert.ok(last.state.cash >= last.nextBill().amount, 'any round in the last 5 minutes keeps it');
+  console.log('ok 店员留账款: any round keeps the bill in its last 5 minutes and spends it before them');
 }
 
 // 店员没本钱 (GAMEPLAY.md §12.2): the clerk buys with the cash in the till at his round. A round that cannot fill the shelves is

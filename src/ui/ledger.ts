@@ -37,7 +37,7 @@ export function renderDue() {
   // the chip is the shop's battle box: HP is the till against this bill — full means 九姐 gets paid on the spot
   const owed = o ? o.amount : b!.amount, hp = bar(s.cash / owed, `手上 ${money(s.cash)}，账 ${money(owed)}`, { hp: true, k: 'HP' });
   render(o ? html`<span class="k">逾期</span><b>${clock(left)}</b><small>差 ${money(Math.max(0, o.amount - s.cash))}</small>${hp}`
-    : html`<span class="k">第 ${b!.week} 周</span><b>${clock(left)}</b><small>${money(b!.amount)}</small>${hp}`, el);
+    : html`<span class="k">第 ${b!.week} 周</span><b>${clock(left)}后</b><small>${money(b!.amount)}</small>${hp}`, el); // 「后」: a reviewer read 11:09 as the time of day
 }
 
 // 退回: this week's upgrades and skills, back at G.REFUND of the price while the till is short of the bill (G.refundable).
