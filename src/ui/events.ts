@@ -56,7 +56,7 @@ export function bindEvents() {
       case 'up': G.upgrade(b.dataset.k!); break;
       case 'learn': G.learn(b.dataset.k!); break;
       case 'refund': G.refund(b.dataset.k!); break;
-      case 'collect': G.collect(id, b.dataset.n === 'all'); break;
+      case 'collect': G.collect(id, b.dataset.n === 'all' ? true : b.dataset.n ? +b.dataset.n : false); break;
       case 'ack': G.ackOffline(); break;
       case 'perk': G.learnPerk(b.dataset.k!); break;
       case 'branch': branchClick(); break;

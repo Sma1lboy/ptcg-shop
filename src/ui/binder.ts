@@ -162,7 +162,10 @@ function collect(id: string) {
   const miss = G.missing(id), base = G.dexTotal(id) - G.dexCount(id) - miss.length, cash = G.state.cash, all = miss.reduce((a, c) => a + c.price, 0), top = miss.at(-1);
   const baseNote = base ? `普卡还缺 ${base} 张，只能开包收` : '';
   if (!top) return html`<small class="muted">闪卡齐了 · ${baseNote}</small>`;
+  // the next 回头客 tier in one buy when the missing hits alone reach it (the same offer 店里的话 makes): what a 补 is for, in one key
+  const { next, need } = tierOf(id), tierCost = next && need > 1 && need <= miss.length ? miss.slice(0, need).reduce((a, c) => a + c.price, 0) : 0;
   return html`<div class="btns"><button type="button" data-act="collect" data-id="${id}" ?disabled=${cash < miss[0].price} title="按市价从同行买，只收进图鉴册，不能再卖">补 ${miss[0].name} ${money(miss[0].price)}</button>
+      ${tierCost ? html`<button type="button" data-act="collect" data-id="${id}" data-n="${need}" ?disabled=${cash < tierCost} title="补最便宜的 ${need} 张，收录到 ${next![0] * 100}%，本系列回头客 +${next![1] * 100}%">补到 ${next![0] * 100}%（${need} 张 ${money(tierCost)}）</button>` : ''}
       ${miss.length > 1 ? html`<button type="button" data-act="collect" data-id="${id}" data-n="all" ?disabled=${cash < all}>闪卡全补 ${money(all)}</button>` : ''}</div>
     <small class="muted">闪卡还缺 ${miss.length} 张，最贵的是 ${top.name} ${money(top.price)}${baseNote ? ` · ${baseNote}` : ''}</small>`;
 }
