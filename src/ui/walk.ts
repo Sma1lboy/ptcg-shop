@@ -9,7 +9,7 @@ import { debtBeat } from '../debt.ts';
 
 // frame size in sprite pixels (public/gen/walk/w-*.webp: 4 frames side by side — stand, step, stand, other step; facing right)
 const SPRITE: Record<string, [number, number]> = { owner: [18, 32], clerk: [16, 31], jiu: [18, 31], adou: [30, 43], opener: [20, 32], seeker: [22, 31], collector: [20, 33], flipper: [28, 39] };
-const SAY: Record<string, string> = { sold: '♪', pricey: '…' }; // anything else walked out with nothing: ?
+const SAY: Record<string, string> = { sold: '♪', pricey: '…' }; // anything else walked out with nothing: ?, or a pack buyer's 「<set>?」 (the set they came for and found on no shelf)
 const MAX = 6, SPEED = 110; // guests on the floor at once; screen px per second
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 let floor: HTMLElement, seenAt = 0;
@@ -53,7 +53,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const w = floor.clientWidth, room = w - 200; // the shelves: between the counter and the door
   if (fresh.length <= 3) for (const v of fresh.slice(0, 2)) {
     if (floor.querySelectorAll('.walker.guest').length >= MAX || !SPRITE[v.t]) break;
-    visit(v.t, SAY[v.r] ?? '?', 140 + Math.random() * room);
+    visit(v.t, SAY[v.r] ?? (v.t === 'opener' && v.set && !G.shelfQty(v.set) ? `${G.setById(v.set).name}?` : '?'), 140 + Math.random() * room);
   }
   const b = debtBeat(ev, G);
   if (b && (b.kind === 'paid' || b.kind === 'last' || b.kind === 'missed')) { // 九姐 at the counter, 阿豆 a step behind her

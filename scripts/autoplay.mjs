@@ -238,7 +238,7 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 // Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
 // the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene, a 图鉴 tier
 // of a set reached (a permanent walk-in step; `nodex` on the command line leaves it uncounted for comparison). Refills never count.
-export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare', snapEvery = 300, series = false, uiNotes = true, countDex = true } = {}) {
+export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare', snapEvery = 300, series = false, uiNotes = true, countDex = true, dump = false } = {}) {
   const { G, SETS, advance } = boot(seed, new Date(2023, 10, 14, 12, 0, 0).getTime()), N = minutes * 60;
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0), st = () => G.state;
   let t = 0, page = 'open', hold = false, holdLeft = 0, storyLeft = 0, cashPrev = st().cash;
@@ -515,7 +515,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   for (const w of [1, 2, 3]) bill(w);
   for (const e of events) if (e.kind === 'afford') e.boughtAt = boughtAt[e.key] ?? null; // when the player actually bought that level (null = never in the hour)
   return { seed, per5, byKind, drought, firsts, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
-    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined };
+    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify(st()) : undefined }; // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
 
 // firsthour diagnosis (read-only on a run made with { series: true }): what the player's money did inside the longest event drought.
