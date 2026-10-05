@@ -35,7 +35,7 @@ export function billNote(cost: number, k: string) {
   const bill = b && left < b.amount, stock = left < clerk;
   if (cash < cost || (!bill && !stock && !hire)) return '';
   return html`<p class="gt-bill">仅扣本次费用后剩 ${moneyOf(left)}${bill ? html`，${G.state.overdue ? '逾期的账' : `${clock(Math.max(0, G.dueIn()))} 后九姐来收`} ${moneyOf(b!.amount)}` : ''}${stock
-    ? html`${bill ? '；' : '，'}店员一轮进货要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}${hire ? html`。雇用后马上巡一轮货架，另用现金补到半满，不预留账款。` : ''}</p>`;
+    ? html`${bill ? '；' : '，'}店员一轮进货要约 ${moneyOf(clerk)}，钱不够的货架空着等下一轮` : ''}${hire ? html`。雇用后马上巡一轮货架，另用现金补到半满；只在账单前 ${G.BILL_KEEP / 60} 分钟留下账款。` : ''}</p>`;
 }
 
 // 退回: this week's buy of k at G.REFUND of its price, while the till can't cover the bill (G.refundable). The ledger lists the same buttons.

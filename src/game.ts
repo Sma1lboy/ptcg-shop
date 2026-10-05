@@ -225,7 +225,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map((c, i) => Math.round(c * COST_X * (i === 0 ? EARLY_DISCOUNT : 1))) },
     expand:   { name: '店面扩建', desc: `口碑客流的上限 +${ROOM_STEP}`, costs: Array.from({ length: 12 }, (_, i) => Math.round(2000 * 1.55 ** i / 100) * 100 * COST_X) },
-    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时）；仓库里的货随时搬上架（留 ${CLERK_KEEP} 包给你拆）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
+    clerk:    { name: '店员', desc: `每 ${CLERK_ROUND / 60} 分钟巡一次货架，自动进货补到半满（含打烊时；账单前 ${BILL_KEEP / 60} 分钟不动账款）；仓库里的货随时搬上架（留 ${CLERK_KEEP} 包给你拆）；2 级：补满，并把散卡卖给同行`, costs: [500, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
   };
   // Skills: base is the regular first-level price; early counts discounted levels.
   // 手气 multiplies the hit rates a pack is opened with; the measured rates in sets.ts are never touched, and every pack is
@@ -819,9 +819,12 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const clerkNeed = () => lvl('clerk') ? cents(shelves().reduce((a, sh) => a + (sh.id && state.auto[sh.id] && unlocked(sh.id) ? Math.max(0, clerkGoal() - sh.qty) * wholesale(sh.id) : 0), 0)) : 0;
   function clerkBuy() {
     let packs = 0, spent = 0;
+    // the last BILL_KEEP seconds before a bill the round leaves 九姐's money in the till, as 收卡 does (a reviewer's first round took
+    // $3,394 down to $6 two minutes before the bill)
+    const keep = dueIn() < BILL_KEEP ? nextBill()?.amount || 0 : 0;
     for (const sh of shelves()) {
       if (!sh.id || !state.auto[sh.id] || sh.qty >= clerkGoal()) continue;
-      const n = Math.min(clerkGoal() - sh.qty, Math.floor(state.cash / wholesale(sh.id))), cost = n > 0 ? stockUp(sh.id, n, sh) : 0;
+      const n = Math.min(clerkGoal() - sh.qty, Math.floor(Math.max(0, state.cash - keep) / wholesale(sh.id))), cost = n > 0 ? stockUp(sh.id, n, sh) : 0;
       if (cost) { packs += n; spent += cost; }
     }
     return { packs, spent };
