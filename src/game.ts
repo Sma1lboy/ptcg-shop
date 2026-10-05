@@ -1044,7 +1044,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
 
   // 行情: every couple of minutes one unlocked set runs hot (+15% price and twice the demand) and another cold (−10% price, half the demand). Game setting.
   function rollHeat(now: number) {
-    const ids = SETS.map(s => s.id).filter(unlocked).sort(() => random() - 0.5);
+    // two draws, not sort(() => random() - 0.5): how many times sort calls its comparator is the engine's business (Node 22 and 26
+    // differ), which made the same seed play a different shop on another Node version
+    const ids = SETS.map(s => s.id).filter(unlocked), hot = ids.splice(Math.floor(random() * ids.length), 1);
+    ids.unshift(...hot, ...ids.splice(Math.floor(random() * ids.length), 1));
     state.heat = Object.fromEntries([[ids[0], 1.15], [ids[1], 0.9]].filter(([id]) => id)); state.heatT = now;
   }
 
