@@ -345,6 +345,7 @@ function showMemo() {
     render(keyed(`grow:${m.k}`, html`<div class="mm-box"><h2>钱够升级了</h2>${now
       ? html`<p>可升级<b>${g.name} Lv ${g.lv + 1}</b>（${g.fx[0]} → ${g.fx[1]}），花费 ${money(g.cost)}。留好账款和自动还款后，还能花 <b>${money(spare)}</b>。</p>`
       : html`<p>留好账款和自动还款后，还能花 <b>${money(spare)}</b>，够买「成长」页上 ${growCount()} 项。推荐的<b>${g.name} Lv ${g.lv + 1}</b> 还差 ${money(g.cost - spare)}。</p>`}
+      ${g.k === 'case' && G.state.shown.length < G.slots() ? html`<p class="mm-say">展示柜现在还空着 ${G.slots() - G.state.shown.length} 格${G.caseMoves() ? '：卡本里的闪卡可以先在货柜的展示柜页按「补满柜位」摆上去，不花钱' : '，扩柜等柜子摆满了再买也不迟'}。</p>` : ''}
       <div class="mm-btns"><button type="button" class="primary" @click=${toGrow}>${now ? '去「成长」升级' : '去「成长」看看'}</button><button type="button" class="mm-x" @click=${() => { grew = m.k; watchShop(); }}>先不管</button></div></div>`), el);
     return;
   }
