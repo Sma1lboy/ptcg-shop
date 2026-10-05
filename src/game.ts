@@ -474,9 +474,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // 图鉴补卡: missing hits of a set, cheapest first, at today's market price.
   const missing = (id: string) => DATA[id].cards.filter(c => BUY_R.includes(c.r) && !state.dexSeen[`${id}|${c.n}`])
     .map(c => ({ n: c.n, name: c.name, r: c.r, price: S.cardPrice(id, c.n, c.r)! })).sort((a, b) => a.price - b.price);
-  // Buys the cheapest missing hit (or all of them) into the binder. Never into singles/case/收藏室, so it cannot be resold.
-  function collect(id: string, all = false) {
-    const miss = missing(id), buy = all ? miss : miss.slice(0, 1), cost = buy.reduce((a, c) => a + c.price, 0);
+  // Buys the cheapest missing hit (all of them, or the cheapest n) into the binder. Never into singles/case/收藏室, so it cannot be resold.
+  function collect(id: string, all: boolean | number = false) {
+    const miss = missing(id), buy = typeof all === 'number' ? miss.slice(0, all) : all ? miss : miss.slice(0, 1), cost = buy.reduce((a, c) => a + c.price, 0);
     if (!unlocked(id) || !buy.length || state.cash < cost) return false;
     const before = dexBonusOf(id);
     state.cash -= cost; for (const c of buy) state.dexSeen[`${id}|${c.n}`] = 1; dexN = null;
