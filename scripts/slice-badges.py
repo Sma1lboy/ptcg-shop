@@ -15,12 +15,13 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw
 
 SIZE = 256
-SHEETS = {  # file → (columns, rows, ids row-major) — the order of src/achievements.ts, 12 + 12 + 12 + 9
+SHEETS = {  # file → (columns, rows, ids row-major) — the order of src/achievements.ts, 12 + 12 + 12 + 9, then later additions
     's1.png': (4, 3, ['open-1', 'hit-1', 'ten-1', 'double', 'gold-1', 'sir-1', 'hr-1', 'packs-100', 'packs-1000', 'mhr-1', 'euro', 'emperor']),
     's2.png': (4, 3, ['unlucky', 'dry-30', 'ten-gold', 'pack-100', 'dex-25', 'dex-50', 'master-1', 'master-3', 'master-all', 'hand-1', 'hand-all', 'trophy']),
     's3.png': (4, 3, ['case-full', None, 'sale-1', 'shelves-full', 'day-100', 'day-1000', 'rev-1k', 'rev-10k', 'rev-100k', None, 'clerk', 'offline-1k']),  # big-card, collector: card backs came out looking like a ball emblem
     's4.png': (3, 3, ['all-sets', 'level-20', 'level-max', 'flipped', 'ten-blank', 'pikachu', 'charizard', 'moon', 'night']),
     'fix1.png': (2, 1, ['big-card', 'collector']),
+    's5.png': (2, 2, ['rev-25k', 'rev-50k', 'served-500', 'served-2k']),
 }
 
 

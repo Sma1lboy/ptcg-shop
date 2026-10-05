@@ -122,3 +122,9 @@ BW 风格的像素画：三张训练家式半身立绘（阿豆、九姐、店�
 
 > Row 1 col 1: one huge trading card seen face-on, printed face side up: cream-white border, a picture window showing a simple illustrated golden mountain under a sunburst, and a big sparkling blue diamond gem in front of the card with sparkle lines; the card is clearly a front face, never a back, and has no circular emblem on it; on a deep navy field. Row 1 col 2: a magnifying glass held over a trading card seen face-on, printed face side up: cream-white border and a picture window showing a simple illustrated green hill and a gold star; a small brown coin purse beside them; the card is clearly a front face, never a back, and has no circular emblem on it; on an amber field.
 
+### s5 SUBJECTS（2 列 2 行，`--size 1536x1536`，`--quality high`，2026-10-04 加的四个经营里程碑；同一模板，N_COUNT = four）→ rev-25k rev-50k served-500 served-2k
+
+> Row 1 col 1: a shop cash register with its drawer sliding open showing a few plain green banknotes, and a small green upward arrow beside it, on a sky field. Row 1 col 2: two stacked bundles of plain green banknotes tied with paper bands beside a small pile of gold coins, on an amber field. Row 2 col 1: a punched loyalty stamp card, a white rectangle with a row of round stamped circles all filled in, and a small brown paper shopping bag beside it, on a green field. Row 2 col 2: a small shopfront with its door open and warm light inside, a doormat in front, and three tiny round-headed customer bust silhouettes in different coloured beanies waiting by the door, on a red field.
+
+一次出图就干净，没出草稿（模板已经验证过）。共 7 次出图调用。
+
