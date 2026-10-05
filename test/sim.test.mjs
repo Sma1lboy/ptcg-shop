@@ -888,6 +888,19 @@ console.log('ok luck percentile');
   console.log('ok 店员留账款: any round keeps the bill in its last 5 minutes and spends it before them');
 }
 
+// 店员分货: a round short of cash gives every shelf the same share of what it lacks before any shelf is topped up, so no set is
+// left at 0 while another is filled (shelf order used to decide it).
+{
+  const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(9), storage: null });
+  Z.state.up.clerk = 1; Z.state.up.racks = 1; for (const [i, id] of ['sv08', 'sv10', 'sv08.5'].entries()) { Z.place(i, id); Z.state.auto[id] = true; }
+  for (const sh of Z.shelves()) sh.qty = 0;
+  Z.state.cash = Z.clerkNeed() / 2; Z.clerkNow();
+  const qs = Z.shelves().filter(sh => sh.id).map(sh => sh.qty);
+  assert.ok(qs.every(q => q > 0), `half the money: every shelf gets some (${qs.join('/')})`);
+  assert.ok(Math.max(...qs) - Math.min(...qs) <= 2, `and about the same (${qs.join('/')})`);
+  console.log(`ok 店员分货: half the cash a round needs puts ${qs.join('/')} packs on ${qs.length} empty shelves`);
+}
+
 // 店员没本钱 (GAMEPLAY.md §12.2): the clerk buys with the cash in the till at his round. A round that cannot fill the shelves is
 // recorded (clerkRound, clerkShort) and logged; 现在补货 (clerkNow) is his buying now and does not move his next round. The
 // 普通 player on seed 1 falls into it on the third shop (夜市, 2 级店员 bought with the last $10.4k before a round) and borrows
