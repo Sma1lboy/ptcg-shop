@@ -1,7 +1,8 @@
 // Top bar: cash is the one big number (and flashes what just came in or went out); stock, walk-ins, sales, singles value sit a step below.
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
-import { G, $, money } from './common.ts';
+import { G, $, money, bar } from './common.ts';
+import { nextStep } from './upgrades.ts';
 
 let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = Date.now(), why = '', lastAt = 0;
 let lastExtra: { tickets: number; idle: number; offline: number } | null = null;
@@ -43,9 +44,23 @@ export function renderStats(reveal = false) {
       ? html`<a href="#shelf" aria-label="货架 ${v}，有系列卖空，去货柜补货">${v}</a>` : v}</dd></div>`)}</dl>`, $('stats'));
 }
 
+// 攒钱目标: 成长's 下一步 in sight on 货柜, where the player waits (a reviewer sat out four stretches of 2 minutes not knowing for what or
+// how long). The ETA is the 闲钱's own climb over the last few minutes (sales net of restocks and bills), shown only when it is climbing
+// and has been watched for a minute: no promise from gross sales.
+const spareSeen: [number, number][] = [];
+function goal() {
+  const g = nextStep(); if (!g || G.canBranch()) return '';
+  const now = Date.now(), spare = G.spare();
+  spareSeen.push([now, spare]); while (spareSeen.length && spareSeen[0][0] < now - 300e3) spareSeen.shift();
+  const [t0, s0] = spareSeen[0], per = now - t0 >= 60e3 ? (spare - s0) / ((now - t0) / 60e3) : 0, left = g.cost - spare;
+  return html`<p class="pm-goal"><span>下一个目标：<b>${g.name} Lv ${g.lv + 1}</b> ${money(g.cost)}</span>
+    ${bar(spare / g.cost, `闲钱 ${money(Math.max(0, spare))} / ${money(g.cost)}`)}
+    <small>${left <= 0 ? html`闲钱够了 · <a href="#grow">去成长升级</a>` : `还差 ${money(left)}${per > 0 ? `，照最近几分钟闲钱涨的速度约 ${Math.max(1, Math.ceil(left / per))} 分钟` : ''}（闲钱 = 留好账款后的现金）`}</small></p>`;
+}
 export function renderEarnings() {
   const active = G.idling(), extra = G.state.extra, offline = G.skill('watch') * G.OFFLINE_BONUS;
   render(html`<h2>${G.paused() ? '剧情中 · 经营暂停' : active ? `挂机中 · 销售奖励 +${G.IDLE_BONUS * 100}%` : '挂机已暂停 · 切到货柜页开始挂机'}</h2>
+    ${goal()}
     <p>${active ? '正停在货柜页，' : '停在货柜页（货架或展示柜）且页面可见时，'}顾客成交和店员卖散卡可多得 ${G.IDLE_BONUS * 100}% 奖励。切到其他页或转到后台立即停止；没有销售就没有奖励。</p>
     <p>本店挂机奖励 <b class="gain">${money(extra.idle)}</b></p>
     <details><summary>离线经营 · 奖励 +${Math.round(offline * 100)}%</summary>

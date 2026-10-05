@@ -514,7 +514,14 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const firsts = Object.fromEntries(['unlock', 'afford', 'ach', 'story'].map(k => [k, counted.find(e => e.kind === k)?.t ?? null]));
   for (const w of [1, 2, 3]) bill(w);
   for (const e of events) if (e.kind === 'afford') e.boughtAt = boughtAt[e.key] ?? null; // when the player actually bought that level (null = never in the hour)
-  return { seed, per5, byKind, drought, firsts, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
+  // M2 判据 1 as revised 2026-10-05 (ROADMAP 决策记录): no 图鉴 tiers, an afford counts only if that level was bought within the hour;
+  // (a) 0–30 min: every 5-min bucket ≥1, longest gap ≤240 s; (b) 30–60 min: every bucket ≥1, longest gap ≤480 s (gaps clipped to the half)
+  const m2t = events.filter(e => e.count && e.kind !== 'dex' && (e.kind !== 'afford' || e.boughtAt != null)).map(e => e.t).sort((a, b) => a - b), m2e = [0, ...m2t, N];
+  const gapIn = (a, b) => { let g = 0; for (let i = 1; i < m2e.length; i++) g = Math.max(g, Math.min(m2e[i], b) - Math.max(m2e[i - 1], a)); return g; };
+  const m2b = Array.from({ length: Math.ceil(N / 300) }, () => 0); for (const x of m2t) m2b[Math.min(m2b.length - 1, Math.floor(Math.max(0, x - 1) / 300))]++;
+  const m2 = { gapA: gapIn(0, 1800), gapB: gapIn(1800, N), emptyA: m2b.slice(0, 6).filter(n => !n).length, emptyB: m2b.slice(6).filter(n => !n).length };
+  m2.a = !m2.emptyA && m2.gapA <= 240; m2.b = !m2.emptyB && m2.gapB <= 480;
+  return { seed, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
     bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify(st()) : undefined }; // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
 
@@ -549,7 +556,8 @@ if (process.argv[1]?.endsWith('autoplay.mjs')) {
     const [seeds = 12, react = 6] = rest.filter(x => x !== 'json' && x !== 'old' && x !== 'nodex').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, uiNotes: !rest.includes('old'), countDex: !rest.includes('nodex') }));
     if (rest.includes('json')) console.log(JSON.stringify(runs, null, 1));
     else { console.table(runs.map(r => ({ seed: r.seed, events: r.events, per5: r.per5.join(' '), 'drought s': r.drought.secs, 'from–to': `${r.drought.from}–${r.drought.to}`, 'unlock/afford/ach/story s': [r.firsts.unlock, r.firsts.afford, r.firsts.ach, r.firsts.story].join('/'), cash: r.end.cash, level: r.end.level, racks: r.end.racks, 'walk-ins/min': r.end.rate, billsPaid: r.billsPaid, loan: r.loan })));
-      const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs))); }
+      const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs)));
+      console.log(`M2 (a) 0–30 min ≤240 s: ${runs.filter(r => r.m2.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapA))} s)  (b) 30–60 min ≤480 s: ${runs.filter(r => r.m2.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapB))} s)  [no 图鉴 tiers, afford only if bought; node ${process.version}]`); }
   } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (进一架 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
   else if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
   else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
