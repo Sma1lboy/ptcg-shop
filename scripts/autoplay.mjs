@@ -361,7 +361,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     for (const s of SETS) if (keptAvailable(s.id)) { const p = G.dexCount(s.id) / G.dexTotal(s.id); if (p < share) { id = s.id; share = p; } }
     return id;
   };
-  const boughtAt = {}, buy = b => { const ok = b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k); if (ok) { sp.growth += b.cost; boughtAt[`${b.k}:${b.lv + 1}`] ??= t; } return ok; };
+  // stableAt: the start of the last unbroken stretch of 闲钱 ≥ price before the level was bought (agent://M2Verdict2's 稳定 afford: a flash eaten by the next restock does not count); diagnostic only
+  const boughtAt = {}, runFrom = {}, stableAt = {}, buy = b => { const ok = b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k); if (ok) { sp.growth += b.cost; const k = `${b.k}:${b.lv + 1}`; boughtAt[k] ??= t; stableAt[k] ??= runFrom[k] ?? t; } return ok; };
   // ----- notice.ts -----
   // uiNotes = the box of the current ui/notice.ts (events only: a sold-out shelf, the first-sale note gated on earned.sealed, 知道了 notes for the first seeker / collector sale, 找卡委托, 收卡's button going to the case page);
   // uiNotes: false = the box as it was before (cust.sold gate, no card notes). A sold-out shelf comes before every note: it cuts in over a printed note.
@@ -527,6 +528,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     const afford = () => { const g = nextStep(), b = G.nextBill(), i = current(); // what the player faces when a level first becomes affordable (diagnostic)
       return { cash: Math.round(st().cash), spare: Math.round(G.spare()), bill: b ? b.amount : 0, gap: shelfGap(), guiding: i >= 0, step: i >= 0 ? STEPS[i].h : null, rec: g ? `${g.k}:${g.lv + 1}` : null, box: memoShown ? memo.kind : null, hold }; };
     for (const b of pool) if ((basis === 'cash' ? st().cash : G.spare()) >= b.cost) ev('afford', `${b.k}:${b.lv + 1}`, `${b.name} Lv${b.lv + 1} $${Math.round(b.cost)}`, true, afford);
+    for (const b of all) { const k = `${b.k}:${b.lv + 1}`; if (G.spare() >= b.cost) runFrom[k] ??= t; else delete runFrom[k]; }
     const gate = pool.filter(b => !seenEv.has(`afford:${b.k}:${b.lv + 1}`)).sort((a, b) => a.cost - b.cost)[0]; // the cheapest level that has not yet counted as an event
     const racked = G.shelves().filter(r => r.id); if (racked.some(r => !r.qty)) bare.any++; if (racked.length && racked.every(r => !r.qty)) bare.all++;
     if (series) ser.push({ t, cash: Math.round(st().cash), spare: Math.round(G.spare()), gate: gate ? Math.round(gate.cost) : null, gateName: gate ? `${gate.name} Lv${gate.lv + 1}` : null, rev: Math.round(G.revenue()), ...spent(), bareAny: bare.any, none: st().cust.none, sold: st().cust.sold });
@@ -553,11 +555,14 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   for (const e of events) if (e.kind === 'afford') e.boughtAt = boughtAt[e.key] ?? null; // when the player actually bought that level (null = never in the hour)
   // M2 判据 1 as revised 2026-10-05 (ROADMAP 决策记录): no 图鉴 tiers, an afford counts only if that level was bought within the hour;
   // (a) 0–30 min: every 5-min bucket ≥1, longest gap ≤240 s; (b) 30–60 min: every bucket ≥1, longest gap ≤480 s (gaps clipped to the half)
-  const m2t = events.filter(e => e.count && e.kind !== 'dex' && (e.kind !== 'afford' || e.boughtAt != null)).map(e => e.t).sort((a, b) => a - b), m2e = [0, ...m2t, N];
-  const gapIn = (a, b) => { let g = 0; for (let i = 1; i < m2e.length; i++) g = Math.max(g, Math.min(m2e[i], b) - Math.max(m2e[i - 1], a)); return g; };
-  const m2b = Array.from({ length: Math.ceil(N / 300) }, () => 0); for (const x of m2t) m2b[Math.min(m2b.length - 1, Math.floor(Math.max(0, x - 1) / 300))]++;
-  const m2 = { gapA: gapIn(0, 1800), gapB: gapIn(1800, N), emptyA: m2b.slice(0, 6).filter(n => !n).length, emptyB: m2b.slice(6).filter(n => !n).length };
-  m2.a = !m2.emptyA && m2.gapA <= 240; m2.b = !m2.emptyB && m2.gapB <= 480;
+  const m2Of = ts => { const tt = ts.sort((a, b) => a - b), e = [0, ...tt, N];
+    const gapIn = (a, b) => { let g = 0; for (let i = 1; i < e.length; i++) g = Math.max(g, Math.min(e[i], b) - Math.max(e[i - 1], a)); return g; };
+    const bk = Array.from({ length: Math.ceil(N / 300) }, () => 0); for (const x of tt) bk[Math.min(bk.length - 1, Math.floor(Math.max(0, x - 1) / 300))]++;
+    const m = { gapA: gapIn(0, 1800), gapB: gapIn(1800, N), emptyA: bk.slice(0, 6).filter(n => !n).length, emptyB: bk.slice(6).filter(n => !n).length };
+    m.a = !m.emptyA && m.gapA <= 240; m.b = !m.emptyB && m.gapB <= 480; return m; };
+  const m2ev = events.filter(e => e.count && e.kind !== 'dex' && (e.kind !== 'afford' || e.boughtAt != null));
+  const m2 = m2Of(m2ev.map(e => e.t));
+  m2.stable = m2Of(m2ev.map(e => (e.kind === 'afford' ? stableAt[e.key] ?? e.t : e.t))); // diagnostic (ROADMAP 决策记录 2026-10-06): an afford stamped where the money last came to stay
   return { seed, comm: cq, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
     bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify({ ...st(), feat: { ...st().feat, ...Object.fromEntries(Object.entries(seen).map(([k, v]) => [`story:${k}`, +v || 0])), 'story:return': 1 } }) : undefined }; // the scenes this player saw go with it (ui/story.ts keeps them in feat), so the reviewer's tab doesn't replay them // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
@@ -616,8 +621,8 @@ if (process.argv[1]?.endsWith('autoplay.mjs')) {
     const [seeds = 12, react = 6] = rest.filter(x => x !== 'json' && x !== 'old' && x !== 'nodex' && x !== 'nocomm').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, uiNotes: !rest.includes('old'), countDex: !rest.includes('nodex'), comm: !rest.includes('nocomm') && !rest.includes('old') }));
     if (rest.includes('json')) console.log(JSON.stringify(runs, null, 1));
     else { console.table(runs.map(r => ({ seed: r.seed, events: r.events, per5: r.per5.join(' '), 'drought s': r.drought.secs, 'from–to': `${r.drought.from}–${r.drought.to}`, 'unlock/afford/ach/story s': [r.firsts.unlock, r.firsts.afford, r.firsts.ach, r.firsts.story].join('/'), cash: r.end.cash, level: r.end.level, racks: r.end.racks, 'walk-ins/min': r.end.rate, billsPaid: r.billsPaid, loan: r.loan })));
-      const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs)));
       console.log(`M2 (a) 0–30 min ≤240 s: ${runs.filter(r => r.m2.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapA))} s)  (b) 30–60 min ≤480 s: ${runs.filter(r => r.m2.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapB))} s)  [no 图鉴 tiers, afford only if bought; node ${process.version}]`);
+      console.log(`  diagnostic, afford at the stable start (agent://M2Verdict2): (a) ${runs.filter(r => r.m2.stable.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.stable.gapA))} s)  (b) ${runs.filter(r => r.m2.stable.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.stable.gapB))} s)`);
       const late = (r, k) => r.comm[k + 'At'].filter(x => x > 1800).length, tot = (f, k) => runs.reduce((a, r) => a + f(r, k), 0); // 找卡委托 are not M2 events; this is what the model saw and served
       console.log(`找卡委托 (not M2 events): asked ${tot(r => r.comm.seen)} / card ever in the binder ${tot(r => r.comm.held)} / served ${tot(r => r.comm.done)} in the hour over ${runs.length} seeds (paid $${Math.round(tot(r => r.comm.paid))}); minutes 30–60: asked ${tot(late, 'seen')} / served ${tot(late, 'done')}`); }
   } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (补到满 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }

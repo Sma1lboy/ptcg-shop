@@ -236,9 +236,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const CROWD_KNEE = 1.4, CROWD_ROOM = 1, ROOM_STEP = 0.15;
   // Game settings: cheaper early shelves, supply and traffic help the first shop grow without
   // bringing the clerk's large restocking rounds forward. Every new shop uses the same prices.
-  // Pack/card market prices and series unlock thresholds are unchanged.
+  // Pack/card market prices are unchanged; of the series unlock thresholds only me01 moved (below).
   const COST_X = 4, EARLY_DISCOUNT = 0.65;
-  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 25000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // ×COST_X below // lifetime revenue needed before a set can be stocked
+  // me01 (超级进化) at 15000 ×4 = $60,000 (was $100,000): the first hour's shop makes about that much, so its unlock — a new set, a story beat, new customers —
+  // lands near minute 55, where the half hour after the clerk had only $2–3k upgrades left to wait for (ROADMAP loop 29).
+  const UNLOCK: Record<string, number> = { 'sv08.5': 400, 'sv03.5': 2000, sv09: 10000, me01: 15000, me02: 60000, me03: 100000, me04: 160000, me05: 250000 }; // ×COST_X below // lifetime revenue needed before a set can be stocked
   const UPGRADES: Record<string, { name: string; desc: string; costs: number[] }> = {
     signage:  { name: '招牌', desc: `顾客肯多付 +${Math.round(SIGN_STEP * 100)} 个百分点 / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750].map(c => c * COST_X) },
     racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(Math.round(200 * 1.6 ** i / 10) * 10 * COST_X * (i < 2 ? EARLY_DISCOUNT : 1))) }, // up to one per set: a second shelf of a set is only more depth
