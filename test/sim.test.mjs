@@ -255,17 +255,19 @@ console.log('ok luck percentile');
   for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) { G.buy('sv08', 100); G.shelve('sv08', 999); } } // the back room is topped up too: 200 packs can sell out inside the 5 minutes
   assert.ok(G.missed('sv10') > 0 && G.missed('sv08') === 0, `the set left off the shelves is the one missed (${G.missed('sv10')} / ${G.missed('sv08')})`);
   T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
-  // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
+  // The clerk works in rounds: 帮工 (level 1) every CLERK_ROUND_1 to half; level 2 every CLERK_ROUND, a 热销 set to the top; level 3 full and the bulk sold.
+  // A shelf emptied between rounds stays empty until the next one. 行情 is set by hand at each round (it rerolls every HEAT_EVERY).
+  const round = (heat = {}) => { st().heat = heat; st().heatT = T; G.tick(); };
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
-  st().heat = {}; st().heatT = T + 1e3; // neither 热销 nor 滞销, whatever the random stream rolled: a 热销 set is filled to the top (asserted next)
-  const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
-  G.shelves()[0].qty = 0; T += 60e3; G.tick(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
-  T += G.CLERK_ROUND * 1e3; st().heat = {}; st().heatT = T; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
-  st().heat = { sv08: 1.15 }; G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; st().heatT = T; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 1 fills a 热销 set to the top');
-  st().heat = {};
-  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills it');
+  const half = Math.ceil(G.depth() / 2); T += 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half on hiring');
+  G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; round(); assert.equal(G.shelfQty('sv08'), 0, '帮工: no round after CLERK_ROUND');
+  T += (G.CLERK_ROUND_1 - G.CLERK_ROUND) * 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), half, '帮工 restocks after CLERK_ROUND_1, a 热销 set to half too');
+  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND_1 * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 2 tops up to half');
+  G.shelves()[0].qty = 0; T += 60e3; round(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
+  T += G.CLERK_ROUND * 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills a 热销 set to the top, every CLERK_ROUND');
+  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; round(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 3 fills it');
   st().singles.z = { set: 'sv08', n: '1', kind: 'C', r: 'C', name: 'bulk', price: 0.1, count: 5 }; T += 1e3; G.tick();
-  assert.equal(st().singles.z, undefined, 'rounds are for restocking only: level 2 still sells the bulk at once');
+  assert.equal(st().singles.z, undefined, 'rounds are for restocking only: level 3 still sells the bulk at once');
 
   // 8. Luck baseline: value is re-priced with today's data, so a price refresh cannot skew the percentile.
   {
@@ -464,7 +466,7 @@ console.log('ok luck percentile');
   assert.equal(st().branch.fame, 1e3 - total);
   assert.ok(G.unlockAt('me05') > 0 && G.unlockAt('me05') < 1e6, '门路 lowers the thresholds, never to zero');
   st().cash = 1e7; G.repay(1e9); G.branch();
-  assert.deepEqual([st().cash, G.lvl('racks'), G.lvl('depth'), G.lvl('clerk')], [G.START_CASH + G.SEED_STEP * G.PERKS.seed.max, G.PERKS.fit.max, G.PERKS.fit.max, 1], 'perks shape the new shop');
+  assert.deepEqual([st().cash, G.lvl('racks'), G.lvl('depth'), G.lvl('clerk')], [G.START_CASH + G.SEED_STEP * G.PERKS.seed.max, G.PERKS.fit.max, G.PERKS.fit.max, 2], 'perks shape the new shop (老店员: the 2-minute clerk, not the 帮工)');
   // Old saves (no branch key) load with an empty history and keep everything else.
   store['ptcg-shop-v1'] = JSON.stringify({ cash: 10, opened: { sv08: 5 }, earned: { sealed: 500, singles: 0 } });
   const O = createGame(env); assert.deepEqual(O.state.branch, { n: 0, fame: 0, got: 0, life: 0, perks: {} }); assert.equal(O.revenue(), 500);
@@ -979,9 +981,9 @@ console.log('ok luck percentile');
     assert.ok(o.bills > 0 && !o.borrowed && g.state.loan === 0, `${m}: a bill was paid from the till, nothing borrowed or repaid`);
     near(d.cash, o.revenue - d.intake - d.restock + d.bulk - o.bills + (o.tickets ?? 0) + (o.bonus ?? 0), `${m}: cash = takings − intake − restock + bulk − bills + gallery tickets + 看店 bonus`);
   };
-  // A shop with every channel: a level-2 clerk (buys stock, sells bulk), 收卡 at the top price, packs bought and opened for real (bulk
+  // A shop with every channel: a level-3 clerk (buys stock, sells bulk), 收卡 at the top price, packs bought and opened for real (bulk
   // and hits for the binder), 3 big cards in the case; the shelves hold 40 packs of two sets and the back room none, so the clerk has to buy.
-  st().cash = 1e6; st().earned.sealed = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX);
+  st().cash = 1e6; st().earned.sealed = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX);
   G.buy('sv08', 15); G.open('sv08', 15);
   for (const [id, i] of [['sv08', 0], ['sv10', 1]]) { G.buy(id, G.depth()); G.place(i, id); }
   for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
@@ -1215,7 +1217,7 @@ console.log('ok luck percentile');
 
   // A restart: the levels 名气 hands out (旧货架, 老店员) satisfy the parents they sit under, and a pack ever opened keeps 柜台 open with the binder gone.
   { const G = shop(); G.buy('sv08', 1); G.open('sv08', 1); G.state.branch.fame = 20; assert.ok(G.learnPerk('fit') && G.learnPerk('hire')); assert.ok(G.bankrupt());
-    assert.deepEqual([G.lvl('racks'), G.lvl('depth'), G.lvl('clerk'), G.lvl('signage')], [1, 1, 1, 0]); assert.deepEqual(G.state.singles, {});
+    assert.deepEqual([G.lvl('racks'), G.lvl('depth'), G.lvl('clerk'), G.lvl('signage')], [1, 1, 2, 0]); assert.deepEqual(G.state.singles, {});
     assert.ok(['racks', 'supplier', 'apprentice', 'watch'].every(k => G.growthLock(k) === ''), 'the perks open the branches under them');
     assert.ok(G.growthLock('talk') && G.growthLock('crowd'), 'but not the ones under 招牌');
     assert.ok(G.cardBranchReady() && G.growthLock('case') === '' && G.growthLock('luck') === '', 'the pack opened in the old shop still counts'); }
@@ -1239,15 +1241,15 @@ console.log('ok luck percentile');
   // A paid level a 名气 perk later covers is the perk's: 退回 returns the money once and leaves the level, and the branches under it, standing.
   { const G = createGame({ now: () => NOW, random: S.rng(8), storage: null }), st = () => G.state, short = () => { st().cash = 10; };
     st().cash = 1e6; for (const k of ['depth', 'depth', 'depth', 'racks', 'clerk', 'watch']) assert.ok(buy(G, k), k);
-    st().branch.fame = 20; assert.ok(G.learnPerk('fit') && G.learnPerk('fit') && G.learnPerk('hire')); // floors: 加层 and 货架 Lv 2, 店员 Lv 1
-    assert.deepEqual([G.lvl('depth'), G.lvl('racks'), G.lvl('clerk')], [3, 2, 1]);
+    st().branch.fame = 20; assert.ok(G.learnPerk('fit') && G.learnPerk('fit') && G.learnPerk('hire')); // floors: 加层 and 货架 Lv 2, 店员 Lv 2 (the paid 帮工 is under it)
+    assert.deepEqual([G.lvl('depth'), G.lvl('racks'), G.lvl('clerk')], [3, 2, 2]);
     const back = k => { short(); const row = G.refundable().find(x => x.k === k), c0 = st().cash; assert.ok(row && G.refund(k), `${k}: refunded`); assert.ok(Math.abs(st().cash - c0 - row.cost * G.REFUND) < 0.01, `${k}: back at 90%`); };
     back('depth'); assert.equal(G.lvl('depth'), 2, 'the paid level above the floor goes back: Lv 3 → 2');
     back('depth'); back('depth'); assert.equal(G.lvl('depth'), 2, 'the two payments 旧货架 covers return their money and the level stays');
     short(); assert.ok(!G.refund('depth') && !G.refundable().some(x => x.k === 'depth'), 'every payment is used up once');
     back('racks'); assert.equal(G.lvl('racks'), 2, 'a 货架 payment the perk covers: money back, Lv 2 stays');
-    back('clerk'); assert.equal(G.lvl('clerk'), 1, '老店员 holds 店员 Lv 1 although 看店 stands on it');
-    assert.ok(G.skill('watch') === 1 && G.growthLock('apprentice') === '' && G.refundTo('clerk') === 1, 'its branches are still open');
+    back('clerk'); assert.equal(G.lvl('clerk'), 2, '老店员 holds 店员 Lv 2 although 看店 stands on it');
+    assert.ok(G.skill('watch') === 1 && G.growthLock('apprentice') === '' && G.refundTo('clerk') === 2, 'its branches are still open');
     assert.ok(!/Lv\d/.test(st().log[0].text), 'a covered payment is not logged as a level lost'); }
   console.log('ok 成长树: locked first buys refused without a trace, both branches open from Lv 1, 柜台 opens from a real card, legacy levels survive reload/perks/restarts, parents refund last');
 }
@@ -1349,7 +1351,7 @@ console.log('ok luck percentile');
   // A trading shop: level-2 clerk, 10 packs opened (bulk for the clerk to sell), a stocked shelf and 3 big cards in the case; the cash never runs short.
   const busy = (seed, skills = {}) => {
     const w = shop(seed), G = w.G, st = w.st; st().cash = 1e6; Object.assign(st().skills, skills);
-    G.upgrade('clerk'); G.upgrade('clerk'); G.buy('sv08', 210); G.open('sv08', 10); G.place(0, 'sv08');
+    G.upgrade('clerk'); G.upgrade('clerk'); G.upgrade('clerk'); G.buy('sv08', 210); G.open('sv08', 10); G.place(0, 'sv08');
     for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
     return w;
   };
@@ -1359,7 +1361,7 @@ console.log('ok luck percentile');
   {
     const w = shop(1), G = w.G, st = w.st, A1 = pull('a', 100), B1 = pull('b', 50), C1 = pull('c', 0.1, 'C');
     const kA = w.give(A1, 2), kB = w.give(B1), kC = w.give(C1, 3), total = copies(G);
-    assert.deepEqual(st().gallery, Array(6).fill(null)); assert.deepEqual([G.GALLERY_SLOTS, G.ROOM_SLOTS, G.PEDESTAL, st().v, 'trophy' in st()], [5, 6, 0, 2, false], 'one pedestal and five slots, no separate trophy');
+    assert.deepEqual(st().gallery, Array(6).fill(null)); assert.deepEqual([G.GALLERY_SLOTS, G.ROOM_SLOTS, G.PEDESTAL, st().v, 'trophy' in st()], [5, 6, 0, 3, false], 'one pedestal and five slots, no separate trophy');
     assert.ok(G.collectToGallery(kA, 1)); assert.equal(st().singles[kA].count, 1); assert.equal(st().gallery[1].key, kA);
     assert.equal(G.collectToGallery(kA, 1), false, 'an occupied slot takes nothing');
     assert.ok(G.collectToGallery(kA, 2)); assert.equal(st().singles[kA], undefined, 'the last copy leaves its pocket, not a pocket of 0');
@@ -1395,7 +1397,7 @@ console.log('ok luck percentile');
 
   // 2. The room is never sold, listed, filled or bought: not by 卖同行, 卖散卡, the clerk's bulk sale, 带徒弟, seekers or collectors.
   {
-    const w = shop(3), G = w.G, st = w.st; st().cash = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); assert.ok(G.learn('apprentice'));
+    const w = shop(3), G = w.G, st = w.st; st().cash = 1e6; G.upgrade('clerk'); G.upgrade('clerk'); G.upgrade('clerk'); assert.ok(G.learn('apprentice'));
     G.buy('sv08', 120); G.place(0, 'sv08');
     const K = w.give(pull('s1', 60), 2), Z = w.give(pull('s2', 2, 'C'), 40);
     assert.ok(G.collectToGallery(K, 1)); assert.ok(G.collectToGallery(Z, 2)); const room = JSON.stringify(st().gallery);
@@ -1482,7 +1484,7 @@ console.log('ok luck percentile');
     assert.ok(shown.st().extra.tickets > 0 && shown.st().extra.tickets === both.st().extra.tickets, 'idle does not multiply the tickets'); near(shown.st().cash - plain.st().cash, shown.st().extra.tickets, 'tickets are in the till');
     near(both.st().extra.idle, idle.st().extra.idle, 'and the room does not change the bonus');
     // the base is the customers' purchases and the clerk's bulk sale; hand sales, 成就奖金 and tickets get nothing
-    const h = shop(9), H = h.G; h.st().cash = 1e6; H.upgrade('clerk'); H.upgrade('clerk'); H.setIdle(true);
+    const h = shop(9), H = h.G; h.st().cash = 1e6; H.upgrade('clerk'); H.upgrade('clerk'); H.upgrade('clerk'); H.setIdle(true);
     h.give(pull('bulk', 2, 'C'), 50); h.T += 1e3; H.tick(); near(h.st().earned.singles, 50 * 2 * H.BUYLIST, 'the clerk sold the bulk'); near(h.st().extra.idle, 0.25 * 50 * 2 * H.BUYLIST, 'and it counts', 1e-9);
     const k = h.give(pull('hand', 80), 2), i0 = h.st().extra.idle, c0 = h.st().cash; H.sell(k); near(h.st().cash - c0, 2 * 80 * H.BUYLIST, 'a sale by hand pays the buy-list price'); H.bonus(100, '奖'); near(h.st().cash - c0, 2 * 80 * H.BUYLIST + 100, '成就奖金 pays what it says');
     assert.equal(h.st().extra.idle, i0, 'no bonus on either');
@@ -1539,10 +1541,10 @@ console.log('ok luck percentile');
     const w = shop(20), G = w.G, st = w.st, kA = w.give(pull('r1', 300), 2), kB = w.give(pull('r2', 20)); assert.ok(G.collectToGallery(kA, 4)); assert.ok(G.collectToGallery(kB, 0));
     st().extra = { tickets: 12, idle: 3.5, offline: 1.25 }; st().galleryAcc = 0.25; assert.ok(G.moveCollect(4, 3));
     const H = createGame({ ...w.env, random: S.rng(1) });
-    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue(), H.state.v], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320, 2], 'the room, its ledger and its carry come back as saved'); assert.equal(H.state.gallery[0].key, kB, 'the pedestal too'); assert.ok(!('trophy' in JSON.parse(w.store[KEY])), 'and no trophy field is written');
+    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue(), H.state.v], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320, 3], 'the room, its ledger and its carry come back as saved'); assert.equal(H.state.gallery[0].key, kB, 'the pedestal too'); assert.ok(!('trophy' in JSON.parse(w.store[KEY])), 'and no trophy field is written');
     const store = {}, env = { now: () => 1_700_000_000_000, random: S.rng(2), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
     store[KEY] = JSON.stringify({ cash: 10, singles: {} }); const O = createGame(env); // a save from before the room
-    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice(), O.state.v], [Array(6).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0, 2]);
+    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice(), O.state.v], [Array(6).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0, 3]);
     const real = PTCG_DATA.sv08.cards[0], good = { key: keyOf(pull(real.n, 12, real.r)), ...pull(real.n, 12, real.r), name: 'old English name' };
     store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: [null, {}, good, { ...good, price: null }, 'x', { ...good, key: 3 }, good], extra: { tickets: 'a', idle: -1, offline: 7 }, galleryAcc: 5 });
     const D = createGame(env);
@@ -1566,7 +1568,7 @@ console.log('ok luck percentile');
   // 11. Receipts: tickets and bonus add up across absences and match the ledger, and the till's change is accounted for to the cent.
   {
     const w = shop(21), G = w.G, st = w.st; st().cash = 1e6; st().earned.sealed = 1e6; st().skills.watch = 2;
-    G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX); G.buy('sv08', 15); G.open('sv08', 15);
+    G.upgrade('clerk'); G.upgrade('clerk'); G.upgrade('clerk'); G.setBuyPct(G.BUY_MAX); G.buy('sv08', 15); G.open('sv08', 15);
     for (const [id, i] of [['sv08', 0], ['sv10', 1]]) { G.buy(id, G.depth()); G.place(i, id); }
     for (let i = 0; i < 3; i++) st().shown.push({ key: `sv08|big${i}|SIR`, set: 'sv08', n: `big${i}`, name: `big${i}`, r: 'SIR', kind: 'SIR', price: 40, pct: 1.1 });
     assert.ok(G.collectToGallery(w.give(pull('r', 2500)), 1)); const c0 = st().cash, e0 = earned(G);
@@ -1600,9 +1602,9 @@ console.log('ok luck percentile');
     const old = { cash: 10, singles: { [c.key]: { ...pull('c', 50), count: 2 } }, trophy: T, gallery: [a, null, b] };
     store[KEY] = JSON.stringify(old); const P = createGame(env);
     assert.deepEqual(keys(P), [T.key, a.key, null, b.key, null, null], 'the trophy is the pedestal, the slots follow it as 第 1–5 格');
-    assert.deepEqual([P.state.v, 'trophy' in P.state, P.state.gallery.length], [2, false, 6]); assert.deepEqual(copies(P), held(old), 'every copy is accounted for');
+    assert.deepEqual([P.state.v, 'trophy' in P.state, P.state.gallery.length], [3, false, 6]); assert.deepEqual(copies(P), held(old), 'every copy is accounted for');
     near(P.trophyBonus(), 300 / 450 * 0.5, 'the bonus reads the pedestal'); assert.equal(P.galleryValue(), 600); assert.equal(P.ticketPrice(), 4, 'the pedestal counts toward the ticket');
-    assert.ok(P.moveCollect(1, 2)); const raw = JSON.parse(store[KEY]); assert.deepEqual([raw.v, 'trophy' in raw, raw.gallery.length], [2, false, 6], 'it is saved in the new shape');
+    assert.ok(P.moveCollect(1, 2)); const raw = JSON.parse(store[KEY]); assert.deepEqual([raw.v, 'trophy' in raw, raw.gallery.length], [3, false, 6], 'it is saved in the new shape');
     assert.deepEqual(keys(createGame(env)), keys(P), 'a new-format save round-trips');
     // b. a trophy and all five slots
     const full = { cash: 10, trophy: T, gallery: [a, b, c, d, e] }; store[KEY] = JSON.stringify(full); const F = createGame(env);
@@ -1610,6 +1612,10 @@ console.log('ok luck percentile');
     // c. one of the two missing
     store[KEY] = JSON.stringify({ cash: 10, gallery: [a] }); assert.deepEqual(keys(createGame(env)), [null, a.key, null, null, null, null], 'no trophy: the pedestal is empty and the slots still follow it');
     store[KEY] = JSON.stringify({ cash: 10, trophy: T }); assert.deepEqual(keys(createGame(env)), [T.key, null, null, null, null, null], 'a trophy and no room');
+    // v3: 店员 got a 帮工 level below the old first one, so a save from before keeps the same clerk one level up; a v3 save is read as it is
+    const clerkAt = (s) => { store[KEY] = JSON.stringify({ cash: 10, ...s }); return createGame(env).lvl('clerk'); };
+    assert.deepEqual([clerkAt({ v: 2, up: { clerk: 1 } }), clerkAt({ v: 2, up: { clerk: 2 } }), clerkAt({ up: { clerk: 1 } }), clerkAt({ v: 2, up: {} }), clerkAt({ v: 3, up: { clerk: 1 } })], [2, 3, 2, 0, 1],
+      'old 店员 Lv 1 / Lv 2 load as Lv 2 / Lv 3 (the 2-minute clerk, the full one), none stays none, a v3 帮工 stays a 帮工');
     // d. damage: each place is checked alone, a gallery that is no list is an empty room, a whole card past the end goes home
     const { kind: _k, ...noKind } = T;
     store[KEY] = JSON.stringify({ cash: 10, trophy: noKind, gallery: [a, b] }); assert.deepEqual(keys(createGame(env)), [null, a.key, b.key, null, null, null], 'a damaged trophy is an empty pedestal, the room is kept');

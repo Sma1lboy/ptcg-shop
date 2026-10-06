@@ -157,9 +157,9 @@ function customers() {
 
 // 店员: one line, the setting itself is a checkbox in each set's 更多 (shelf.ts)
 function clerk() {
-  if (!G.lvl('clerk')) return html`<p class="muted">没雇店员：成长里的「店员」每 ${G.CLERK_ROUND / 60} 分钟替你用现金进货。<a href="#grow">去成长</a></p>`;
+  if (!G.lvl('clerk')) return html`<p class="muted">没雇店员：成长里的「店员」1 级帮工每 ${G.CLERK_ROUND_1 / 60} 分钟替你用现金进货。<a href="#grow">去成长</a></p>`;
   const n = SETS.filter(s => G.unlocked(s.id) && G.state.auto[s.id]).length;
-  return html`<p class="muted">店员在岗，${n ? `${n} 个系列每 ${G.CLERK_ROUND / 60} 分钟自动补货` : '还没有勾选自动补货的系列（行里的「更多」）'}。<a href="#grow">去成长</a></p>`;
+  return html`<p class="muted">${G.lvl('clerk') === 1 ? '帮工' : '店员'}在岗，${n ? `${n} 个系列每 ${G.clerkRoundSecs() / 60} 分钟自动补货` : '还没有勾选自动补货的系列（行里的「更多」）'}。<a href="#grow">去成长</a></p>`;
 }
 
 function renderGoals() { // mid-reveal too: the 展示柜 side leaves the binder's cards out while a pack is in hand (hold), the rest is the shop

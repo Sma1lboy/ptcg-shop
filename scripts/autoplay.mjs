@@ -114,7 +114,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     G.shelves().forEach((s, i) => { if (!s.id && ids.length) G.place(i, ids.reduce((a, b) => (racksOf(b) < racksOf(a) ? b : a))); });
     for (const id of ids) G.setPrice(id, pctOf(id));
     for (const id of ids) if (G.state.stock[id] > 0) G.shelve(id, G.state.stock[id]); // leftovers in the back room go out first
-    const byHand = ids.filter(id => !(G.lvl('clerk') > 1 && G.state.auto[id])); // the rest the clerk restocks (a level-1 clerk only fills to half, so keep topping up)
+    const byHand = ids.filter(id => !(G.lvl('clerk') > 2 && G.state.auto[id])); // the rest the clerk restocks (levels 1–2 only fill to half, so keep topping up)
     for (let more = true; more;) { // fill the shelves 5 packs a set at a time, so a short budget is spread over every set
       more = false;
       for (const id of byHand) {
