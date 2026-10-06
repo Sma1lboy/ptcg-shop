@@ -83,7 +83,7 @@ function draw() {
         <span class="margin ${margin >= 0 ? 'gain' : 'loss'}" title="每包毛利 = 标价 − 进货价">每包 ${margin >= 0 ? '+' : '−'}${money(Math.abs(margin))}</span></div>
       <div class="s-act" role="group" aria-label="${name} 补货和开包">
         <button type="button" class="primary" data-act="${q.act}" data-id="${id}" data-n="${q.n}" title="${q.title}" ?disabled=${!q.ok}>${q.text}</button>
-        <button type="button" data-act="open1" data-id="${id}" ?disabled=${!stock || hold}>开 1 包</button></div>
+        <button type="button" data-act="open1" data-id="${id}" title="${hold ? '手里这包翻完再开' : stock ? `从仓库拆 1 包（仓库 ${stock} 包）` : '自己拆的包从仓库拿，货架上的留给顾客；仓库空了，先进货'}" ?disabled=${!stock || hold}>开 1 包</button></div>
       ${c.rail || verdict ? html`<div class="s-cust">${c.rail ?? nothing}${verdict ? html`<p class="c-note">${verdict}</p>` : nothing}</div>` : nothing}
       <details class="s-more"><summary>更多</summary>
         <div class="m-btns">

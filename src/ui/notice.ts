@@ -253,10 +253,10 @@ function showMemo() {
     const c = G.state.comm; if (!c) return; // gone since it was queued: watchShop takes the note off the list next
     const here = m.key.endsWith(':have'), left = Math.max(1, Math.ceil(G.commLeft() / 60));
     render(keyed(ident, here ? html`<div class="mm-box"><h2>委托要的卡到了</h2>
-      <p>卡本里有了 <b>${c.name}</b>，交给委托人 <b class="gain">${money(c.reward, 'exact')}</b>（市价 ${money(c.price, 'exact')}）· 还剩 ${left} 分钟</p>
+      <p>卡本里有了 <b>${c.name}</b>，交给委托人 <b class="gain">${money(c.reward, 'exact')}</b>（市价 ${money(c.price, 'exact')}）· 还剩不到 ${left} 分钟</p>
       <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); G.deliverCommission(); }}>交付 ${money(c.reward, 'exact')}</button><button type="button" @click=${close}>先留着</button></div></div>`
       : html`<div class="mm-box"><h2>有人来找卡</h2>
-      <p><b>${c.name}</b> · 报酬 <b class="gain">${money(c.reward, 'exact')}</b> · ${G.COMM_LEN / 60} 分钟内交</p>
+      <p><b>${c.name}</b> · 报酬 <b class="gain">${money(c.reward, 'exact')}</b> · 还剩不到 ${left} 分钟</p>
       <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去展示柜看看</button><button type="button" @click=${close}>知道了</button></div></div>`), el);
     return;
   }

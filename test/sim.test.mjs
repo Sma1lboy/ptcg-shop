@@ -257,9 +257,12 @@ console.log('ok luck percentile');
   T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
   // The clerk works in rounds: half full at level 1, and a shelf emptied between rounds stays empty until the next one.
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
+  st().heat = {}; st().heatT = T + 1e3; // neither 热销 nor 滞销, whatever the random stream rolled: a 热销 set is filled to the top (asserted next)
   const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
   G.shelves()[0].qty = 0; T += 60e3; G.tick(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
   T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
+  st().heat = { sv08: 1.15 }; G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; st().heatT = T; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 1 fills a 热销 set to the top');
+  st().heat = {};
   G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills it');
   st().singles.z = { set: 'sv08', n: '1', kind: 'C', r: 'C', name: 'bulk', price: 0.1, count: 5 }; T += 1e3; G.tick();
   assert.equal(st().singles.z, undefined, 'rounds are for restocking only: level 2 still sells the bulk at once');
