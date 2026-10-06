@@ -269,7 +269,7 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 //    request is gone or the player is on 展示柜; its key goes to the case page), and a player who finds the card in the binder (or the case) serves it with one press, on to 展示柜 and 交付. The model knows at once
 //    when the card is in the binder: the real panel shows it only on 展示柜, so this is the generous end. Requests are NOT M2 events (no ev() for them); their effect is only the cash and the presses they take.
 //  - NOT modelled (so no events from them): receipts (SLIP), selling cards to peers, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
-//    phone layout, the sound/animation timings, 先不管 (the player never waves the sold-out box off).
+//    phone layout, the sound/animation timings, 先不管 (the player never waves the sold-out box off), the 委托 panel's 开包找它 key (a gamble with 闲钱 a player may take; this player never does).
 // Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
 // the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene, a 图鉴 tier
 // of a set reached (a permanent walk-in step; `nodex` on the command line leaves it uncounted for comparison). Refills never count.
