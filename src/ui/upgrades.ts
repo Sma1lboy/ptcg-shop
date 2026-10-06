@@ -54,7 +54,7 @@ function buyables() {
 // cheapest level that changes the running shop. 看店 only pays someone who closes the page and 手气 only someone who opens packs,
 // and 人气 / 扩建 under 2% more walk-ins are left out; those come back only when nothing else is left.
 const MIN_TRAFFIC = 0.02;
-export function nextStep() { // 成长's 下一步 — also what notice.ts's 「钱够升级了」 names
+export function nextStep() { // 成长's 下一步 — also the 「下一个目标」 line on 货柜
   const all = buyables().sort((a, b) => a.cost - b.cost);
   if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return { ...r, why: '解锁的系列比货架多，先加一个货架' }; }
   const gain = (k: string) => G.peek(k, G.rate) / G.rate() - 1;
@@ -261,12 +261,12 @@ function tree(next?: string) {
     </div>`;
 }
 
-// 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档.
+// 开分店 restarts the shop, so it takes two clicks within 3 s, like 清空存档. The one 开分店 button is the header's (branchGoal), shown once the debt is paid.
 let armed = 0;
 const armedNow = () => Date.now() - armed < 3000;
 export function branchClick() {
   if (armedNow()) { armed = 0; G.branch(); return; }
-  armed = Date.now(); renderUpgrades(); setTimeout(renderUpgrades, 3100); // the header's 开分店 and the panel's both say 再点一次
+  armed = Date.now(); renderUpgrades(); setTimeout(renderUpgrades, 3100); // the header's 开分店 says 再点一次
 }
 
 // A street's per-set tilt in words: which sets draw more (or fewer) pack buyers there than on 老街.
@@ -276,28 +276,30 @@ function streetSets(st: ReturnType<typeof G.street>) {
   return [up && `${up} 来的人多`, down && `${down} 来的人少`].filter(Boolean).join('；');
 }
 
-// 开分店 (prestige): how far this shop is from the gate, what branching now would pay, what carries over, and the 名气 perks.
+// 开分店 (prestige): while the debt stands it is one line (what is still owed, the 名气 in hand) and, once 名气 has ever been earned, the
+// perks to spend it on. Debt paid: how far this shop is from the next 名气, what branching now would pay, what carries over, and the perks.
+// The button itself is the header's (branchGoal): one 开分店 key on the page.
 function renderBranch() {
   const b = G.state.branch, rev = G.revenue(), d0 = G.debt0(), paid = Math.max(0, Math.min(1, 1 - G.state.debt / d0)), can = G.canBranch(), fame = G.fameFor(), hand = G.handFame();
   const nextAt = (fame + 1) ** 2 * G.FAME_UNIT, pts = fameStr;
   const here = G.street(), there = nextStreet();
-  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店在${here.name} · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '把欠九姐的钱还清，这家店就是你的；她会出本钱让你去别的街口再开一家'}</small></h2>
+  const perks = html`<section class="perks" id="perks" aria-labelledby="perks-h">
+      <h3 class="br-h" id="perks-h">名气加成 <small>${b.got ? `永久，这家店和以后每家新店都有 · 手上 ${pts(b.fame)}` : '开分店带走的名气在这里花，每家新店都有'}</small></h3>
+      <ol>${Object.keys(G.PERKS).map(k => html`<li>${node(perkNode(k), undefined)}</li>`)}</ol>
+    </section>`;
+  if (!can) { render(html`<h2>开分店：还欠 ${money(G.state.debt)} · 名气 ${b.fame}</h2>${b.got ? perks : ''}`, $('branch')); return; }
+  render(html`<h2>开分店 <small>${b.n ? `第 ${b.n + 1} 家店在${here.name} · 前 ${b.n} 家店营业额 ${money(b.life)} · 共得名气 ${b.got}` : '这家店还清了，是你的了；九姐出本钱让你去别的街口再开一家'}</small></h2>
     <div class="br-now">
       <div class="br-prog">
-        <p><span>这家店的债</span> <b>${can ? '还清了' : `还欠 ${money(G.state.debt)}`}</b> <small>/ ${money(d0)}</small></p>
+        <p><span>这家店的债</span> <b>还清了</b> <small>/ ${money(d0)}</small></p>
         ${bar(paid, `已还 ${Math.round(paid * 100)}%`, { k: 'EXP' })}
-        <p class="br-say">${can ? html`现在开分店能带走 <b>${pts(fame + hand)}</b>（本店营业额 ${money(rev)}${hand ? `，加亲手开齐的 ${hand}` : ''}）；多做 ${money(nextAt - rev)} 营业额，开分店就能带走 ${pts(fame + hand + 1)}（营业额名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 向下取整，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。`
-          : html`按现在的营业额（${money(rev)}），还清时能带走至少 ${pts(fame)}。破产的店一点名气都没有。`}${!can && hand ? ` 另有亲手开齐的 ${pts(hand)}等着：开分店时一起拿，破产也不丢。` : ''}</p>
+        <p class="br-say">现在开分店能带走 <b>${pts(fame + hand)}</b>（本店营业额 ${money(rev)}${hand ? `，加亲手开齐的 ${hand}` : ''}）；多做 ${money(nextAt - rev)} 营业额，开分店就能带走 ${pts(fame + hand + 1)}（营业额名气 = √(营业额 ÷ ${G.FAME_UNIT.toLocaleString('en-US')}) 向下取整，越往后越慢）。下一家店欠 ${money(Math.round(G.DEBT0 * (1 + G.DEBT_STEP * (b.n + 1))))}。</p>
       </div>
-    <div class="br-go">
+      <div class="br-go">
         <p class="br-street"><b>下一家在${there.name}</b>${there.say}${there.sets ? html`<small>${streetSets(there)}</small>` : ''}</p>
         <p class="br-keep"><b>带走</b>卡册和展示柜里的卡、图鉴、成就、欧气检测的全部记录、名气</p>
         <p class="br-keep"><b>留下</b>现金、仓库和货架上的包、店铺升级、技能、营业额（后面的系列要重新解锁）</p>
-        <button type="button" data-act="branch" ?disabled=${!can}>${!can ? '开分店（先还清债）' : armedNow() ? '再点一次：关店并开分店' : `开分店 · 带走 ${pts(fame + hand)}`}</button>
       </div>
     </div>
-    <section class="perks" id="perks" aria-labelledby="perks-h">
-      <h3 class="br-h" id="perks-h">名气加成 <small>${b.got ? `永久，这家店和以后每家新店都有 · 手上 ${pts(b.fame)}` : '开分店带走的名气在这里花，每家新店都有'}</small></h3>
-      <ol>${Object.keys(G.PERKS).map(k => html`<li>${node(perkNode(k), undefined)}</li>`)}</ol>
-    </section>`, $('branch'));
+    ${perks}`, $('branch'));
 }

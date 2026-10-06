@@ -3,6 +3,7 @@
 import { createGame } from '../game.ts';
 import { html, nothing } from 'lit-html';
 import { card, logo } from '../assets.ts';
+import { SETS } from '../sets.ts';
 
 // Dev-only shop clock (`npm run dev`; the build and the pen use Date.now as is): reviewers and the maintainer can run the shop faster
 // or jump over a wait instead of sitting it out in real minutes. `?speed=4` in the URL, or from the console / a test driver:
@@ -48,8 +49,8 @@ export const rarLabel = (k: string) => { const r = RAR[k]; return r.jp ? `${r.zh
 // Names only, for a line that would otherwise print codes: rarNames(['RR', 'ACE', 'PB']) → 双稀有/ACE SPEC/精灵球闪.
 export const rarNames = (ks: readonly string[]) => ks.map(k => RAR[k]?.zh ?? k).join('/');
 
-// 上架 from the set table and the 顾客 panel keeps 1 pack in the back room, so a new player who shelves a fresh box can still open
-// one; the shelf's own 补满 moves them all. The count is what will actually move (the set's shelves, or one empty shelf, hold so many).
+// 上架 from a set row's key (refillQuote) and the sold-out box keeps 1 pack in the back room, so a new player who shelves a fresh box can
+// still open one. The count is what will actually move (the set's shelves, or one empty shelf, hold so many).
 export function toShelf(id: string) {
   const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth();
   const st = G.state.stock[id] || 0;
@@ -70,7 +71,7 @@ export function restock(id: string) {
   const room = G.WAREHOUSE - (G.state.stock[id] || 0), n = Math.max(0, Math.min(room, Math.floor(G.state.cash / G.wholesale(id))));
   return { n, text: `${n === room ? '进满' : '进'} ${n}`, title: `进 ${n} 包 ${money(n * G.wholesale(id), 'exact')}${n < room ? `（仓库还能放 ${room}，钱只够这些）` : '，仓库放满'}` };
 }
-// 进一架: what fills this set's shelves (one empty shelf when it has none yet) plus the one pack 上架 keeps back for the player to open,
+// 补到满's gap (the older name was 进一架): what fills this set's shelves (one empty shelf when it has none yet) plus the one pack 上架 keeps back for the player to open,
 // less what the back room already holds; capped by the cash. The guide's first buy and the usual restock (DESIGN.md「引导」): ten packs
 // sold out in about half a minute, a shelf of forty sells for minutes. n 0 when the back room already covers the shelf.
 export function shelfFill(id: string) {
@@ -88,4 +89,33 @@ export function deepFill(id: string) {
   const n = Math.min(G.WAREHOUSE - stock, f.n + Math.max(0, Math.floor((G.spare() - f.n * w) / w)));
   return n <= f.n ? f : { n, full: f.full, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * w, 'exact')}：一架的量，加上闲钱够的仓库存货，店员会接着搬上架` };
 }
-export const shelveLabel = (id: string, racked: boolean) => { const n = toShelf(id); return `${racked ? '上架' : '摆上空货架'}${n ? ` ${n} 包` : ''}`; };
+// 补到满: the one key of a set's row on 货架 (shelf.ts), the same quote as the sold-out box (notice.ts fix): from the back room when it holds
+// more than the 1 pack 上架 keeps back (上架 N 包, free), else buy the shelf's gap and shelve it in the same press (events.ts 'refill'; with a
+// clerk on the set, deepFill's bigger quote). ok false: the key is off, and text/title say why — no empty shelf for a set on none, the shelf is
+// already full, or the cash does not reach 2 packs. A partial fill (cash short) says how many, not 「到满」.
+export interface Quote { act: 'refill' | 'shelve'; n: number; cost: number; ok: boolean; text: string; title: string }
+export function refillQuote(id: string, alone = true): Quote {
+  const s = G.state, w = G.wholesale(id), stock = s.stock[id] || 0, racks = G.shelves(), own = racks.filter(r => r.id === id).length;
+  if (!own && !racks.some(r => !r.id)) return { act: 'refill', n: 0, cost: 0, ok: false, text: '补到满', title: '没有空货架：在「更多」里给它换一个货架，或到成长里加一个货架' };
+  const up = toShelf(id);
+  if (stock > 1 && up) return { act: 'shelve', n: up, cost: 0, ok: true, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货；仓库留 1 包自己拆` };
+  const f = alone ? deepFill(id) : shelfFill(id);
+  if (f.n > 1) {
+    const cost = f.n * w;
+    return { act: 'refill', n: f.n, cost, ok: true, text: `${f.full ? '补到满' : `补 ${f.n} 包`} ${money(cost, 'exact')}`,
+      title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架，仓库留 1 包自己拆${f.full ? '' : '；现金只够这些'}` };
+  }
+  const full = !!own && G.shelfQty(id) >= own * G.depth();
+  return { act: 'refill', n: 0, cost: 0, ok: false, text: full ? '货架已满' : '补到满', title: full ? '这个系列的货架已经满了' : '现金不够进 2 包' };
+}
+// A set customers keep asking for that is on no shelf, while every shelf is taken: the shelf whose set sold to the fewest buyers
+// in the same window says so and offers the swap (G.place). Only when more came for the missing set than bought from that shelf,
+// so a busy shop doesn't nag. Said in the missing set's row (shelf.ts) and under the 找卡的 table (goals.ts).
+export function swapHint(): { i: number; id: string; miss: number; buyers: number } | null {
+  const racks = G.shelves(); if (racks.some(r => !r.id)) return null;
+  const want = SETS.filter(x => G.unlocked(x.id) && !racks.some(r => r.id === x.id)).map(x => ({ id: x.id, miss: G.missed(x.id) })).sort((a, b) => b.miss - a.miss)[0];
+  if (!want?.miss) return null;
+  const since = G.now() - G.MISS_WINDOW * 1000, buyers = (id: string) => G.state.recent.filter(v => v.at > since && v.r === 'sold' && v.set === id && v.n && !v.card && v.t !== 'seeker').length / racks.filter(r => r.id === id).length;
+  const idle = racks.map((r, i) => ({ i, b: buyers(r.id!) })).sort((a, b) => a.b - b.b)[0];
+  return want.miss > idle.b ? { i: idle.i, id: want.id, miss: want.miss, buyers: Math.round(idle.b) } : null;
+}

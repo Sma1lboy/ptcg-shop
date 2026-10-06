@@ -1,5 +1,6 @@
 // 卡本 (单卡库存): hits for seekers at 单卡标价; list in the case, put on the 收藏室's 镇店台, collect or sell to peers.
-// Each pocket holds the card, its mark and market price, copy count, and its moves.
+// Each pocket holds the card, its mark and market price, copy count, and its moves: 上柜 and 卖 up front, 收藏 / 镇店 / 欣赏 behind a ⋯.
+// The pocket of the card an open 找卡委托 wants shows 交付 $X (the one yellow key) where 上柜 stood; 上柜 moves behind the ⋯.
 // While viewing the case, emptied pockets stay put and new cards append: another card's sell button must not move under a tap.
 // Re-entering the page sorts and closes the gaps. Only seeker sales show the LIVE receipt animation; manual transfers do not.
 import { html, render, nothing } from 'lit-html';
@@ -15,6 +16,7 @@ import { inspectCard } from './inspect.ts';
 import { hold } from './mat.ts';
 
 const LIVE = 2400;
+const more = new Set<string>(); // pockets whose ⋯ is open (the key outlives re-renders: pockets are keyed, the page list is not rebuilt)
 let had: Record<string, { c: Single; n: number }> | null = null, lastAt = 0, soldN = 0;
 const sold: Record<string, { k: number; at: number; c: Single; n: number; gain: number }> = {};
 const positions = new Map<string, Single>();
@@ -34,6 +36,7 @@ function listen(list: [string, Single][]) {
 export function renderSingles() {
   const s = G.state, list = Object.entries(s.singles).filter(([, c]) => S.HITS.includes(c.kind));
   listen(list);
+  for (const k of more) if (!s.singles[k]) more.delete(k);
   if (location.hash !== '#case') positions.clear();
   for (const [k, c] of list.sort((a, b) => b[1].price - a[1].price)) positions.set(k, c);
   const pockets = [...positions];
@@ -44,13 +47,15 @@ export function renderSingles() {
       <div class="bulk"><span>散卡 ${bulk.n} 张 · 卖同行可得 ${money(bulk.v)}</span>
         <button type="button" data-act="bulk" ?disabled=${!bulk.n}>一键卖散卡</button></div>
       ${pockets.length ? html`<div class="bk-book sb-book"><ol class="bk-page sb-page">${repeat(pockets, ([k]) => k, ([k, c]) => { // keyed: a pocket stays its card's while others sell around it (a lit or flashed pocket too)
-        const gone = !s.singles[k];
+        const gone = !s.singles[k], asked = !gone && !!s.comm && G.commKey(s.comm) === k, open = more.has(k) && !gone;
+        const take = html`<button type="button" data-act="col-take" data-key="${k}" ?disabled=${gone || !canCollect()} title="放进收藏室：只看不卖，不标价">收藏</button>`;
+        const list = html`<button type="button" data-act="list" data-key="${k}" ?disabled=${gone || full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>`;
         return html`<li class="pk sb-pk ${gone ? 'gone' : ''} ${!gone && spotted(c) ? 'spot' : ''}" data-spot="card:${c.name}">
-          <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${!gone && s.comm && G.commKey(s.comm) === k ? html`<i class="cm-tag" title="有人来找这张卡：到上面的找卡委托交付">委托</i>` : nothing}${chip(k)}</button>
+          <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${asked ? html`<i class="cm-tag" title="有人来找这张卡：点「交付」交一张，另外的留着">委托</i>` : nothing}${chip(k)}</button>
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
-          <span class="sb-btns"><button type="button" data-act="col-take" data-key="${k}" ?disabled=${gone || !canCollect()} title="放进收藏室：只看不卖，不标价">收藏</button><button type="button" data-act="list" data-key="${k}" ?disabled=${gone || full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
-            <button type="button" data-act="pedestal" data-key="${k}" ?disabled=${gone} title="摆上收藏室的镇店台，吸引收藏党，但不再出售；台上原来的卡回卡本">镇店</button>
+          <span class="sb-btns">${asked ? html`<button type="button" class="primary" data-act="comm-deliver" ?disabled=${G.revealing()} title="从卡本交一张，现金 +${money(s.comm!.reward, 'exact')}">交付 ${money(s.comm!.reward, 'exact')}</button>` : list}<button type="button" class="sb-dots" aria-expanded=${open ? 'true' : 'false'} aria-label="${c.name} 更多操作" title="更多：${asked ? '上柜、' : ''}收藏、镇店、欣赏" ?disabled=${gone} @click=${() => { if (!more.delete(k)) more.add(k); renderSingles(); }}>⋯</button>
+            ${open ? html`<span class="sb-more">${asked ? list : nothing}${take}<button type="button" data-act="pedestal" data-key="${k}" title="摆上收藏室的镇店台，吸引收藏党，但不再出售；台上原来的卡回卡本">镇店</button><button type="button" aria-label="欣赏${c.name}" @click=${() => inspectCard(c)}>欣赏</button></span>` : nothing}
             <button type="button" data-act="sell" data-key="${k}" data-n="${c.count}" ?disabled=${gone} title="一次卖出这 ${c.count} 张给同行">卖 ${c.count} 张 ${money(c.price * G.BUYLIST * c.count, 'exact')}</button></span></li>`;
       })}</ol></div>` : html`<p class="muted">卡本里没有闪卡：拆包玩家当场拆出的闪卡可能按收卡价卖给你，自己开出的闪卡也放这里。</p>`}`, $('singles'));
 }
-addEventListener('hashchange', () => { positions.clear(); if (!hold) renderSingles(); }); // entering or leaving always forgets the old order, even mid-reveal: the render that follows the release then sorts afresh
+addEventListener('hashchange', () => { positions.clear(); more.clear(); if (!hold) renderSingles(); }); // entering or leaving always forgets the old order, even mid-reveal: the render that follows the release then sorts afresh

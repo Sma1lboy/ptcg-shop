@@ -49,9 +49,9 @@
 | `src/ui/common.ts` | 全页唯一的游戏实例 `G`、金额格式、卡图地址、稀有度名字 |
 | `src/ui/card.ts` | 卡面：全站唯一的 2D 卡（`face` 卡图 + 闪面 + 加载失败的白卡纸、`cap` 卡下的记号和价、`mark` 印刷的稀有度记号 SVG、`back` / `energy` 卡背和能量卡的 SVG 图，分享图也用）。规格在 DESIGN.md「卡面」；开包台拼字符串的地方用 `toHTML()` |
 | `src/ui/inspect.ts` | 共用卡片欣赏：原生 dialog，放大、翻面、指针／触控闪面；复用 `card.ts`，明确关闭键。图鉴未收录的卡不展示原图，翻牌期间卡册入口不得泄露新卡 |
-| `src/ui/collection.ts` | 收藏室 `#gallery`（货柜页展示柜视图最上面的一间房，镇店之宝并在里面）：镇店台加五个固定展位、纯展示与布置模式、实体卡移入／换位／取回、门票与展品总值；不进入售卖展示柜或店员补柜逻辑 |
-| `src/ui/commission.ts` | 找卡委托 `#comm`（货柜页展示柜视图，在展示柜和卡本之间）：这张卡的卡面、报酬、剩余时间、卡在哪、「交付」（卡本里有才是主键）和「不接」。规则、数字和存档在 `game.ts`（`COMM_GAP` 一带）：`state.comm` / `state.commAt` / `state.commPaid`、`deliverCommission()` / `dismissCommission()`，`createGame({ commissions: false })` 关掉；抽卡用自己的随机数（不碰 `random()`），所以不交付时客流、开包哈希和所有带种子的测试都和没有它时逐字一样。卡本（`singles.ts`）和卡册（`binder.ts`）里同一张卡戴「委托」小牌；店里的话（`notice.ts`）出一次「有人来找卡」；顶栏现金浮标写「交付 +$」（`stats.ts` 的 `sources()` 读 `commPaid`）。翻牌期间整格 `inert` |
-| `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/店员（货柜页），`binder` 是欧气页的卡册（战利品 + 各系列图鉴、补卡、亲手开出），`upgrades` + `skills` 是成长页（店铺等级、开分店和名气加成、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径，`guide` 是新手引导：一个原生 popover（`#coach`）贴在当前步要按的按钮旁，步骤从存档状态推出，页脚「新手引导」重放 |
+| `src/ui/collection.ts` | 收藏室 `#gallery`（货柜页展示柜视图最上面的一间房，镇店之宝并在里面）：镇店台加五个固定展位、纯展示与布置模式、实体卡移入／换位／取回、门票与展品总值；没有展品且不在布置时只是一行「收藏室 0/6 · 布置」，不画空格；不进入售卖展示柜或店员补柜逻辑 |
+| `src/ui/commission.ts` | 找卡委托 `#comm`（货柜页展示柜视图，在展示柜和卡本之间）：没有委托时只有标题条一行状态；有委托时是这张卡的卡面、报酬、剩余时间、卡在哪和「不接」。「交付 $x」不在这里，是卡本（`singles.ts`）里放着这张卡的那一格的黄键。规则、数字和存档在 `game.ts`（`COMM_GAP` 一带）：`state.comm` / `state.commAt` / `state.commPaid`、`deliverCommission()` / `dismissCommission()`，`createGame({ commissions: false })` 关掉；抽卡用自己的随机数（不碰 `random()`），所以不交付时客流、开包哈希和所有带种子的测试都和没有它时逐字一样。卡本（`singles.ts`）和卡册（`binder.ts`）里同一张卡戴「委托」小牌；店里的话（`notice.ts`）出一次「有人来找卡」；顶栏现金浮标写「交付 +$」（`stats.ts` 的 `sources()` 读 `commPaid`）。翻牌期间整格 `inert` |
+| `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`shelf` 是货架页的一张系列表（每个系列一行：库存条、标价、黄键「补到满」＝缺口进货并上架〔`common.ts` 的 `refillQuote`，和「X 卖空了」同一个报价〕、「开 1 包」，行里是这个系列的价签条和一句结论，「更多」里放进 10／进满仓库／开 10 包／换货架／店员自动补货），没有货架墙；`goals` 是给系列行供价签条和结论（`priceRail` / `packCust`）、展示柜视图的找卡缺货表加一句话、店员一行（货柜页），`binder` 是欧气页的卡册（战利品 + 各系列图鉴、补卡、亲手开出），`upgrades` + `skills` 是成长页（店铺等级、开分店和名气加成、升级和技能的口袋、手气的官方/加成后概率对照；债没还清时开分店一格折成一行，页上只有页头一个「开分店」键），`singles` 是卡本（每格「上柜」「卖」加一个 ⋯ 展开收藏／镇店／欣赏；当前委托要的那张卡的格子换成黄色「交付」），`stats` 渲染顶栏和 `#playmode`（标题条「挂机中 +25%」加一行下一个目标，闲钱够了就是「升级 $X」键，调 `G.upgrade` / `G.learn`），`sources` 是页脚的来源、游戏设定（含挂机与离线规则）和价格口径，`guide` 是新手引导：一个原生 popover（`#coach`）贴在当前步要按的按钮旁，步骤从存档状态推出，页脚「新手引导」重放 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽／滑动／空格输入及 3D 适配。命令式 DOM；`mat.up` / `mat.cur` 管翻牌进度，`held` 镜像 3D 举牌状态，说明牌和「放回」键跟它走。举牌可用放回键、桌面点击、Esc／X、空格／回车／Z 结束，对话框优先处理自己的键。撕包有六种撕法，拖动的起点和方向决定（2D 的指针输入在这里，3D 的在 table3d.js，规则同在 series.ts）；点一下、空格照「上次的撕法」，记在 localStorage `ptcg.tear`，经 `tearStyle()` / `onTear(style)` 和 3D 台面来回 |
 | `src/table3d.js` | 开包台 three.js 场景，纯演出，不读游戏状态。`mountTable(el, { onTear(style), onFlip, onDone, onPick, onLost, onHold, onLook, tearStyle, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, lookAt, putBack, flip, flipAll, resize, dispose }`。`tearStyle()` 给点一下／空格／`flip(0)` 用的撕法（`TearId`），`onTear(style)` 报这包实际怎么撕开的。`showShelf(items)` 读 mat.ts 提供的 `{ set, n, off }`；`showBatch(set,packs,picks,{news,quick})` 的重点卡与新卡下标由 mat.ts 决定。`onLook(k)` 在第 k 张举到眼前时触发，放下时为 -1；`putBack()` 放回举着的卡。`ready` 等待 three 加载；静止不渲染，开发时 `window.__t3` 读帧数和 renderer.info |
 | `src/series.ts` | 十个系列的演出数据与纯函数：原创图形、出牌顺序、撕口轨迹、晃动幅度；3D 与 2D 共用笔画和节奏，不读取游戏状态，不消耗开包随机数。还有撕包的六种撕法（`TEAR_IDS`）：`tearFromGesture` 由起手位置和方向选撕法，`tearAlong` / `tearFlight` / `tearPose` / `tearClip` 是 3D 与 2D 共用的进度、飞走轨迹、拖动姿势和包身毛边 |
@@ -65,12 +65,12 @@
 | `src/fx.ts` | 全部声音的合成（WebAudio，不用音频文件）：开包、店里（风铃/收银/倒爷/催账/锤子/卷帘门…）、界面按键、循环的环境声；总线、音量、静音、环境声开关（localStorage `ptcg.mute` `ptcg.vol` `ptcg.amb`）。还有稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `src/ui/sound.ts` | 什么时候出声：订阅 `G.on`（顾客走 `state.recent`，债务走 `debt.ts`）、翻页、按键、剧情的 `ptcg:line`；同类声音限频，开包演出和剧情时店里不出声；页脚「声音」弹层。规矩见 DESIGN.md「声音」 |
 | `src/ui/menu.ts` | 键盘菜单：方向键在最上面那一层里移 ▶ 光标到最近的控件，Enter/空格/Z 确认，Esc/X 退出；声音走 `ptcg:ui`。规矩见 DESIGN.md「菜单与光标」 |
-| `src/ui/walk.ts` | 货柜页顶上的店面地板：店主、店员、每位进店顾客（按 `state.recent`）和收账的九姐阿豆是像素小人，走进来、头顶冒 ♪ … ? 气泡、走出去。纯演出，只读状态。规矩见 DESIGN.md「店里的人」 |
+| `src/ui/walk.ts` | 货柜页的店面地板（桌面在视图栏下面，手机在系列表下面）：店主、店员、每位进店顾客（按 `state.recent`）和收账的九姐阿豆是像素小人，走进来、头顶冒 ♪ … ? 气泡、走出去。纯演出，只读状态。规矩见 DESIGN.md「店里的人」 |
 | `src/assets.ts` | 卡图/logo 的地址：本地镜像或 CDN 回退 |
 | `style.css` | 全部样式与 token |
-| `index.html` | Vite 外壳：六页导航（开包／货柜／欧气／成长／成就／排行）与页脚；收藏室 `#gallery` 在货柜页展示柜视图顶上。面板容器 id 是各自 render 的目标 |
+| `index.html` | Vite 外壳：六页导航（开包／货柜／欧气／成长／成就／排行）与页脚；收藏室 `#gallery` 在货柜页展示柜视图顶上。面板容器 id 是各自 render 的目标；货柜页的 DOM 顺序是手机的（页签、系列表、`#floor`、`#playmode`），桌面由 `style.css` 的 `order` 把后两者提到表上面 |
 | `src/ui/layout.ts` | hash 路由 `#open #shelf #case #luck #grow #ach #board`，旧书签 `#collection` 用 replaceState 改成 `#case`；`currentPage()` 是规范化页面值，未知 hash 回退开包，挂机判定共用它。只隐藏不重建页面；`#case` 是货柜的展示柜视图；处理开包前切页和成长／货柜提示点 |
-| `src/ui/rail.ts` | 开包页右栏：仓库里的包、手气等级与官方／游戏加成后概率、升级回执、欧气结论。`skills.ts` 提供手气展示数据；挂机／离线收益面板 `#playmode` 由 `stats.ts` 渲染，放在货柜页（货架与展示柜都显示），挂机只在货柜页生效 |
+| `src/ui/rail.ts` | 开包页右栏：仓库里的包、手气等级与官方／游戏加成后概率、升级回执、欧气结论。`skills.ts` 提供手气展示数据；挂机面板 `#playmode` 由 `stats.ts` 渲染，放在货柜页（货架与展示柜都显示），挂机只在货柜页生效；店内动态只在货架视图 |
 | `DESIGN.md` | 设计依据：题材、token 角色和约束、字、布局、组件规矩 |
 | `ROADMAP.md` | 产品化 loop 的状态：当前里程碑、候选里程碑、待办池（标里程碑、文件、验收）、竞品拆解、完成记录。每轮开始读、结束写 |
 | `vite.config.ts` | 构建：单文件、three 走 CDN import map、pen 模式和 1 MB 上限 |

@@ -209,27 +209,23 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* 开包: the table takes the viewport; a narrow rail picks the next pack */
 .page-open { grid-template-columns: minmax(0, 1fr) 300px; }
 .mat { position: relative; height: calc(100dvh - var(--top-h) - 40px); min-height: 460px; overflow: auto; }
-/* 货柜: two views, each panel tagged data-view and shown by <html data-page> (layout.ts). 货架: the shelf across the page, then
-   pack buyers | clerk + log. 展示柜: case + singles | case browsers. Across the top a bar with the two view tabs (the main menu's
-   tab plates, one size down; the count on each is who left that half empty-handed) and the customers' head for both */
+/* 货柜: two views, each panel tagged data-view and shown by <html data-page> (layout.ts). 货架: the set table (the customers are in its
+   rows), then the shop floor and 挂机, the log. 展示柜: case + singles | the 找卡的 table. Across the top a bar with the two view tabs
+   (the main menu's tab plates, one size down). DOM order is the phone's: tabs, the set table, then #floor and #playmode; from 780px
+   those two go above the table */
 .page-shelf { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-.page-shelf > :is(.shelf, .views, #playmode) { grid-column: 1 / -1; }
+.page-shelf > :is(.shelf, .views, #playmode, #floor) { grid-column: 1 / -1; }
+@media (min-width: 780px) { .page-shelf > .views { order: -3; } .page-shelf > #floor { order: -2; } .page-shelf > #playmode { order: -1; } }
 :root:not([data-page="case"]) .page-shelf > [data-view="case"], :root[data-page="case"] .page-shelf > [data-view="shelf"] { display: none; }
 .views { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 28px; }
 .subnav { display: flex; gap: 6px; }
 .subnav a { font-size: var(--fs-body); height: 38px; }
-/* Counts must not add a flex row or push a transaction key when they gain a digit. */
-.cust-head { flex: 1 1 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(80px, 160px) minmax(0, 1.5fr); align-items: center; gap: 4px 14px; margin: 0; }
-.cust-head .c-meta { margin: 0; }
-.cust-head .cust-bar { width: 100%; max-width: none; margin: 0; }
-.cust-head :is(.c-meta, .cust-sum) { min-block-size: 2lh; }
-@media (min-width: 1100px) { .cust-head :is(.c-meta, .cust-sum) { min-block-size: 1lh; } }
 /* 店里的人 (ui/walk.ts): a BW indoor map under the view tabs — the back wall (planked, a window, two wall shelves of packs, a
    baseboard), checker floor tiles, the counter on the left with the owner behind it, the door with its mat on the right. The room
    is an illustration, so its colours are fixed (the same in both themes, like the story art): pale cool wall and tiles, the
    frame-grey trim. People are 4-frame pixel strips (public/gen/walk) at 2×: walking steps through the frames, facing left is the
    strip mirrored. Balloons are BW emote bubbles */
-.floor { position: relative; flex: 1 1 100%; height: 132px; overflow: hidden; border: 3px solid var(--frame); border-radius: var(--r-frame);
+.floor { position: relative; height: 132px; overflow: hidden; border: 3px solid var(--frame); border-radius: var(--r-frame);
   background:
     linear-gradient(#9FC8EE, #D6E9F8) calc(50% - 40px) 8px / 64px 24px no-repeat,            /* the window pane */
     linear-gradient(#3A4150, #3A4150) calc(50% - 40px) 6px / 68px 28px no-repeat,            /* its frame */
@@ -311,125 +307,59 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .rail) .primary:disabled { color: var(--sticker-ink); }
 
-/* shelf (src/ui/shelf.ts): no boxes. Cards two-up by default; from 1340px of shelf width one table-like row per set under a single header,
-   so a long lineup of sets reads as a list, not a wall of blocks (the rows share the header's columns through subgrid) */
+/* shelf (src/ui/shelf.ts): ONE table of packs, no boxes. A row per set — name · stock · price · the key — with the customers' price rail
+   and its verdict under it and a 更多 fold. One column of rows by default (stacked: name and key on a line, the rest under it; folded
+   to that line below 700px); from 1000px of shelf width a table under a single header, the rows sharing its columns through subgrid */
 .shelf > h2 { margin-bottom: 4px; }
-#shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); column-gap: 40px; }
+#shelf { display: grid; grid-template-columns: minmax(0, 1fr); }
+#shelf > * { grid-column: 1 / -1; }
 .shelf-head { display: none; }
-.set { display: flex; flex-direction: column; gap: 4px; padding: 16px 0; border-bottom: 1px solid var(--line); min-width: 0; }
-.s-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.shelf-meta { margin: 0 0 4px; font-size: var(--fs-cap); color: var(--muted); max-width: 72ch; } .shelf-meta b { color: var(--ink); font-weight: 600; }
+.shelf-alert { margin: 4px 0 10px; max-width: 72ch; color: var(--ink); } .shelf-alert small { display: block; margin-top: 4px; color: var(--muted); }
+.shelf-alert button { margin-left: 4px; vertical-align: baseline; }
+#clerk p { margin: 12px 0 0; font-size: var(--fs-cap); }
+.set { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 14px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.set > :where(:not(.s-id, .s-act)) { grid-column: 1 / -1; } /* :where, so the table's own placements below win */
+.s-id { grid-column: 1; grid-row: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
+.s-act { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.s-act .primary { min-width: 9.5em; } /* the key keeps its width as the quote's digits change */
 .set .logo { width: 64px; height: 36px; object-fit: contain; flex: none; }
 .set-name { min-width: 0; flex: 1; }
 .set-name h3 { margin: 0; font-size: var(--fs-h); line-height: 1.3; }
-.set-name span { font-size: var(--fs-cap); color: var(--muted); }
+.set-name > span { display: block; font-size: var(--fs-cap); color: var(--muted); }
 .heat { margin-left: 8px; font-size: var(--fs-cap); font-weight: 600; white-space: nowrap; vertical-align: 1px; } /* after the name, not in its own column: the line under the name keeps the full width */ .heat.hot { color: var(--ink); } .heat.cold { color: var(--muted); }
-.set-mkt { margin: 0 0 4px; font-size: var(--fs-cap); color: var(--muted); }
-.verb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-height: 36px; }
-.v-k { width: 2.4em; flex: none; font-size: var(--fs-cap); color: var(--muted); }
-.v-n { min-width: 4.2em; color: var(--muted); font-size: var(--fs-cap); } .v-n b { color: var(--ink); font-size: var(--fs-body); font-weight: 600; }
-.v-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
-/* Purchase controls keep their slots when cash or stock changes; a second click must not land on a larger order. */
-.v-buy .v-btns { display: grid; grid-template-columns: repeat(2, 7.8em); flex: none; }
-.v-shelf .v-n { min-height: 2.8em; }
 .sticker { display: inline-block; background: var(--sticker); color: var(--sticker-ink); font: 600 var(--fs-body)/1.35 var(--font-tag); padding: 1px 7px; border-radius: 2px; transform: rotate(-2deg); box-shadow: 0 1px 0 rgba(0, 0, 0, .18); }
-.set.locked .logo { filter: grayscale(1); opacity: .5; } .set.locked h3 { color: var(--muted); }
-.v-n small { display: block; font-size: var(--fs-cap); line-height: 1.3; } .v-n small b { font-size: var(--fs-cap); }
-/* shelf wall (shelf.ts wall()): one piece of shop furniture across the panel, a bay per shelf, bolted side by side. Every part is
-   a thing on a real wall unit: the header card over each bay (a tab plate with the set's logo), the pegboard back (flat, like a BW
-   interior tile; empty spots show the back, not a dashed box), one board per 加层 level whose lip is the --frame edge, packs
-   standing face-out (foil, logo, the heat-seal crimps), and the dark price rail on the bottom lip with the player's yellow
-   label clipped to it. The rail is the same in both themes, so text on it is --hud-ink. The next 加一个货架 is an unbuilt bay's
-   outline at the end. Controls and notes sit under the furniture, on the page */
-.wall { grid-column: 1 / -1; padding: 4px 0 20px; border-bottom: 1px solid var(--line); min-width: 0; }
-.wall-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 0 0 14px; }
-.wall-up { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
-.wall-note { margin: 12px 0 0; font-size: var(--fs-cap); color: var(--muted); }
-.wall-alert { margin: -4px 0 14px; max-width: 72ch; color: var(--ink); } .wall-alert small { display: block; margin-top: 4px; color: var(--muted); }
-.wall-alert button { margin-left: 4px; vertical-align: baseline; }
-.racks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 22px 0; }
-.rack { display: flex; flex-direction: column; min-width: 0; --face: linear-gradient(135deg, var(--foil-3), var(--foil-2) 35%, var(--foil-1) 55%, var(--foil-2) 75%, var(--foil-3)); }
-.r-sign { display: flex; align-items: center; justify-content: center; gap: 6px; height: 40px; margin: 0; padding: 0 10px; overflow: hidden;
-  border: 2px solid var(--frame); border-bottom: 0; border-radius: 8px 8px 0 0; background: var(--hud); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12);
-  font: 400 var(--fs-cap)/1 var(--font-pixel); color: var(--hud-ink); text-shadow: 1px 1px 0 #0B0D10; white-space: nowrap; }
-.r-sign img { height: 24px; max-width: 58%; object-fit: contain; flex: none; }
-.r-sign span { overflow: hidden; text-overflow: ellipsis; }
-.rack.empty .r-sign { color: var(--hud-muted); font-weight: 700; }
-.r-bay { position: relative; display: flex; flex-direction: column; padding: 0 8px; border-inline: 2px solid var(--frame);
-  background:
-    radial-gradient(circle, var(--line-strong) 1px, transparent 1.6px) 3px 3px / 12px 12px, color-mix(in oklab, var(--ink) 8%, var(--panel));
-  box-shadow: inset 0 10px 12px -8px rgba(4, 8, 14, .45); }
-/* a board seen a little from above: its top face (a lighter band the packs stand on), then the frame-coloured lip */
-.board { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); align-items: end; gap: 3px; margin-inline: -8px; padding: 12px 9px 5px;
-  background: linear-gradient(to top, color-mix(in oklab, var(--frame) 30%, var(--panel)) 0 6px, transparent 6px); border-bottom: 5px solid var(--frame); }
-.board i { position: relative; aspect-ratio: 5 / 8.4; }
-/* a pack face-out, painted like the 3D pack (table3d.js drawFront, colours from sets.ts LOOK): the foil gradient, the set logo up top,
-   the chase card's art in the middle feathered into the foil, the darker foot, heat-seal crimps. Without the look (unknown set) it
-   falls back to plain foil. d1–d3: that many packs of the row behind it, peeking over its top */
-/* Do not share .pk with binder pockets: its padding, border and negative margin change a stocked board's height. */
-.board i.shelf-pack { --back: color-mix(in oklab, var(--c1, var(--foil-3)) 55%, #0A0F1C); position: relative; border-radius: 2px; overflow: visible;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 2px 2px rgba(4, 8, 14, .35);
-  background: var(--logo) 50% 8% / 90% auto no-repeat,
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, .28) 0 1px, rgba(255, 255, 255, .25) 1px 2px) top / 100% 6% no-repeat,
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, .28) 0 1px, rgba(255, 255, 255, .25) 1px 2px) bottom / 100% 5% no-repeat,
-    linear-gradient(transparent 68%, var(--c2, transparent) 90%),
-    linear-gradient(160deg, var(--c0, var(--foil-3)), var(--c1, var(--foil-2)) 50%, var(--c2, var(--foil-1))); }
-.board i.shelf-pack::before { content: ""; position: absolute; inset: 26% 0 24%; background: var(--art, none) 50% 17% / 118% auto no-repeat;
-  -webkit-mask: linear-gradient(transparent, #000 22%, #000 70%, transparent); mask: linear-gradient(transparent, #000 22%, #000 70%, transparent); }
-.rack[style*="--front"] .board i.shelf-pack { background: var(--front) 50% 50% / 100% 100%; } /* the printed front: logo, art and crimps are in the picture */
-.rack[style*="--front"] .board i.shelf-pack::before { display: none; }
-.board i.shelf-pack::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, .55) 45%, transparent 60%); mix-blend-mode: soft-light; }
-.board i.shelf-pack.d1 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 0 2px 2px rgba(4, 8, 14, .35); }
-.board i.shelf-pack.d2 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C), 0 2px 2px rgba(4, 8, 14, .35); }
-.board i.shelf-pack.d3 { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 1px -3px 0 0 var(--back), 2px -6px 0 0 color-mix(in oklab, var(--back) 80%, #0A0F1C),
-  3px -9px 0 0 color-mix(in oklab, var(--back) 62%, #0A0F1C), 0 2px 2px rgba(4, 8, 14, .35); }
-.r-out { position: absolute; left: 50%; bottom: 30px; translate: -50% 0; rotate: -4deg; padding: 2px 8px; border: 1.5px solid var(--muted); border-radius: 2px;
-  font: 700 var(--fs-cap)/1.3 var(--font-body); color: var(--muted); background: var(--panel); white-space: nowrap; }
-.r-rail { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; margin: 0; padding: 3px 10px 4px;
-  background: var(--hud); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14);
-  font-size: var(--fs-cap); color: var(--hud-muted); }
-.r-rail b { color: var(--hud-ink); font-weight: 600; }
-.r-rail .sticker { margin-block: -6px -2px; }
-.rack.empty .r-bay { background: radial-gradient(circle, var(--line-strong) 1px, transparent 1.6px) 3px 3px / 12px 12px, color-mix(in oklab, var(--ink) 5%, var(--panel)); }
-.rack.ghost .r-sign, .rack.ghost .r-bay { border: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; color: var(--muted); }
-.rack.ghost .r-sign { border-bottom: 0; text-shadow: none; } .rack.ghost .r-bay { border-top: 0; padding-bottom: 30px; } /* the rail's height. No hard shadow: on the pale page it doubled every stroke */
-.rack.ghost .board { border-bottom: 2px dashed var(--line-strong); border-image: none; background: none; box-shadow: none; }
-.rack.ghost .r-ctl { margin-top: 0; } .rack.ghost .r-ctl button { flex: 1; }
-/* 卖出落在墙上 (shelf.ts listen): the packs a customer took lift off the board and fade; a chip from the till (the top bar's .delta:
-   the dark display glass, the money in --mat-gain as the cash window's delta) rises from the price rail and fades. A sold-out shelf
-   that lost a buyer shakes its sign once and the chip says how many walked out, in the display's muted ink (it is news, not money).
-   Pointed at from the 顾客 panel, a shelf gets the cursor's blue ring. Reduced motion: the chip stands still for its 2.4 s, no lift */
-.board i .lift { position: absolute; inset: 0; z-index: 1; pointer-events: none; animation: lift .9s cubic-bezier(.3, .7, .4, 1) forwards; }
-@keyframes lift { 30% { opacity: 1; transform: translateY(-14%) rotate(-3deg); } to { opacity: 0; transform: translateY(-46%) rotate(-5deg); } }
-.r-beat { position: absolute; right: 6px; bottom: 6px; z-index: 2; padding: 1px 7px; border-radius: 3px; background: var(--hud); box-shadow: 0 2px 6px rgba(4, 8, 14, .4);
-  color: var(--hud-ink); font: 600 var(--fs-cap)/1.5 var(--font-body); white-space: nowrap; pointer-events: none; animation: beat 2.4s ease-out forwards; }
-.r-beat em { font: 700 var(--fs-body)/1 var(--font-tag); font-style: normal; color: var(--mat-gain); }
-.r-beat.lost { color: var(--hud-muted); }
-@keyframes beat { from { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } to { opacity: 0; transform: translateY(-18px); } }
-.r-out.shake { animation: shake .5s ease-out; }
-@keyframes shake { 20% { rotate: -9deg; } 45% { rotate: 1deg; } 70% { rotate: -6deg; } }
-.rack.lit .r-bay { box-shadow: inset 0 10px 12px -8px rgba(4, 8, 14, .45), 0 0 0 2px var(--sel); }
-.rack.lit .r-sign { filter: brightness(1.25); }
-.r-swap button { margin-left: 4px; padding: 2px 10px; min-height: 28px; font-size: var(--fs-cap); }
-@media (prefers-reduced-motion: reduce) { .board i .lift { display: none; } .r-beat { animation: none; } }
-/* Sales and shortage reports come and go; their shelf space must not move the buying controls below.
-   Keep every report and the swap action readable on narrow racks instead of truncating them to hover-only titles. */
-.r-notes { block-size: 5lh; flex: none; overflow: auto; scrollbar-gutter: stable; font-size: var(--fs-cap); }
-.r-miss { margin: 6px 6px 0; font-size: var(--fs-cap); color: var(--muted); } .r-miss b { color: var(--ink); font-weight: 600; }
-.r-miss + .r-miss { margin-top: 2px; }
-.r-ctl { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding: 8px 6px 0; }
+/* stock: 货架 n/cap with its bar, the back room under it */
+.s-stock { display: grid; grid-template-columns: auto minmax(48px, 1fr); align-items: center; gap: 2px 8px; font-size: var(--fs-cap); }
+.s-stock b { font-size: var(--fs-body); font-weight: 600; color: var(--ink); }
+.s-stock .muted { grid-column: 1 / -1; }
+.s-price { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.s-price .pricer, .s-price .margin { margin-left: 0; }
+.s-cust .c-note { margin-top: 2px; }
+.s-cust .c-rule { margin-top: 6px; }
+.set-locked { display: flex; align-items: center; gap: 12px; margin: 12px 0 0; font-size: var(--fs-cap); color: var(--muted); } .set-locked .bar { flex: 0 1 140px; }
+/* 更多: the rare keys (进 10, 进满仓库, 开 10 包, 换货架, 店员自动补货) behind a fold */
+.s-more { font-size: var(--fs-cap); }
+.s-more summary { display: flex; align-items: center; width: max-content; min-height: 28px; cursor: pointer; color: var(--muted); list-style: none; }
+.s-more summary::-webkit-details-marker { display: none; }
+.s-more summary::before { content: ""; margin: 0 6px 0 0; border-left: 6px solid var(--muted); border-block: 4px solid transparent; transition: transform .15s; }
+.s-more[open] summary::before { transform: rotate(90deg); }
+.s-more summary:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
+.m-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.m-place, .m-auto { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 /* the shelf picker is a BW list box: pale field, dark rim, the ▼ of a BW menu */
-/* flex-basis 7.5em: the set's name gets its own row when the bay is narrow (a phone's 超电突围 lost its last glyph) */
-.r-ctl select { flex: 1 1 7.5em; min-width: 0; min-height: 34px; padding: 4px 24px 4px 8px; appearance: none; border: 2px solid var(--frame); border-radius: 8px; color: var(--btn-ink); font: 400 var(--fs-cap)/1.5 var(--font-pixel);
+.m-place select { min-width: 0; min-height: 34px; padding: 4px 24px 4px 8px; appearance: none; border: 2px solid var(--frame); border-radius: 8px; color: var(--btn-ink); font: 400 var(--fs-cap)/1.5 var(--font-pixel);
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0h10L5 6z' fill='%23808A99'/%3E%3C/svg%3E") right 8px center no-repeat, var(--btn-face);
   box-shadow: inset 0 -3px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)); }
-.r-ctl select:hover { box-shadow: inset 0 -3px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)), 0 0 0 2px var(--sel); }
-.r-ctl option { background: var(--btn-face); color: var(--btn-ink); }
+.m-place select:hover:not(:disabled) { box-shadow: inset 0 -3px 0 color-mix(in oklab, var(--btn-face) 72%, var(--frame)), 0 0 0 2px var(--sel); }
+.m-place select:disabled { opacity: .6; cursor: not-allowed; }
+.m-place option { background: var(--btn-face); color: var(--btn-ink); }
 .page-shelf > .shelf { container-type: inline-size; }
 /* one column of sets (a phone, or the receipt squeezing the page): each set folds to one row — logo, name, where it stands
-   (仓库 · 货架 · the price label, or 没上架 · who missed it) and the one next step as the row's yellow key; tapping the name opens
-   the full controls, and while open the row's key steps aside so the set still has one yellow key. Two columns and up never fold */
+   (仓库 · 货架 · the price label, or 没上架 · who missed it) and the key; tapping the name opens the rest (stock, price, 开 1 包, the
+   rail and its verdict, 更多). Two columns and up never fold */
 .fold { all: unset; }
-.s-sum, .s-go { display: none; }
+.set-name > .s-sum { display: none; }
 @container (max-width: 699px) {
   .s-id { position: relative; }
   .fold { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -437,31 +367,27 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
   .set.open .fold::before { transform: rotate(90deg); }
   .fold::after { content: ""; position: absolute; inset: -12px 0; } /* the whole row is the fold's hit area, under the key */
   .fold:focus-visible { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
-  .s-go { display: block; position: relative; z-index: 1; flex: none; max-width: 45%; }
-  .s-go button { white-space: normal; }
   .set:not(.open) { padding: 12px 0; }
-  .set:not(.open, .locked) :is(.s-en, .set-mkt, .verb) { display: none; }
-  .set:not(.open) .s-sum { display: block; font-size: var(--fs-cap); line-height: 1.6; color: var(--muted); }
+  .set:not(.open) > :not(.s-id, .s-act), .set:not(.open) :is(.s-en, .set-mkt), .set:not(.open) .s-act > :not(.primary) { display: none; }
+  .set:not(.open) .s-act { position: relative; z-index: 1; max-width: 46cqw; }
+  .set:not(.open) .s-act .primary { min-width: 0; white-space: normal; }
+  .set:not(.open) .s-sum { display: block; line-height: 1.6; }
   .s-sum b { color: var(--ink); font-weight: 600; } .s-sum .sticker { font-size: var(--fs-cap); margin-left: 2px; }
-  .set.open .s-go { display: none; }
+  .set.open .s-id { grid-column: 1 / -1; }
+  .set.open .s-act { grid-column: 1 / -1; grid-row: auto; justify-content: flex-start; }
 }
-@container (min-width: 1340px) { /* the table's own width, not the viewport's: the closing receipt narrows the page while it hangs there */
-  #shelf { grid-template-columns: minmax(240px, 1fr) repeat(4, auto); column-gap: 16px; }
-  .shelf-head, .set { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; }
+@container (min-width: 1000px) { /* the table's own width, not the viewport's: the closing receipt narrows the page while it hangs there */
+  #shelf { grid-template-columns: minmax(250px, 1.2fr) minmax(150px, .7fr) auto auto; column-gap: 20px; }
+  .shelf-head, .set { display: grid; grid-template-columns: subgrid; align-items: center; }
   .shelf-head { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--fs-cap); color: var(--muted); }
-  .set { padding: 12px 0; row-gap: 2px; column-gap: normal; } /* normal = the parent grid's gap; a subgrid with its own gap drifts off the header */
+  .set { padding: 12px 0; row-gap: 4px; column-gap: normal; } /* normal = the parent grid's gap; a subgrid with its own gap drifts off the header */
   .s-id { grid-column: 1; grid-row: 1; }
-  .set-mkt { grid-column: 1; grid-row: 2; margin: 0 0 0 76px; } /* under the name, past the logo */
-  .set .verb { grid-row: 1 / span 2; }
-  .set.locked .set-mkt { grid-column: 2 / -1; grid-row: 1; margin: 0; }
-  .v-n { min-width: 4.6em; }
-  .v-k { display: none; }
-  .verb { flex-wrap: nowrap; min-height: 0; }
-  .v-btns, .page .pricer { margin-left: 0; flex-wrap: nowrap; }
-  /* the 货架 column is sized for its widest state (「摆上空货架 199 包」, 「12 位没买到」), so buying a box or a walk-in
-     missing out doesn't widen it and squeeze the names into four lines */
-  .set button { white-space: nowrap; } /* squeezed auto columns broke 「开 10 包」 one character per line; the table starts at 1340 wide: its five columns need 240px of name + ~1030px of controls + gaps (below that they overflowed and clipped 「开 10 包」) */
-  .v-shelf .v-n { min-width: 6.2em; } .v-shelf [data-act="shelve"] { min-width: 10.6em; }
+  .s-stock { grid-column: 2; grid-row: 1; }
+  .s-price { grid-column: 3; grid-row: 1; flex-wrap: nowrap; }
+  .s-act { grid-column: 4; grid-row: 1; flex-wrap: nowrap; }
+  .s-cust { grid-column: 2 / 4; grid-row: 2; }
+  .s-more { grid-column: 4; grid-row: 2; align-self: start; }
+  .set button { white-space: nowrap; }
 }
 button:disabled { cursor: not-allowed; }
 
@@ -668,9 +594,11 @@ button:disabled { cursor: not-allowed; }
 .sb-btns { display: flex; flex-wrap: wrap; gap: 4px; }
 .page .sb-btns button { flex: 1 1 auto; min-width: 44px; min-height: 44px; padding: 2px 6px; font-size: var(--fs-cap); }
 .page .sb-btns [data-act="sell"] { flex-basis: 100%; }
+.page .sb-btns .sb-dots { flex: 0 0 44px; padding: 2px 0; }
+.sb-more { display: flex; flex: 1 1 100%; flex-wrap: wrap; gap: 4px; }
 .sb-pk.gone .sb-btns { visibility: hidden; }
-/* 找卡委托 (commission.ts): one request, in the same window as the 卡本 under it. The card (a pocket's width) on the left, the words, the time bar and the two keys
-   stacked on the right. 委托 on a pocket in the 卡本 / 卡册 is the 新 tag's twin: ink face, page-colour type, never yellow (yellow is the 交付 key) */
+/* 找卡委托 (commission.ts): one request, in the same window as the 卡本 under it. The card (a pocket's width) on the left, the words, the time bar and 不接
+   stacked on the right. 委托 on a pocket in the 卡本 / 卡册 is the 新 tag's twin: ink face, page-colour type, never yellow (yellow is the 交付 key, on the 卡本 pocket) */
 .cm { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px 16px; align-items: start; }
 .cm-card { display: grid; gap: 4px; }
 .cm-card .cf { width: 100%; }
@@ -806,6 +734,13 @@ button:disabled { cursor: not-allowed; }
 .v-gone::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse 70% 55% at 50% 30%, var(--sel-glow), transparent 70%); animation: flare 1.1s ease-out forwards; }
 @keyframes gone { 25% { opacity: 1; transform: translateY(-8px); } to { opacity: 0; transform: translateY(-40px) scale(.94); } }
 @keyframes flare { from { opacity: 0; } 20% { opacity: 1; } to { opacity: 0; } }
+/* the till chip (case.ts stamp, singles.ts chip): the top bar's .delta, the dark display glass, the money in --mat-gain as the cash
+   window's delta; it rises from the cell's foot and fades in 2.4 s. Reduced motion: it stands still for those 2.4 s */
+.r-beat { position: absolute; right: 6px; bottom: 6px; z-index: 2; padding: 1px 7px; border-radius: 3px; background: var(--hud); box-shadow: 0 2px 6px rgba(4, 8, 14, .4);
+  color: var(--hud-ink); font: 600 var(--fs-cap)/1.5 var(--font-body); white-space: nowrap; pointer-events: none; animation: beat 2.4s ease-out forwards; }
+.r-beat em { font: 700 var(--fs-body)/1 var(--font-tag); font-style: normal; color: var(--mat-gain); }
+@keyframes beat { from { opacity: 0; transform: translateY(8px); } 12% { opacity: 1; transform: none; } 70% { opacity: 1; } to { opacity: 0; transform: translateY(-18px); } }
+@media (prefers-reduced-motion: reduce) { .r-beat { animation: none; } }
 .v-beat { bottom: 8px; left: 50%; right: auto; translate: -50% 0; z-index: 4; }
 .v-info .v-miss { grid-column: 1 / -1; }
 @media (prefers-reduced-motion: reduce) { .v-gone { display: none; } }
@@ -873,7 +808,10 @@ button:disabled { cursor: not-allowed; }
 .col-rar { color: var(--muted); font-size: var(--fs-cap); }
 #playmode { font-size: var(--fs-cap); }
 #playmode p { margin: 8px 0; }
-#playmode summary { cursor: pointer; }
+/* the empty 收藏室 is one line: the 布置 key sits in the title bar, a notch shorter than a pocket's keys */
+#gallery > h2 button { align-self: center; min-height: 28px; padding: 2px 12px 4px; }
+#gallery:has(> h2:only-child) { padding-bottom: 0; } /* the title bar is the whole window when the room is empty */
+#gallery > h2:only-child { margin-bottom: 0; }
 @media (max-width: 779px) {
   #gallery button, .inspect button { min-height: 44px; }
 }
@@ -883,7 +821,8 @@ button:disabled { cursor: not-allowed; }
   display: flex; flex-wrap: wrap; align-items: start; gap: 12px 40px; font-size: var(--fs-cap); color: var(--muted); }
 .foot details { flex: 1 1 340px; min-width: 0; }
 .foot .disclaimer { flex: 1 1 100%; margin: 0; }
-#playmode .pm-goal { display: grid; grid-template-columns: auto minmax(120px, 1fr); align-items: center; gap: 4px 12px; }
+#playmode .pm-goal { display: grid; grid-template-columns: auto minmax(120px, 1fr); align-items: center; gap: 4px 12px; margin-bottom: 0; }
+#playmode .pm-goal > button { justify-self: start; }
 #playmode .pm-goal small { grid-column: 1 / -1; color: var(--muted); }
 @media (max-width: 560px) { #playmode .pm-goal { grid-template-columns: 1fr; } }
 .foot summary { cursor: pointer; color: var(--ink); font-size: var(--fs-body); font-weight: 600; padding: 6px 0; }
@@ -1068,22 +1007,8 @@ button:disabled { cursor: not-allowed; }
 @container (max-width: 520px) {
   .bk-page.sb-page { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
 }
-.cust-bar { display: flex; height: 8px; gap: 2px; margin-bottom: 6px; }
-.cust-bar span { border-radius: 2px; min-width: 0; }
-.c-sold { background: var(--gain); } .c-pricey { background: color-mix(in oklab, var(--ink) 50%, transparent); } .c-none { background: var(--line); }
-.cust-sum { margin: 0 0 4px; } .cust-sum b { font-weight: 600; }
-/* 顾客 (ui/goals.ts): what the last walk-ins came for, grouped. Pack buyers get one row per set with its price rail */
-.c-meta { font-size: var(--fs-body); font-weight: 400; color: var(--muted); margin-left: 8px; }
-.c-h { font-size: var(--fs-cap); color: var(--muted); margin: 0 0 6px; } /* how to read the rails, under the panel's name plate */
-.c-sets, .c-case { list-style: none; margin: 0; padding: 0; }
-.c-sets > li, .c-case > li { padding: 10px 0; border-top: 1px solid var(--line); }
+/* 顾客 (ui/goals.ts): the verdict under a set's price rail (shelf.ts rows) and the sentence under the 找卡的 table */
 .c-more { display: none; }
-@media (max-width: 779px) { /* phones: the three sets that lost the most customers, the rest behind 再看 N 个系列 (goals.ts FEW) */
-  .c-sets:not(.all) > li:nth-child(n+4) { display: none; }
-  .c-more { display: block; margin: 4px auto 0; }
-}
-.c-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; } .c-row b { font-weight: 600; } .c-row .muted { font-size: var(--fs-cap); }
-.c-n { margin-left: auto; font-size: var(--fs-cap); color: var(--muted); }
 .c-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); } .c-note b { color: var(--ink); font-weight: 600; }
 .c-note button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
 /* 缺货表 (goals.ts gaps): seekers who left empty-handed, a row per set they asked for, a column per rarity tier. Each cell is a
@@ -1102,12 +1027,9 @@ button:disabled { cursor: not-allowed; }
 .gaps td.nil { border-color: transparent; }
 .gaps td.g:not(.nil):hover, .gaps td.g:focus-visible { background: var(--hover); }
 .gaps td.g:not(.nil, .gap) { cursor: pointer; }
-.gaps .g-src td { text-align: left; padding: 0 0 6px; color: var(--muted); line-height: 1.5; }
-.gaps .g-src b { color: var(--ink); font-weight: 600; }
-.gaps .g-src button { margin-left: 8px; min-height: 26px; padding: 2px 10px; vertical-align: middle; }
 .gaps + .c-more { display: none; }
-@media (max-width: 779px) { /* phones: the three sets that lost the most seekers (two rows each: cells + source) */
-  .gaps tbody:not(.all) tr:nth-child(n+7) { display: none; }
+@media (max-width: 779px) { /* phones: the three sets that lost the most seekers (a row each) */
+  .gaps tbody:not(.all) tr:nth-child(n+4) { display: none; }
   .gaps + .c-more { display: block; margin: 4px auto 0; }
   .gaps th:first-child { width: 28%; }
 }
@@ -1141,8 +1063,6 @@ button:disabled { cursor: not-allowed; }
 .c-set::-webkit-slider-thumb { -webkit-appearance: none; width: 1px; height: 100%; }
 .c-set::-moz-range-thumb { width: 1px; height: 100%; border: 0; }
 .c-rule:has(.c-set:focus-visible) .sticker { outline: 2px solid var(--sticker-edge); outline-offset: 2px; }
-.auto { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.auto { gap: 4px; }
 .dx-hand .btns { margin-top: 6px; }
 .dx-sum { margin: 16px 0 0; }
 .dx-total { float: right; font-size: var(--fs-body); font-weight: 500; color: var(--muted); }
@@ -1699,17 +1619,12 @@ button:disabled { cursor: not-allowed; }
   :root[data-page="open"] .pops { top: calc(var(--top-h) + 132px); }
   :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
-  .racks { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 156px; gap: 0; overflow-x: auto; scroll-snap-type: x mandatory;
-    margin-inline: calc(var(--gap) * -1); padding: 0 var(--gap) 6px; scroll-padding-inline: var(--gap); }
-  .rack { scroll-snap-align: start; }
-  .r-ctl select { min-height: 40px; }
+  .s-more summary { min-height: 40px; } .m-place select { min-height: 40px; }
   .subnav { flex: 1 1 100%; } .subnav a { flex: 1; min-width: 0; padding: 0 6px; height: 44px; white-space: nowrap; } .sub-k { display: none; }
-  .cust-head { grid-template-columns: minmax(0, 1fr); gap: 4px 10px; }
-  .cust-head .c-meta { grid-row: 1; } .cust-head .cust-bar { grid-row: 2; } .cust-head .cust-sum { grid-row: 3; }
 }
 @media (max-width: 429px) { .cash .k { display: none; } } /* phones: the coin goes (the money box still reads as 所持金 by its white frame), so a 7-character sum ($129.62, $31,262) fits beside both readouts */
 @media (max-width: 379px) { .sub dd { font-size: var(--fs-cap); } .sub div { padding: 3px 5px; } } /* 320–379: three-digit readouts ("598 包") beside a 7-character sum */
-@media (max-width: 359px) { .due .bar { display: none; } .cust-head .cust-sum { min-block-size: 3lh; } } /* 320–359: retain the bill countdown and reserve the third count line */
+@media (max-width: 359px) { .due .bar { display: none; } } /* 320–359: retain the bill countdown */
 @media (min-width: 780px) and (max-width: 859px) { .due .bar { --due-bar: 44px; --in: 3px; } .due .bar::before { display: none; } .nav a { padding: 0 6px; } }
 
 /* 开包 on a phone turned sideways (844×390, 667×375 …): the viewport is short, not narrow. The table fills the height under the

@@ -31,28 +31,26 @@
       <section id="rail"></section>
     </aside>
   </section>
-  <!-- 货柜 has two views by product line, each with its own half of the customers next to the controls they call for:
-       #shelf 货架 (packs: shelf wall + set table | walk-ins for packs · clerk + shop log) and #case 展示柜 (case + singles | case browsers).
-       All panels stay direct children of the page; data-view says which view shows it (layout.ts sets <html data-page>). -->
+  <!-- 货柜 has two views by product line:
+       #shelf 货架 (packs: ONE set table — stock, price, the key, the customers' price rail and verdict in each row; clerk line; shop log) and
+       #case 展示柜 (case + singles | the 找卡的 shortage table).
+       All panels stay direct children of the page; data-view says which view shows it (layout.ts sets <html data-page>). DOM order is the
+       phone's: the tabs, the set table, then the shop floor and 挂机; style.css puts those two above the table from 780px. -->
   <section class="page page-shelf" id="page-shelf" aria-label="货柜" hidden>
     <div class="views">
       <nav class="subnav" aria-label="货柜">
-        <a href="#shelf">货架<span class="sub-k">&nbsp;· 整包</span><b class="tab-n tab-dot" id="n-packs" hidden></b></a>
-        <a href="#case">展示柜<span class="sub-k">&nbsp;· 单卡</span><b class="tab-n tab-dot" id="n-case" hidden></b></a>
+        <a href="#shelf">货架<span class="sub-k">&nbsp;· 整包</span></a>
+        <a href="#case">展示柜<span class="sub-k">&nbsp;· 单卡</span></a>
       </nav>
-      <p class="cust-head" id="cust-head"></p>
-      <div class="floor" id="floor" aria-hidden="true"></div>
     </div>
-    <section id="playmode" aria-label="挂机与离线收益"></section>
     <section class="shelf" data-view="shelf" aria-labelledby="shelf-h">
-      <h2 id="shelf-h">货架 · 进货</h2>
+      <h2 id="shelf-h">货架 · 补货和定价</h2>
       <div id="shelf"></div>
+      <div id="clerk"></div>
     </section>
+    <div class="floor" id="floor" aria-hidden="true"></div>
+    <section id="playmode" aria-label="挂机与离线收益"></section>
     <div class="col" data-view="shelf">
-      <section id="customers"></section>
-    </div>
-    <div class="col" data-view="shelf">
-      <section id="clerk"></section>
       <section><h2>店内动态</h2><ol class="log" id="log"></ol></section>
     </div>
     <section class="room" id="gallery" data-view="case" aria-label="收藏室"></section>

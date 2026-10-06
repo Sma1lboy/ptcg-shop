@@ -167,8 +167,8 @@ export function noob({ hours = 5, seed = 1, log = 1800 } = {}) {
 
 // 开张的头十分钟 (game.ts OPENING): a new player who plays the story (`story` seconds, the shop clock paused if the game can pause it, else running),
 // buys `packs` packs of the first set they can afford, shelves them at the default tag, and looks in every `look` seconds: restocks `packs` packs
-// if the shelf is empty. Nothing else is bought. With `guide`, the player follows the new-player guide as it is now (guide.ts): 进一架 —
-// a shelf's worth plus the one pack kept back — of every set the shop can sell, each on its own shelf, and the same again for a set
+// if the shelf is empty. Nothing else is bought. With `guide`, the player follows the new-player guide as it is now (guide.ts): the row's
+// 补到满 (ui/common.ts refillQuote: a shelf's worth plus the one pack kept back, bought and shelved in one press) of every set the shop can sell, each on its own shelf, and the same again for a set
 // whose shelf is empty at a look. Reports what the guide's first ten minutes feel like: flipper sweeps and when, seconds with every
 // shelf bare (`bare`) and with some sellable set not on a shelf (`gap`), the 货柜 badge (pack buyers who found their set missing,
 // G.missed) when the story ends and at the tenth minute, cash / profit, and whether the first bill was paid without a loan.
@@ -179,9 +179,18 @@ export function opening({ packs = 10, seed = 1, story = 40, look = 60, minutes =
   if (G.pause) G.pause(true); for (let t = 0; t < story; t++) { advance(1); G.tick(); } if (G.pause) G.pause(false);
   out.badge0 = missed();
   const stockUp = id => {
-    const n = guide ? G.depth() + 1 - (G.state.stock[id] || 0) : packs; if (n > 0) G.buy(id, n);
+    if (guide) { // the row key, as ui/common.ts refillQuote quotes it: the back room's spare packs go up as they are, else the shelf's gap is bought (cash and room permitting, at least 2 packs) and shelved
+      const own = G.shelves().filter(s => s.id === id), st = G.state.stock[id] || 0;
+      if (!own.length && G.shelves().every(s => s.id)) return;
+      const room = own.length ? own.reduce((a, s) => a + G.depth() - s.qty, 0) : G.depth(), up = Math.min(room, st > 1 ? st - 1 : st);
+      if (st > 1 && up) { G.shelve(id, up); return; }
+      const n = Math.min(Math.max(0, Math.min(room + 1 - st, G.WAREHOUSE - st)), Math.floor(G.state.cash / G.wholesale(id)));
+      if (n > 1 && G.buy(id, n)) G.shelve(id, Math.max(0, (G.state.stock[id] || 0) - 1));
+      return;
+    }
+    G.buy(id, packs);
     const i = G.shelves().findIndex(s => s.id === id), j = i >= 0 ? i : G.shelves().findIndex(s => !s.id); if (j >= 0 && i < 0) G.place(j, id);
-    G.shelve(id, guide ? Math.max(0, (G.state.stock[id] || 0) - 1) : packs);
+    G.shelve(id, packs);
   };
   ids.forEach(stockUp);
   let seen = G.state.recent[0]?.at ?? 0;
@@ -236,7 +245,7 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 }
 // ---------- 第一小时 (firstHour): a new player who presses what the guide and the shop's message box tell them to ----------
 // The decision rules are PORTED from src/ui/guide.ts (STEPS, current(), toStock/toRack, GRAD), src/ui/notice.ts (watchShop, pick, holds, fix,
-// the box's printed counts), src/ui/upgrades.ts (nextStep, growCount), src/ui/common.ts (toShelf, shelfFill, restock) and the event wiring of
+// the box's printed counts), src/ui/upgrades.ts (nextStep, growCount), src/ui/common.ts (toShelf, shelfFill, deepFill, refillQuote, restock) and the event wiring of
 // src/ui/story.ts / ach.ts (debtBeat, sceneFor, note/watch/check come from the real modules). Nothing in src/ui is imported (it needs a DOM), so
 // a rule changed there must be changed here: this is a model of the UI, NOT exact UI parity. Deliberate assumptions and divergences:
 //  - time is the fake wall clock, one second a step. The shop clock is paused while a scene is read (G.pause, as the story player does): a scene
@@ -247,18 +256,20 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 //    held: no achievement check, no scene, the box shows only 'out' (as ui does). On release both flush the same second (the UI's 400/600 ms
 //    delays are dropped).
 //  - the guide's 定价 step is answered with 「先按这个价卖」 (default price); 账单 with 「知道了」; no price is ever changed, so 倒爷 sweeps are only the default-price ones.
-//  - the 「钱够升级了」 box: the player goes to 成长 and buys nextStep() when its price is within 闲钱; else, when `others` (default true), the cheapest
-//    level 闲钱 covers (the box says 「够买 N 项」); if nothing is bought the box is waved off (ui would repeat it). Then back to 货柜.
+//  - what used to be boxes (「新到」「钱够升级了」「上柜」「图鉴补到 N%」「仓库留包」, all gone from ui/notice.ts) is persistent UI now, and this player presses it in the same priority order, each after `react` seconds on screen, not while the guide speaks:
+//    the new set's row key on 货柜 (a rack is free, an unlocked set has none: `shelf row`); 展示柜's 补满柜位 (G.fillCase) when a slot is free and caseMoves() > 0, at most once per visit — the player is on the case page after 收卡's / 找卡's keys
+//    and a 委托 delivery, else it costs a tab press to get there (the 展示柜 sub-tab's badge); 成长 when the 闲钱 covers nextStep() — the 「下一个目标」 line, the tab's badge — or, when `others` (default true), any level (the badge counts them all):
+//    buy nextStep() if the 闲钱 covers it, else the cheapest level it covers, then back to 货柜; 卡册's 补到 N% on 欧气 (the cheapest tier 补卡 alone reaches, within a tenth of the next upgrade); the 开包 rail's 开 N 包 of what the warehouse holds. No 先不管 for any of them.
 //  - the opening scene plays at t = 0 and is kept OUT of the event metric by default (`countOpening`): it would hide a leading drought.
 //  - start time is local noon, so 夜猫子 can't fire from the time zone of whoever runs this.
-//  - uiNotes (default true) mirrors the message box of the current ui/notice.ts: the first-sale note is gated on earned.sealed, the first seeker / collector sale each leave a 知道了 note, a collector's big card in the binder
-//    gets the 上柜 box (least valuable eligible hit, pressed = G.list), a waiting note cuts in over a 钱够升级 / 上柜 box, and 收卡's button (去看收到的卡) takes the player to the case page. `old` (uiNotes: false) is the box
-//    before that: the baseline of ROADMAP (mean 20.4 events, mean longest drought 1055.8 s, worst 1557 s over seeds 1–12).
+//  - uiNotes (default true) mirrors the message box of the current ui/notice.ts, which says only events: a sold-out shelf (a newly unlocked set waiting for a free shelf rides along as a second, lower key), the first-sale note gated on earned.sealed, the first seeker / collector
+//    sale each leave a 知道了 note, 找卡委托, and 收卡's button (去看收到的卡) takes the player to the case page. `old` (uiNotes: false) is the box before the card notes (cust.sold gate, no card/委托 notes); 成长 and 展示柜 above do not depend on it.
+//    The 'old' baseline of ROADMAP (mean 20.4 events, mean longest drought 1055.8 s, worst 1557 s over seeds 1–12) was measured with the boxes that are gone now.
 //  - 找卡委托 (comm, default on; `nocomm` on the command line / NOCOMM=1 switches it off for the before/after pair): the box shows its 「有人来找卡」 note once per request (not while the guide speaks, dropped when the
 //    request is gone or the player is on 展示柜; its key goes to the case page), and a player who finds the card in the binder (or the case) serves it with one press, on to 展示柜 and 交付. The model knows at once
 //    when the card is in the binder: the real panel shows it only on 展示柜, so this is the generous end. Requests are NOT M2 events (no ev() for them); their effect is only the cash and the presses they take.
 //  - NOT modelled (so no events from them): receipts (SLIP), selling cards to peers, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
-//    phone layout, the sound/animation timings, 先不管 / 先不摆 (the player never waves a box off).
+//    phone layout, the sound/animation timings, 先不管 (the player never waves the sold-out box off).
 // Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
 // the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene, a 图鉴 tier
 // of a set reached (a permanent walk-in step; `nodex` on the command line leaves it uncounted for comparison). Refills never count.
@@ -279,10 +290,11 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   // ----- common.ts -----
   const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0; return Math.min(room, n > 1 ? n - 1 : n); };
   const shelfFill = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), s = st().stock[id] || 0, want = Math.max(0, Math.min(room + 1 - s, G.WAREHOUSE - s)), n = Math.min(want, Math.floor(st().cash / G.wholesale(id))); return { n, full: n === want }; };
-  const restockN = id => Math.max(0, Math.min(G.WAREHOUSE - (st().stock[id] || 0), Math.floor(st().cash / G.wholesale(id))));
-  // shelf.ts: the n of the row's primary buy button (no stock): 进满 / 进一架 / 进 10 / 进 1
-  const primaryBuyN = id => { const w = G.wholesale(id), s = st().stock[id] || 0, room = G.WAREHOUSE - s, full = restockN(id), can = n => room > 0 && st().cash >= w * Math.min(n, room), sf = shelfFill(id);
-    const fill = full === room && full > 10 && full * w * 4 <= st().cash, rack = !fill && sf.full && sf.n > 10; return !can(1) ? 0 : fill ? full : rack ? sf.n : can(10) ? 10 : 1; };
+  // shelf.ts: a set row's ONE yellow key (common.ts refillQuote), the same quote as the sold-out box: 上架 N 包 from the back room when it holds
+  // more than the pack kept back, else 补到满 — buy the shelf's gap (deepFill: bigger with a clerk on the set) and shelve it in the same press
+  // (events.ts 'refill'). null = the key is off: no empty shelf for a set on none, a full shelf, cash under 2 packs.
+  const rowKey = id => { if (!racked(id) && !G.shelves().some(r => !r.id)) return null;
+    const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { act: 'shelve', id, n: up }; const f = deepFill(id); return f.n > 1 ? { act: 'refill', id, n: f.n } : null; };
   const canShelve = id => { const own = G.shelves().filter(r => r.id === id).length; return !!st().stock[id] && (own ? G.shelfQty(id) < own * G.depth() : G.shelves().some(r => !r.id)); };
   const unlockedIds = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
   // ----- guide.ts -----
@@ -294,7 +306,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   let billAt = 0;
   const STEPS = [
     { h: '进货', page: 'shelf', done: () => !toStock() && (sum(st().stock) + sum(st().opened) > 0 || G.shelves().some(r => r.id)),
-      target: () => { const x = toStock(); return x ? { act: 'buy', id: x.id, n: primaryBuyN(x.id) } : null; } },
+      target: () => { const x = toStock(); return x ? rowKey(x.id) : null; } },
     { h: '摆上货架', page: 'shelf', done: () => G.shelves().some(r => r.id) && !toRack(),
       target: () => { const x = toRack() ?? SETS.find(s => G.unlocked(s.id) && canShelve(s.id)); return x && canShelve(x.id) ? { act: 'shelve', id: x.id, n: toShelf(x.id) } : null; } },
     { h: '定价', page: 'shelf', done: () => !!rec.price || Object.keys(st().price).length > 0,
@@ -307,8 +319,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
         return !!rec.bill || st().billsPaid > 0 || !!st().overdue || !G.nextBill(); },
       target: () => (G.nextBill() ? { act: 'bill', always: true } : null) },
     { h: '补货', page: 'shelf', done: () => !G.shelves().some(r => r.id && !r.qty),
-      target: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; if (!id) return null;
-        if ((st().stock[id] || 0) > 1) return canShelve(id) ? { act: 'shelve', id, n: toShelf(id) } : null; const n = primaryBuyN(id); return n ? { act: 'buy', id, n } : null; } },
+      target: () => { const id = G.shelves().find(r => r.id && !r.qty)?.id; return id ? rowKey(id) : null; } },
     { h: '测欧气', page: 'luck', done: () => !!rec.luck, target: () => null },
   ];
   const current = () => (rec.off || rec.done || graduated() ? -1 : STEPS.findIndex(s => !s.done()));
@@ -324,16 +335,37 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     if (SETS.filter(s => G.unlocked(s.id)).length > G.racks()) { const r = all.find(b => b.k === 'racks'); if (r) return r; }
     return live(all)[0] || all[0]; };
   const yellow = () => buyables().filter(b => b.cost <= st().cash && b.cost <= G.spare()).sort((a, b) => a.cost - b.cost || KS.indexOf(a.k) - KS.indexOf(b.k));
-  const growKey = () => { const g = nextStep(); return g && !G.canBranch() && (g.cost <= G.spare() || yellow().length > 0) ? `${g.k}:${g.lv}` : ''; };
+  const growPick = () => { const g = nextStep(); return !g || guiding() ? null : g.cost <= G.spare() ? g : others ? yellow()[0] ?? null : null; }; // what the player buys on 成长 once the 闲钱 covers something, if anything
+  // ui/binder.ts 卡册's 补到 N%: the missing hits of the cheapest next 图鉴 tier a set can reach by 补卡 alone (at market): a permanent walk-in step. It lives on 欧气 as a yellow key now (no box says it any more); the player who has the
+  // 闲钱 for one goes there and presses it, within a tenth of the next upgrade (a side purchase: it must not push 成长's next step back). Not while the guide speaks.
+  const dexOffer = () => {
+    if (guiding()) return null;
+    let best = null;
+    for (const s of SETS) { if (!G.unlocked(s.id) || G.master(s.id)) continue;
+      const share = G.dexCount(s.id) / G.dexTotal(s.id), tier = G.DEX_TIERS.find(([at]) => share < at - 1e-9); if (!tier) continue;
+      const need = Math.ceil(tier[0] * G.dexTotal(s.id) - 1e-9) - G.dexCount(s.id), miss = G.missing(s.id);
+      if (need <= 0 || miss.length < need) continue;
+      const cost = miss.slice(0, need).reduce((a, c) => a + c.price, 0);
+      const cap = 0.1 * (nextStep()?.cost ?? Infinity);
+      if (cost <= G.spare() && cost <= cap && (!best || cost < best.cost)) best = { id: s.id, need, cost }; }
+    return best; };
+  // shelf.ts: an unlocked set with no shelf, while a rack stands free, shows its row's yellow key (buy the quoted shelf and put it up); the player presses it on 货柜 once the guide is over
+  const newSet = () => (guiding() || !G.shelves().some(r => !r.id) ? null : unlockedIds().find(id => !racked(id) && fix(id, false)) ?? null);
+  // rail.ts 开包's right column lists the packs the warehouse holds with an 「开 N 包」 key (no box invites to it any more): the one 上架 leaves, or the clerk's kept-back packs (notice.ts' old keptAvailable);
+  // the lowest-priority thing this player does: not while the guide speaks, and only while a shelf still sells
+  const keptAvailable = id => (st().stock[id] || 0) >= 1 && (st().stock[id] || 0) <= (G.lvl('clerk') && st().auto[id] ? G.CLERK_KEEP : 1) && G.unlocked(id) && !G.master(id);
+  const keptPack = () => {
+    if (guiding() || !G.shelves().some(s => s.id && s.qty > 0)) return null;
+    let id = null, share = Infinity;
+    for (const s of SETS) if (keptAvailable(s.id)) { const p = G.dexCount(s.id) / G.dexTotal(s.id); if (p < share) { id = s.id; share = p; } }
+    return id;
+  };
   const boughtAt = {}, buy = b => { const ok = b.act === 'up' ? G.upgrade(b.k) : G.learn(b.k); if (ok) { sp.growth += b.cost; boughtAt[`${b.k}:${b.lv + 1}`] ??= t; } return ok; };
   // ----- notice.ts -----
-  // uiNotes = the box of the current ui/notice.ts (first-sale note gated on earned.sealed, 知道了 notes for the first seeker / collector sale, the 上柜 box for a collector's big card,
-  // a waiting note cutting in over a 钱够升级/上柜 box, 收卡's button going to the case page); uiNotes: false = the box as it was before (cust.sold gate, no card notes, no case box).
-  let memo = null, memoShown = false, printed = null, soldBefore = uiNotes ? st().earned.sealed : st().cust.sold, tookBefore = st().intake?.n ?? 0, grew = '';
+  // uiNotes = the box of the current ui/notice.ts (events only: a sold-out shelf, the first-sale note gated on earned.sealed, 知道了 notes for the first seeker / collector sale, 找卡委托, 收卡's button going to the case page);
+  // uiNotes: false = the box as it was before (cust.sold gate, no card notes). A sold-out shelf comes before every note: it cuts in over a printed note.
+  let memo = null, memoShown = false, printed = null, soldBefore = uiNotes ? st().earned.sealed : st().cust.sold, tookBefore = st().intake?.n ?? 0;
   const stocked = {}, out = new Set(), fresh = new Set(), notes = [], known = new Set(unlockedIds());
-  // a collector needs a big card in the case: offer the least valuable eligible hit from the binder, only while no big card is up and a slot is free (notice.ts collectorCard)
-  const collectorCard = () => (!uiNotes || hold || st().shown.length >= G.slots() || st().shown.some(c => c.price >= G.BIG_CARD) ? null
-    : Object.entries(st().singles).filter(([, c]) => c.count > 0 && S.HITS.includes(c.kind) && c.price >= G.BIG_CARD).sort((a, b) => a[1].price - b[1].price)[0] ?? null);
   const rackedIds = () => [...new Set(G.shelves().filter(r => r.id).map(r => r.id))];
   // ui/common.ts deepFill: with a clerk, the box naming one set also stocks the back room with what the 闲钱 covers (the clerk shelves it)
   const deepFill = id => { const f = shelfFill(id), w = G.wholesale(id), s = st().stock[id] || 0; if (process.env.NODEEP || !G.lvl('clerk') || !st().auto[id] || f.n <= 1) return f;
@@ -341,46 +373,11 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const fix = (id, alone = true) => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = alone ? deepFill(id) : shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
   const outIds = () => { const all = [...out], fx = all.map(x => fix(x, false)), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || STEPS[current()]?.h !== '补货'; // guide.ts guideShelf: only the guide's own 补货 step speaks for an empty shelf
-  // The lowest-priority warehouse invitation. This player accepts it; the real UI also offers a session-long dismissal.
-  const keptAvailable = id => (st().stock[id] || 0) >= 1 && (st().stock[id] || 0) <= (G.lvl('clerk') && st().auto[id] ? G.CLERK_KEEP : 1) && G.unlocked(id) && !G.master(id); // ui/notice.ts: the one 上架 leaves, or the clerk's kept-back packs
-  const keptAllowed = () => uiNotes && !hold && !guiding() && page !== 'open' && (page !== 'grow' || yellow().length === 0) && G.shelves().some(s => s.id && s.qty > 0);
-  const keptPack = () => {
-    if (!keptAllowed()) return null;
-    let id = null, share = Infinity;
-    for (const s of SETS) if (keptAvailable(s.id)) { const p = G.dexCount(s.id) / G.dexTotal(s.id); if (p < share) { id = s.id; share = p; } }
-    return id;
-  };
-  // ui/notice.ts dexOffer: the cheapest 图鉴 tier the 闲钱 can reach by 补卡 alone (missing hits at market), once the guide is over
-  const dexOffer = () => {
-    if (!uiNotes || guiding() || hold || page === 'grow') return null;
-    let best = null;
-    for (const s of SETS) { if (!G.unlocked(s.id) || G.master(s.id)) continue;
-      const share = G.dexCount(s.id) / G.dexTotal(s.id), tier = G.DEX_TIERS.find(([at]) => share < at - 1e-9); if (!tier) continue;
-      const need = Math.ceil(tier[0] * G.dexTotal(s.id) - 1e-9) - G.dexCount(s.id), miss = G.missing(s.id);
-      if (need <= 0 || miss.length < need) continue;
-      const cost = miss.slice(0, need).reduce((a, c) => a + c.price, 0);
-      const cap = 0.1 * (nextStep()?.cost ?? Infinity); // a side purchase: never more than a tenth of the next upgrade, so it doesn't push that back
-      if (cost <= G.spare() && cost <= cap && (!best || cost < best.cost)) best = { id: s.id, need, cost, bonus: tier[1] }; }
-    return best; };
   const holds = m => { switch (m.kind) {
     case 'first': case 'intake': case 'done': case 'cards': case 'comm': return notes[0] === m;
     case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
-    case 'new': return !guiding() && fresh.has(m.id) && G.shelves().some(r => !r.id);
-    case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
-    case 'case': return !guiding() && !hold && !!collectorCard() && !!st().singles[m.key]?.count;
-    case 'kept': return keptAllowed() && keptAvailable(m.id);
-    case 'dex': { const o = dexOffer(); return !!o && o.id === m.id && o.need === m.need; }
     default: return false; } };
-  const pickMemo = () => {
-    if (shelfMine() && out.size) return { kind: 'out', ids: outIds() };
-    if (notes.length) return notes[0];
-    if (guiding()) return null;
-    const nu = G.shelves().some(r => !r.id) ? [...fresh][0] : undefined, k = page === 'grow' ? '' : growKey(), c = collectorCard();
-    if (nu) return { kind: 'new', id: nu };
-    if (c) return { kind: 'case', key: c[0] };
-    if (k && k !== grew) return { kind: 'grow', k };
-    const o = dexOffer(); if (o) return { kind: 'dex', ...o };
-    const id = keptPack(); return id ? { kind: 'kept', id } : null; };
+  const pickMemo = () => (shelfMine() && out.size ? { kind: 'out', ids: outIds() } : notes[0] ?? null);
   let inWatch = false;
   function watchShop() {
     if (inWatch) return; inWatch = true;
@@ -403,17 +400,17 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       for (const id of out) if (!on.includes(id)) out.delete(id);
       for (const id of unlockedIds()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
       for (const id of fresh) if (on.includes(id)) fresh.delete(id); // keep a newly unlocked set pending until a shelf is free
-      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case' || memo.kind === 'dex' || memo.kind === 'comm') && out.size > 0 && shelfMine();
-      const receiptReady = uiNotes && notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case' || memo?.kind === 'dex');
-      const keep = memo && holds(memo) && !cut && !receiptReady;
-      const next = !keep || memo?.kind === 'kept' ? pickMemo() : null;
-      memo = keep && (memo.kind !== 'kept' || next?.kind === 'kept') ? memo : next;
+      const cut = memo && memo.kind !== 'out' && out.size > 0 && shelfMine();
+      if (!(memo && holds(memo) && !cut)) memo = pickMemo();
       // showMemo: hidden mid-reveal except a sold-out box; a box keeps its printed counts while it stays up and the cash covers them
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
-        const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}:${st().stock[memo.id] || 0}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind === 'comm' ? `comm:${memo.key}` : memo.kind;
-        if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash && !(printed.cost > 0 && cost >= 2 * printed.cost + 1))) printed = { ident, cost, fixes, sets }; // ui/notice.ts: an outgrown quote is printed again
+        const sets = memo.kind === 'out' ? memo.ids : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
+        // the newly unlocked set the sold-out box also names (a second, lower key): while a shelf stands free and there is something to put on it
+        const add = memo.kind === 'out' && G.shelves().some(r => !r.id) ? [...fresh].find(i => fix(i, false)) : undefined, addFix = add ? fix(add, false) : null;
+        const q = (id, f) => (f ? (f.up ? 'u' : `b${G.wholesale(id)}`) : '-');
+        const ident = memo.kind === 'out' ? `out:${sets.join()}:${fixes.map((f, i) => q(sets[i], f)).join(',')}${add ? `+${add}:${q(add, addFix)}` : ''}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'comm' ? `comm:${memo.key}` : memo.kind;
+        if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash && !(printed.cost > 0 && cost >= 2 * printed.cost + 1))) printed = { ident, cost, fixes, sets, add, addFix }; // ui/notice.ts: an outgrown quote is printed again
       }
       memoShown = shown;
     } finally { inWatch = false; }
@@ -464,33 +461,36 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const refill = (x, dataN) => { if ((st().stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
     const n = dataN ?? shelfFill(x).n; if (n > 1 && pay(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
   const openPack = (id, buyFirst, n = 1) => { if (hold) return; if (buyFirst && !pay(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, n).length) { hold = false; holdLeft = 0; } };
-  const grow = () => { page = 'grow'; const g = nextStep(), b = g && g.cost <= G.spare() ? g : others ? yellow()[0] : null;
-    if (b && buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); else { grew = growKey(); did('成长: nothing bought'); } page = 'shelf'; };
+  const grow = b => { page = 'grow'; if (buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); page = 'shelf'; };
+  // the box's second key, the newly unlocked set: shelve what the back room holds, or buy the printed quantity and shelve it
+  function addKey() { const { add, addFix: f } = printed; did(`box out+ ${add}`); if (f.up) G.shelve(add, f.up); else refill(add, f.n); watchShop(); }
   // what is on screen, top priority first: { id, press }
   function prompts() {
     const ps = [], m = memoShown ? memo : null;
-    if (m?.kind === 'out') ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) });
+    if (m?.kind === 'out') { ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) }); if (printed.addFix) ps.push({ id: 'm+:' + printed.ident, press: addKey }); }
     const i = current();
     if (i >= 0) { const s = STEPS[i], tg = s.target();
       if (s.h === '测欧气') ps.push({ id: `g:${i}:${page === 'luck'}`, press: () => { page = 'luck'; if (sum(st().opened)) rec.luck = 1; did('guide 测欧气'); } });
       else if (tg && (tg.always || page === s.page || tg.act === 'open1' || tg.act === 'buyopen')) ps.push({ id: `g:${i}:${page}:${tg.act}:${tg.id ?? ''}:${tg.n ?? ''}`, press: () => guideKey(s, tg) });
       else if (page !== s.page) ps.push({ id: `g:${i}:tab`, press: () => { page = s.page; did(`tab ${s.page}`); } }); }
     if (m && m.kind !== 'out') ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) });
+    const ns = newSet(); if (ns) ps.push(page === 'shelf' ? { id: `r:${ns}`, press: () => { did(`shelf row ${ns}`); refill(ns, fix(ns, false).n); } } : { id: 'r:tab', press: () => { page = 'shelf'; did('tab shelf'); } }); // 货架: the new set's row key
+    // 展示柜: 补满柜位 (yellow while a slot is free and the binder holds cards for it), once per visit; a player whose 展示柜 tab badge shows walk-outs, or who passes through on a 委托, is on that page, else it costs a tab press first
+    if (st().shown.length < G.slots() && G.caseMoves() > 0 && !(page === 'case' && caseFilled) && (page === 'case' || !guiding())) ps.push(page === 'case' ? { id: `f:${caseVisit}`, press: () => { did('展示柜 补满柜位'); caseFilled = true; G.fillCase(); } } : { id: 'v:case', press: () => { page = 'case'; did('tab case'); } });
+    const up = growPick(); if (up) ps.push({ id: `u:${up.k}:${up.lv}`, press: () => grow(up) }); // 成长: the 下一个目标 line / the tab's badge
+    const dx = dexOffer(); if (dx) ps.push({ id: `d:${dx.id}:${dx.need}`, press: () => { page = 'luck'; if (G.collect(dx.id, dx.need)) { sp.dex = (sp.dex || 0) + dx.cost; did(`卡册 补到 ${dx.id} ×${dx.need}`); } page = 'shelf'; } }); // 欧气: 卡册's 补到 N%
+    const kp = keptPack(); if (kp) ps.push({ id: `k:${kp}:${st().stock[kp] || 0}`, press: () => { did(`rail 开 ${kp}`); openPack(kp, false, Math.min(10, st().stock[kp] || 0)); } }); // 开包 rail: 开 N 包 of what the warehouse holds
     const x = comm && !hold && st().comm; // 找卡委托: serve it once the binder (or the case) holds the card
     if (x && (st().singles[G.commKey(x)]?.count || st().shown.some(k => k.key === G.commKey(x)))) ps.push({ id: `c:${G.commKey(x)}@${x.due}`, press: () => { did(`deliver ${x.name}`); page = 'case'; serveComm(G, cq, () => t); watchShop(); } });
     return ps; }
   function guideKey(s, tg) {
     did(`guide ${s.h} ${tg.act}${tg.id ? ' ' + tg.id : ''}${tg.n ? ' ×' + tg.n : ''}`);
-    if (tg.act === 'buy') pay(tg.id, tg.n); else if (tg.act === 'shelve') G.shelve(tg.id, tg.n);
+    if (tg.act === 'buy') pay(tg.id, tg.n); else if (tg.act === 'refill') refill(tg.id, tg.n); else if (tg.act === 'shelve') G.shelve(tg.id, tg.n);
     else if (tg.act === 'price') rec.price = 1; else if (tg.act === 'bill') rec.bill = 1;
     else if (tg.act === 'open1') openPack(tg.id, false); else if (tg.act === 'buyopen') openPack(tg.id, true); }
   function memoKey(m) {
     did(`box ${m.kind}${m.ids ? ' ' + m.ids.join() : m.id ? ' ' + m.id : ''}${m.key ? ' ' + m.key : ''}${m.buyer ? ' ' + m.buyer : ''}`);
     if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards' || m.kind === 'comm') { if (uiNotes && (m.kind === 'intake' || m.kind === 'comm')) page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's and 找卡's primary button goes to the case page (收卡: 去看收到的卡, 找卡: 去展示柜看看)
-    else if (m.kind === 'case') G.list(m.key);
-    else if (m.kind === 'grow') grow();
-    else if (m.kind === 'kept') openPack(m.id, false, Math.min(10, st().stock[m.id] || 0));
-    else if (m.kind === 'dex') { if (G.collect(m.id, m.need)) sp.dex = (sp.dex || 0) + m.cost; }
     else { const ids = printed.sets, fx = printed.fixes;
       if (ids.length > 1) for (const [i, x] of ids.entries()) refill(x, fx[i]?.n ?? 0);
       else if (fx[0]?.up) G.shelve(ids[0], fx[0].up);
@@ -498,7 +498,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       else page = 'shelf'; }
     watchShop(); }
   // ----- the clock -----
-  const shownAt = new Map(); let lastPress = -1e9;
+  const shownAt = new Map(); let lastPress = -1e9, caseVisit = 0, caseFilled = false, prevPage = page;
   const level = () => Object.keys(G.UPGRADES).reduce((a, k) => a + G.lvl(k), 0) + Object.keys(G.SKILLS).reduce((a, k) => a + G.skill(k), 0);
   const shelfGap = () => Math.round(G.shelves().reduce((a, r) => a + (r.id ? Math.max(0, G.depth() - r.qty) * G.wholesale(r.id) : 0), 0)); // what filling every labelled shelf to the top costs now
   const spent = () => ({ refill: Math.round(sp.refill), growth: Math.round(sp.growth), bill: Math.round(sp.bill), intake: Math.round(st().intake?.cost ?? 0), bonus: sp.bonus,
@@ -511,6 +511,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const rows = [], init0 = new Set(unlockedIds());
   watchShop(); seen.sets = init0.size; play('opening');
   for (t = 1; t <= N; t++) {
+    if (page === 'case' && prevPage !== 'case') { caseVisit++; caseFilled = false; } prevPage = page; // a visit to 展示柜 starts when the player lands on it
     G.setIdle(page === 'shelf' || page === 'case'); advance(1); G.tick(hold); cashPrev = st().cash; // 挂机 counts on 货柜 (main.ts syncIdle)
     const round = st().clerkRound;
     if (round) {
@@ -618,7 +619,7 @@ if (process.argv[1]?.endsWith('autoplay.mjs')) {
       console.log(`M2 (a) 0–30 min ≤240 s: ${runs.filter(r => r.m2.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapA))} s)  (b) 30–60 min ≤480 s: ${runs.filter(r => r.m2.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapB))} s)  [no 图鉴 tiers, afford only if bought; node ${process.version}]`);
       const late = (r, k) => r.comm[k + 'At'].filter(x => x > 1800).length, tot = (f, k) => runs.reduce((a, r) => a + f(r, k), 0); // 找卡委托 are not M2 events; this is what the model saw and served
       console.log(`找卡委托 (not M2 events): asked ${tot(r => r.comm.seen)} / card ever in the binder ${tot(r => r.comm.held)} / served ${tot(r => r.comm.done)} in the hour over ${runs.length} seeds (paid $${Math.round(tot(r => r.comm.paid))}); minutes 30–60: asked ${tot(late, 'seen')} / served ${tot(late, 'done')}`); }
-  } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (进一架 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
+  } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (补到满 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
   else if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
   else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }
   else if (mode === 'bills') { // one row per week until the debt is cleared: the bill against what the shop made that week before paying it

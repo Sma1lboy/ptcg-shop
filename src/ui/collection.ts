@@ -6,7 +6,8 @@
 //    cell, pick one placed card then another cell to swap (or to move it into an empty one), or send a placed card back to the binder. The
 //    pedestal is a cell like the rest. Every move is one call on G; nothing here mutates state.
 // Cards in the room are owned copies out of the binder: never for sale, never offered to customers. No card that is not flipped yet
-// can be put in (mat.ts `hold`: its cards are in singles already, but the player has not seen them). 欣赏 opens inspect.ts.
+// can be put in (mat.ts `hold`: its cards are in singles already, but the player has not seen them). 欣赏 opens inspect.ts. With nothing on
+// show and no arranging the room is one line (收藏室 0/6 · 布置): the empty cells come back with 布置.
 import { html, render, nothing } from 'lit-html';
 import { repeat } from 'lit-html/directives/repeat.js';
 import type { Exhibit, Single } from '../game.ts';
@@ -93,6 +94,11 @@ export function renderCollection() {
   const p = pick, emptyPick = p?.t === 'slot' && !p.card;
   const open = !hold && free >= 0 && !(p?.t === 'slot' && !emptyPick); // a card in hand or an empty cell chosen: sources may be picked
   const ticket = G.ticketPrice();
+  if (!n && !arranging) { // nothing on show: one line, not six empty cells (空馆不收门票); 布置 brings the room back
+    render(html`<h2>收藏室 0/${G.ROOM_SLOTS} · <button type="button" data-act="col-arrange" aria-pressed="false" title="从卡本移入卡片；放上镇店台的卡会吸引收藏党。空馆不收门票。">布置</button></h2>
+      ${msg && !msg.ok ? html`<p class="col-msg bad" role="alert">${msg.text}</p>` : nothing}`, $('gallery'));
+    return;
+  }
   render(html`<h2>收藏室 ${n}/${G.ROOM_SLOTS} <small class="muted">只看不卖，不标价</small></h2>
       <div class="case-bar col-bar"><span class="cb-k">门票 <b>${n ? money(ticket) : '—'}</b></span>
         <span class="cb-k">藏品总值 <b>${money(G.galleryValue())}</b></span>
