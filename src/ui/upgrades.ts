@@ -17,7 +17,7 @@ const UFX: Record<string, (lv: number) => string> = {
   case: lv => `${G.CASE_BASE + G.CASE_GAINS.slice(0, lv).reduce((a, b) => a + b, 0)} 个柜位`,
   supplier: lv => `进货打 ${+((G.WHOLESALE - G.WHOLESALE_STEP * lv) * 10).toFixed(1)} 折`,
   expand: lv => `图鉴和系列带来的客流上限 ×${+(G.CROWD_KNEE + G.CROWD_ROOM + G.ROOM_STEP * lv).toFixed(2)}`,
-  clerk: lv => ['没有店员', `帮工：${G.CLERK_ROUND_1 / 60} 分钟一轮，补到半满`, `${G.CLERK_ROUND / 60} 分钟一轮，热销的补满`, '全部补满，卖散卡'][lv],
+  clerk: lv => ['没有店员', `帮工：${G.CLERK_ROUND_1 / 60} 分钟一轮、卖空就补，补到半满`, `${G.CLERK_ROUND / 60} 分钟一轮，热销的补满`, '全部补满，卖散卡'][lv],
 };
 
 // 人气 and 扩建 both move walk-ins (人气 outside the 客流上限, 扩建 by lifting it): their pockets show the walk-ins a level really

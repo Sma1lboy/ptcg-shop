@@ -255,13 +255,15 @@ console.log('ok luck percentile');
   for (let i = 0; i < 60; i++) { T += 5e3; G.tick(); if (G.shelfQty('sv08') < 10) { G.buy('sv08', 100); G.shelve('sv08', 999); } } // the back room is topped up too: 200 packs can sell out inside the 5 minutes
   assert.ok(G.missed('sv10') > 0 && G.missed('sv08') === 0, `the set left off the shelves is the one missed (${G.missed('sv10')} / ${G.missed('sv08')})`);
   T += (G.MISS_WINDOW + 60) * 1e3; assert.equal(G.missed('sv10'), 0, 'old misses drop out of the window'); G.tick(); // catch up here, not in the next block
-  // The clerk works in rounds: 帮工 (level 1) every CLERK_ROUND_1 to half; level 2 every CLERK_ROUND, a 热销 set to the top; level 3 full and the bulk sold.
-  // A shelf emptied between rounds stays empty until the next one. 行情 is set by hand at each round (it rerolls every HEAT_EVERY).
+  // The clerk works in rounds: 帮工 (level 1) every CLERK_ROUND_1 to half, and at once when one of his shelves stands empty (at most every
+  // CLERK_EMPTY); level 2 every CLERK_ROUND, a 热销 set to the top; level 3 full and the bulk sold. 行情 is set by hand at each round (it rerolls every HEAT_EVERY).
   const round = (heat = {}) => { st().heat = heat; st().heatT = T; G.tick(); };
   G.reset(); st().cash = 1e6; st().earned.sealed = 1e6; T += 1; G.buy('sv08', 1); G.shelve('sv08', 1); G.setPrice('sv08', G.MAX_PCT); G.upgrade('clerk'); // at 160% nobody buys
   const half = Math.ceil(G.depth() / 2); T += 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half on hiring');
-  G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; round(); assert.equal(G.shelfQty('sv08'), 0, '帮工: no round after CLERK_ROUND');
-  T += (G.CLERK_ROUND_1 - G.CLERK_ROUND) * 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), half, '帮工 restocks after CLERK_ROUND_1, a 热销 set to half too');
+  G.shelves()[0].qty = 5; T += G.CLERK_ROUND * 1e3; round(); assert.equal(G.shelfQty('sv08'), 5, '帮工: a shelf with packs left waits for his round');
+  G.shelves()[0].qty = 0; T += 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), half, '帮工: an empty shelf brings him at once, to half even when 热销');
+  G.shelves()[0].qty = 0; T += 1e3; round(); assert.equal(G.shelfQty('sv08'), 0, '帮工: not again within CLERK_EMPTY');
+  T += G.CLERK_EMPTY * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, '帮工: after CLERK_EMPTY the empty shelf brings him back');
   G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND_1 * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 2 tops up to half');
   G.shelves()[0].qty = 0; T += 60e3; round(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
   T += G.CLERK_ROUND * 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills a 热销 set to the top, every CLERK_ROUND');
@@ -660,7 +662,7 @@ console.log('ok luck percentile');
   let T = 1_700_000_000_000; const K = createGame({ now: () => T, random: () => 0.99, storage: { getItem: () => null, setItem() {} } }); // 0.99: nobody walks in
   const s = K.state, id = 'sv10'; s.cash = 1e6; K.upgrade('depth'); K.buy(id, 40); K.place(0, id); K.buy(id, 60); // an 80-pack shelf, 40 on it, 60 in the back room
   assert.equal(K.shelfQty(id), 40); T += 1000; K.tick(); assert.equal(K.shelfQty(id), 40, 'no clerk: the back room stays put');
-  K.upgrade('clerk'); s.clerkT = T + 1e9; // no round due: only the carrying
+  K.upgrade('clerk'); K.upgrade('clerk'); s.clerkT = T + 1e9; // no round due: only the carrying (level 2: the 帮工 would go round for the empty shelf below)
   T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [80, 20], 'clerk carries up to the shelf\'s depth');
   K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [10, K.CLERK_KEEP], 'all but CLERK_KEEP');
   K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'at CLERK_KEEP the rest is the player\'s');
@@ -1836,11 +1838,15 @@ console.log('ok luck percentile');
     const a = shop(1), b = shop(2); assert.equal(JSON.stringify(a.until()), JSON.stringify(b.until()), 'the same shop at the same time asks the same, whatever the walk-in seed');
   }
 
-  // 5. The walk-in stream, the till and the binder are exactly what they were without it, for an hour that never serves one.
+  // 5. The walk-in stream, the till and the binder are exactly what they were without it, for an hour in which the asked-for card never sits in
+  // the binder (while it does, seekers leave it alone — by design — and the hours part ways). So 收卡 is at its floor, which keeps hits out of the
+  // binder: seed 9 at the default price took a requested card in minute 13 once the 帮工 went round for empty shelves (loop 31).
   {
-    const hour = extra => { const w = shop(9, extra, ['sv08', 'sv10']); Object.assign(w.st().up, { clerk: 1 }); w.st().auto = { sv08: true, sv10: true }; w.st().shopT = 0; w.st().week = 1; w.run(3600);
-      const s = w.st(); return { w, key: JSON.stringify([s.cash, s.earned, s.cust, s.customers, s.singles, s.stock, s.shelves, s.recent.length, s.intake, s.lost, s.billsPaid]) }; };
-    const on = hour(), off = hour({ commissions: false });
+    const hour = (seed, extra) => { const w = shop(seed, extra, ['sv08', 'sv10']); Object.assign(w.st().up, { clerk: 1 }); w.st().auto = { sv08: true, sv10: true }; w.st().shopT = 0; w.st().week = 1; w.G.setBuyPct(w.G.BUY_MIN);
+      let held = false; for (let i = 0; i < 3600; i += 10) { w.run(10); const c = w.st().comm; if (c && w.st().singles[w.G.commKey(c)]?.count) held = true; }
+      const s = w.st(); return { w, held, key: JSON.stringify([s.cash, s.earned, s.cust, s.customers, s.singles, s.stock, s.shelves, s.recent.length, s.intake, s.lost, s.billsPaid]) }; };
+    const on = hour(9), off = hour(9, { commissions: false });
+    assert.ok(!on.held, 'at the 收卡 floor no asked-for card reaches the binder in the hour');
     assert.equal(on.key, off.key, 'same cash, sales, binder and shelves with commissions on or off'); assert.ok(on.w.st().commAt > 0 || on.w.st().comm, 'and it did ask for cards meanwhile'); assert.equal(off.w.st().commAt, 0);
   }
 
