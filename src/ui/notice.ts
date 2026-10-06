@@ -198,10 +198,11 @@ function watchShop() {
       notes.push({ kind: 'cards', buyer, card: v.card, n: v.n ?? 1, gain: v.gain ?? 0 });
   }
   // 找卡委托: one note per request, not while the guide speaks (the request is still on 展示柜, the note just waits for the guide to finish); it goes with the request, and once the player is
-  // looking at 展示柜 (the panel says it all there)
-  const cm = s.comm, ck = cm ? `${cm.set}|${cm.n}|${cm.due}` : '';
-  for (let i = notes.length - 1; i >= 0; i--) { const note = notes[i]; if (note.kind === 'comm' && (note.key !== ck || location.hash === '#case')) notes.splice(i, 1); }
-  if (!cm) commNoted = ''; else if (ck !== commNoted && !guiding()) { if (location.hash !== '#case') notes.push({ kind: 'comm', key: ck }); commNoted = ck; }
+  // looking at 展示柜 (the panel says it all there). A second note when its card turns up in the binder (收卡, a pack): a reviewer's arrived and
+  // went unnoticed until the request lapsed — that note delivers on the spot, on any page.
+  const cm = s.comm, have = !!cm && (s.singles[G.commKey(cm)]?.count ?? 0) > 0, ck = cm ? `${cm.set}|${cm.n}|${cm.due}${have ? ':have' : ''}` : '';
+  for (let i = notes.length - 1; i >= 0; i--) { const note = notes[i]; if (note.kind === 'comm' && (note.key !== ck || (!have && location.hash === '#case'))) notes.splice(i, 1); }
+  if (!cm) commNoted = ''; else if (ck !== commNoted && !guiding()) { if (have || location.hash !== '#case') notes.push({ kind: 'comm', key: ck }); commNoted = ck; }
   const on = racked();
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
@@ -250,7 +251,11 @@ function showMemo() {
   }
   if (m.kind === 'comm') {
     const c = G.state.comm; if (!c) return; // gone since it was queued: watchShop takes the note off the list next
-    render(keyed(ident, html`<div class="mm-box"><h2>有人来找卡</h2>
+    const here = m.key.endsWith(':have'), left = Math.max(1, Math.ceil(G.commLeft() / 60));
+    render(keyed(ident, here ? html`<div class="mm-box"><h2>委托要的卡到了</h2>
+      <p>卡本里有了 <b>${c.name}</b>，交给委托人 <b class="gain">${money(c.reward, 'exact')}</b>（市价 ${money(c.price, 'exact')}）· 还剩 ${left} 分钟</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); G.deliverCommission(); }}>交付 ${money(c.reward, 'exact')}</button><button type="button" @click=${close}>先留着</button></div></div>`
+      : html`<div class="mm-box"><h2>有人来找卡</h2>
       <p><b>${c.name}</b> · 报酬 <b class="gain">${money(c.reward, 'exact')}</b> · ${G.COMM_LEN / 60} 分钟内交</p>
       <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去展示柜看看</button><button type="button" @click=${close}>知道了</button></div></div>`), el);
     return;

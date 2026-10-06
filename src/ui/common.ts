@@ -9,15 +9,23 @@ import { SETS } from '../sets.ts';
 // or jump over a wait instead of sitting it out in real minutes. `?speed=4` in the URL, or from the console / a test driver:
 // __dev.speed(n) (n× wall clock from now), __dev.skip(sec) (trades sec seconds at once, in steps short enough not to count as
 // 离开), __dev.now(). Every UI comparison against a game timestamp uses G.now(), so a fast clock stays consistent on screen.
-const DEV = !!(import.meta as { env?: { DEV?: boolean } }).env?.DEV;
-let devBase = Date.now(), devAt = devBase, devSpeed = DEV ? Math.max(1, +(new URLSearchParams(location.search).get('speed') || 1)) : 1;
+// The clock's lead over the wall clock and its speed live in sessionStorage: a reload (or a test driver reopening the page) keeps the
+// game time where it was, instead of crediting the paused or skipped stretch as time the shop was closed.
+const DEV = !!(import.meta as { env?: { DEV?: boolean } }).env?.DEV, DEV_KEY = 'ptcg.devclock';
+const devSaved = (() => { try { return DEV ? JSON.parse(sessionStorage.getItem(DEV_KEY) || 'null') as { lead: number; speed: number } | null : null; } catch { return null; } })();
+const urlSpeed = new URLSearchParams(location.search).get('speed');
+let devBase = Date.now(), devAt = devBase + (devSaved?.lead ?? 0), devSpeed = DEV ? (urlSpeed != null && Number.isFinite(+urlSpeed) ? Math.max(0, +urlSpeed) : devSaved?.speed ?? 1) : 1;
 const devClock = () => devAt + (Date.now() - devBase) * devSpeed;
+const devKeep = () => { try { sessionStorage.setItem(DEV_KEY, JSON.stringify({ lead: devClock() - Date.now(), speed: devSpeed })); } catch { /* ignore */ } };
 export const G = createGame(DEV ? { now: devClock } : {});
-if (DEV) (window as unknown as { __dev: unknown }).__dev = {
-  now: () => G.now(),
-  speed(n: number) { devAt = devClock(); devBase = Date.now(); devSpeed = Math.max(0, n); return devSpeed; },
-  skip(sec: number) { for (let t = 0; t < sec; t += 10) { devAt += Math.min(10, sec - t) * 1000; G.tick(G.revealing()); } return G.now(); },
-};
+if (DEV) {
+  addEventListener('pagehide', devKeep); setInterval(devKeep, 1000);
+  (window as unknown as { __dev: unknown }).__dev = {
+    now: () => G.now(),
+    speed(n: number) { devAt = devClock(); devBase = Date.now(); devSpeed = Math.max(0, n); devKeep(); return devSpeed; },
+    skip(sec: number) { for (let t = 0; t < sec; t += 10) { devAt += Math.min(10, sec - t) * 1000; G.tick(G.revealing()); } devKeep(); return G.now(); },
+  };
+}
 export const $ = (id: string) => document.getElementById(id)!;
 // Big sums shorten: $123.4K from $100,000, $1.23M from a million (the debt, late revenue); below that, whole dollars from $1,000.
 // Quotes use cents even above $1,000; overview readouts retain the compact format.

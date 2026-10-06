@@ -835,8 +835,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     } else if (type === 'seeker') { // looks through the case and the counter binder (shut while packs are being revealed: the cards not flipped yet are in singles), cheapest first; takes up to `want` cards within budget
       const tier = pickW([0, 1, 2], i => SEEK_W[i]), any = random() < 0.4, sid = pickW(SETS.filter(s => unlocked(s.id)), () => 1).id;
       const ok = (c: Pull) => SEEK[tier].includes(c.kind) && (any || c.set === sid);
+      // the binder copy an open 找卡委托 asks for is put aside: a reviewer's commission card was bought in at the counter and sold to a seeker 23 s later
+      const held = state.comm ? commKey(state.comm) : '';
       const fits = [...hits.filter(ok).map(c => ({ c, ask: cardAsk(c), pct: cardPct(c), key: '' })),
-        ...(reveal ? [] : Object.entries(state.singles)).filter(([, c]) => ok(c)).flatMap(([key, c]) => Array.from({ length: c.count }, () => ({ c, ask: Math.round(c.price * casePct() * 100) / 100, pct: casePct(), key })))].sort((a, b) => a.ask - b.ask);
+        ...(reveal ? [] : Object.entries(state.singles)).filter(([, c]) => ok(c)).flatMap(([key, c]) => Array.from({ length: c.count - (key === held ? 1 : 0) }, () => ({ c, ask: Math.round(c.price * casePct() * 100) / 100, pct: casePct(), key })))].sort((a, b) => a.ask - b.ask);
       let budget = lognorm(60, 0.7), want = SEEK_N;
       v.tier = tier; if (!any) v.set = sid;
       if (!fits.length) { /* nothing of that rarity in the case or the binder */ }

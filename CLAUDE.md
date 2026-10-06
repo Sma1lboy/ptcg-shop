@@ -14,7 +14,7 @@
 | 成长曲线 | `node scripts/autoplay.mjs [小时] [开包比例] [标价]` |
 | 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
 | 像素字 | `node scripts/pixel-font.mjs`（加了新文案后重切字体子集，要 `uv`：用户已同意，用 uvx 跑 fonttools，不进 package.json）；`--check` 列出源码里有、字体里没有的字，缺就退出 1 |
-| 评审存档与加速 | `node scripts/autoplay.mjs checkpoint [种子=3] [分钟=30] > /tmp/cp.js`：首小时模型玩到第 N 分钟的存档，做成浏览器 init 脚本（时间戳平移成刚关店、引导和看过的剧情都带上）。`npm run dev` 下 URL 加 `?speed=N` 让店里的钟 N 倍速，控制台 `__dev.skip(秒)` 一次经营过去（按 10 秒一步，不算离开）、`__dev.speed(0)` 暂停、`__dev.now()`；只在 dev 有，build 和 pen 里没有。评审跳过的时长就是空闲时长，要写进报告 |
+| 评审存档与加速 | `node scripts/autoplay.mjs checkpoint [种子=3] [分钟=30] > /tmp/cp.js`：首小时模型玩到第 N 分钟的存档，做成浏览器 init 脚本（时间戳平移成刚关店、引导和看过的剧情都带上）。`npm run dev` 下 URL 加 `?speed=N` 让店里的钟 N 倍速，控制台 `__dev.skip(秒)` 一次经营过去（按 10 秒一步，不算离开）、`__dev.speed(0)` 暂停（URL `?speed=0` 也行）、`__dev.now()`；倍速和超前量存在 sessionStorage，刷新页面游戏时间不跳；只在 dev 有，build 和 pen 里没有。评审跳过的时长就是空闲时长，要写进报告 |
 | 找卡委托前后对照 | `NOCOMM=1 node scripts/autoplay.mjs …`（任何模式）或 `node scripts/autoplay.mjs firsthour 24 nocomm` 关掉找卡委托，其余同一份代码；不加就是开着。模型玩家会按卡本里有没有这张卡去交付，`firsthour` 末尾另报 30–60 分钟内看到／交付了几张（委托不计入 M2 事件） |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。

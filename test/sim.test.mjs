@@ -1793,6 +1793,9 @@ console.log('ok luck percentile');
     assert.equal(G.deliverCommission(), false, 'nothing open: nothing to serve');
     w.run(G.COMM_GAP - 20); assert.equal(st().comm, null, 'the next one waits COMM_GAP'); w.run(30);
     const d = st().comm; assert.ok(d, 'and then comes'); const dk = give(G, d, 1); assert.ok(G.deliverCommission()); assert.ok(!(dk in st().singles), 'the last copy takes the pocket with it');
+    // its binder copy is put aside: seekers (cheapest card first, the set's whole binder on offer) never take the last copy while it is open
+    const e = (w.run(G.COMM_GAP + 10), st().comm); assert.ok(e, 'a third request'); const ek = give(G, e, 1);
+    Object.assign(st(), { casePct: 0.5 }); w.run(240); assert.equal(st().singles[ek]?.count, 1, 'the one copy waits for the request, however cheap the binder');
   }
 
   // 3. Lapsing and 不接 cost nothing, and each restarts the cooldown from where it ended.
