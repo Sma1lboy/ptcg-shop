@@ -85,7 +85,8 @@ export function renderCase() {
           <button type="button" data-act="caseprice" data-d="1" aria-label="单卡涨价" ?disabled=${pct >= G.MAX_PCT - 1e-9}>＋</button></span></span>
         <span class="cb-k">收卡价<span class="pricer"><button type="button" data-act="buyprice" data-d="-1" aria-label="收卡价降一档" ?disabled=${buy <= G.BUY_MIN + 1e-9}>−</button><b>${Math.round(buy * 100)}%</b>
           <button type="button" data-act="buyprice" data-d="1" aria-label="收卡价提一档" ?disabled=${buy >= G.BUY_MAX - 1e-9}>＋</button></span></span>
-        <button type="button" class="primary" data-act="fillcase" ?disabled=${!n} title="先补空柜位，再用卡本里更贵的闪卡换掉柜里最便宜的">${n ? fillText : free ? '卡本里没有闪卡' : '柜里已是最贵的'}</button></div>
+        <button type="button" class="primary" data-act="fillcase" ?disabled=${!n} title="先补空柜位，再用卡本里更贵的闪卡换掉柜里最便宜的">${n ? fillText : free ? '卡本里没有闪卡' : '柜里已是最贵的'}</button>
+        ${!G.skill('apprentice') && G.state.cust.visits > 0 ? html`<small class="muted">${G.lvl('clerk') ? `成长里的「带徒弟」（${money(G.skillCost('apprentice')!)}）会让店员一空就补柜` : '雇了店员以后，「带徒弟」会让他一空就补柜'}</small>` : nothing}</div>
       <p class="case-note" title="找卡的翻展示柜和卡本（一次最多带走 ${G.SEEK_N} 张）；拆包玩家当场拆出的闪卡按收卡价卖给你（他们心里平均要 ${Math.round(G.SELLER.tol * 100)}%，同行收 ${Math.round(G.BUYLIST * 100)}%）；卡本满 ${G.BINDER} 张、欠着九姐的账时不收；九姐来收账前 ${G.BILL_KEEP / 60} 分钟，收银机里先留够那张账">卡本里的闪卡按市价的 ${Math.round(pct * 100)}% 卖，上柜的卡按各自价签卖。收藏党只看柜里市价 $${G.BIG_CARD} 以上的卡，大卡上柜；上面收藏室镇店台上的卡让他们更常来、也更肯多付。拆包玩家当场拆出的闪卡，可能按市价的 ${Math.round(buy * 100)}% 卖给你。</p>
       <div class="vitrine">
         <ol class="v-slots">${cubes.map((c, k) => { const m = c && !named.has(c.name) ? (named.add(c.name), miss.get(c.name)) : undefined;

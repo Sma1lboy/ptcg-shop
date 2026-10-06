@@ -108,6 +108,8 @@ export interface Quote { act: 'refill' | 'shelve'; n: number; cost: number; ok: 
 export function refillQuote(id: string, alone = true): Quote {
   const s = G.state, w = G.wholesale(id), stock = s.stock[id] || 0, racks = G.shelves(), own = racks.filter(r => r.id === id).length;
   if (!own && !racks.some(r => !r.id)) return { act: 'refill', n: 0, cost: 0, ok: false, text: '补到满', title: '没有空货架：在「更多」里给它换一个货架，或到成长里加一个货架' };
+  // a full shelf says so before any quote: with the clerk's kept-back packs short of 10, the gap math still asked to buy (「补到满 $637」 at 160/160)
+  if (own && G.shelfQty(id) >= own * G.depth()) return { act: 'refill', n: 0, cost: 0, ok: false, text: '货架已满', title: '这个系列的货架已经满了' };
   const up = toShelf(id);
   if (stock > keepsBack(id) && up) return { act: 'shelve', n: up, cost: 0, ok: true, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货；仓库留 ${keepsBack(id)} 包自己拆` };
   const f = alone ? deepFill(id) : shelfFill(id);
@@ -116,8 +118,7 @@ export function refillQuote(id: string, alone = true): Quote {
     return { act: 'refill', n: f.n, cost, ok: true, text: `${f.full ? '补到满' : `补 ${f.n} 包`} ${money(cost, 'exact')}`,
       title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架，仓库留 ${keepsBack(id)} 包自己拆${f.full ? '' : '；现金只够这些'}` };
   }
-  const full = !!own && G.shelfQty(id) >= own * G.depth();
-  return { act: 'refill', n: 0, cost: 0, ok: false, text: full ? '货架已满' : '补到满', title: full ? '这个系列的货架已经满了' : '现金不够进 2 包' };
+  return { act: 'refill', n: 0, cost: 0, ok: false, text: '补到满', title: '现金不够进 2 包' };
 }
 // A set customers keep asking for that is on no shelf, while every shelf is taken: the shelf whose set sold to the fewest buyers
 // in the same window says so and offers the swap (G.place). Only when more came for the missing set than bought from that shelf,

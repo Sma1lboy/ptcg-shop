@@ -294,7 +294,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   // shelf.ts: a set row's ONE yellow key (common.ts refillQuote), the same quote as the sold-out box: 上架 N 包 from the back room when it holds
   // more than the pack kept back, else 补到满 — buy the shelf's gap (deepFill: bigger with a clerk on the set) and shelve it in the same press
   // (events.ts 'refill'). null = the key is off: no empty shelf for a set on none, a full shelf, cash under 2 packs.
-  const rowKey = id => { if (!racked(id) && !G.shelves().some(r => !r.id)) return null;
+  const rowKey = id => { if (!racked(id) && !G.shelves().some(r => !r.id)) return null; if (racked(id) && G.shelfQty(id) >= G.shelves().filter(r => r.id === id).length * G.depth()) return null; // common.ts: a full shelf's key is off
     const up = toShelf(id); if ((st().stock[id] || 0) > keepsBack(id) && up) return { act: 'shelve', id, n: up }; const f = deepFill(id); return f.n > 1 ? { act: 'refill', id, n: f.n } : null; };
   const canShelve = id => { const own = G.shelves().filter(r => r.id === id).length; return !!st().stock[id] && (own ? G.shelfQty(id) < own * G.depth() : G.shelves().some(r => !r.id)); };
   const unlockedIds = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
