@@ -223,7 +223,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
   const MISS_WINDOW = 600;                // 货柜 page: walk-ins (state.recent) and pack buyers who found their set missing (state.miss) are both kept for exactly this long, by time, so the two counts cover the same customers
   const CLERK_KEEP = 10;                  // packs of a set the clerk leaves in the back room for the player to open (one 开 10 包)
-  const CLERK_ROUND = 300;                // the clerk goes round the shelves every 5 minutes: a shelf has to last until the next round (why 加层 pays late)
+  const CLERK_ROUND = 180;                // the clerk goes round the shelves every 3 minutes: a shelf has to last until the next round (why 加层 pays late)
   // 客流上限: the word-of-mouth multiplier (图鉴口碑 × 新系列) counts in full up to CROWD_KNEE, and past it with diminishing
   // returns toward CROWD_KNEE + room(), room = CROWD_ROOM + ROOM_STEP per 店面扩建 level. Game setting, so the late shop keeps
   // growing without traffic running away; 店面扩建 is the open-ended place late cash goes (cost ×1.45 a level, the gain shrinks).
@@ -884,7 +884,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // The clerk's buying (a round, or 现在补货): every shelf of a set he restocks, up to half full (level 1) or full (level 2), in
   // shelf order, with the cash there is. clerkNeed = what that would still cost. Late in a shop the shelves sell out in a minute or
   // two, so a round made with the till emptied by an upgrade leaves them bare until the next one: the 店员没本钱 pit (GAMEPLAY §12).
-  const clerkGoal = () => lvl('clerk') >= 2 ? depth() : Math.ceil(depth() / 2);
+  const clerkGoal = () => lvl('clerk') >= 2 || (globalThis as { CFULL?: boolean }).CFULL ? depth() : Math.ceil(depth() / 2);
   const clerkNeed = () => lvl('clerk') ? cents(shelves().reduce((a, sh) => a + (sh.id && state.auto[sh.id] && unlocked(sh.id) ? Math.max(0, clerkGoal() - sh.qty) * wholesale(sh.id) : 0), 0)) : 0;
   // The bill is left in the till in its last BILL_KEEP seconds, as 收卡 does. Looking further ahead (10 minutes on every round, or only
   // on the first round after hiring) cost the long-run regressions (街口 fourth shop past 34 h; 店员没本钱 blind player down to 2 shops).
