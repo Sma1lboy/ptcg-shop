@@ -119,7 +119,7 @@ function onEmit(ev?: Parameters<Parameters<typeof G.on>[0]>[0]) {
   const nowUnlocked = unlockedSets();
   if (nowUnlocked.length > (seen.sets ?? 0)) {
     const fresh = nowUnlocked[nowUnlocked.length - 1]; seen.sets = nowUnlocked.length; save();
-    play('unlock', { set: G.setById(fresh).name });
+    play('unlock', { set: G.setById(fresh).name, nth: nowUnlocked.length });
   }
 }
 // 还清 / 开分店, read at the moment: before branching, the 名气 this shop would take and the next shop's debt; after, this shop's

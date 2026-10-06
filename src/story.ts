@@ -11,7 +11,7 @@ export type Bg = 'street' | 'shop' | 'dark';
 // street / streetSay = that shop's street and what is different about it (no streetSay on 老街, where the numbers are the first shop's);
 // for 收齐: setId = the set's id (its logo goes on the cover), total = its card count, bought = how many of them were 补的, tol = what
 // 大师套 lets its pack buyers pay on top (already a percent)
-export interface Ctx { bill?: string; short?: string; rate?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string; setId?: string; total?: number; bought?: number; tol?: string }
+export interface Ctx { bill?: string; short?: string; rate?: string; week?: number; card?: string; price?: string; set?: string; bills?: number; fame?: number; debt?: string; shop?: number; street?: string; streetSay?: string; setId?: string; total?: number; bought?: number; tol?: string; nth?: number }
 export interface Line { who: Who; t: string | ((c: Ctx) => string) }
 // seal: the scene is a set just completed — the binder closes over the shop and its cover is hot-stamped with the set's logo,
 // silver for 大师套 (补的 count), gold for 亲手开齐 (every card from a pack), like the silver and gold stars on the cards
@@ -154,10 +154,11 @@ export const SCENES: Record<string, Scene[]> = {
     L('adou', '……我就看看。'),
     L('jiu', '开得好。记住这种感觉，账单来的时候用得上。'),
   ] }],
+  // nth: how many sets are unlocked now; the three lines turn over with it (the same three played for every set read as filler by the second)
   unlock: [{ bg: 'shop', lines: [
-    L('jiu', c => `听说你要进「${c.set}」了？`),
-    L('jiu', '进货的钱花出去，账可不会少一分。'),
-    L('adou', '九姐的意思是：恭喜。'),
+    L('jiu', c => [`听说你要进「${c.set}」了？`, `又一个？「${c.set}」也进了。`, `「${c.set}」到了。卖得动才算数。`][(c.nth ?? 0) % 3]),
+    L('jiu', c => ['进货的钱花出去，账可不会少一分。', '货多了，架子摆不摆得下，自己算清楚。', '别光顾着拆，账还在那儿。'][(c.nth ?? 0) % 3]),
+    L('adou', c => ['九姐的意思是：恭喜。', '九姐上回还说你撑不过一个月。', '她这是让你挑个好位置摆。'][(c.nth ?? 0) % 3]),
   ] }],
 };
 

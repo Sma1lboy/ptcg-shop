@@ -12,7 +12,7 @@ import { go } from './layout.ts';
 import { storyOpen } from './story.ts';
 
 const KEY = 'ptcg.guide';
-type Rec = { price?: 1; bill?: 1; off?: 1; share?: 1; done?: 1; badges?: 1; luck?: 1 }; // done: every guide step reached; badges: the missed-customer explanation was visible when the player acted; luck: legacy, read once into the save
+type Rec = { price?: 1; bill?: 1; off?: 1; share?: 1; done?: 1; badges?: 1; luck?: 1 }; // done: every guide step reached; badges: the missed-customer explanation was visible when the player acted; luck, price: legacy, read once into the save
 let rec: Rec = {};
 try { rec = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { /* storage blocked: the guide just starts over each visit */ }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rec)); } catch (e) { /* ignore */ } };
@@ -56,7 +56,8 @@ const STEPS: Step[] = [
     at: () => { const x = toRack(); return x ? inRow(x.id, '.s-act .primary[data-act="shelve"]:not(:disabled)') : pick('#shelf .set .s-act .primary:not(:disabled)', '#shelf .set .s-act .primary'); },
     // the key as it reads right now: 上架 N 包 once the back room holds the stock, else the 补到满 that buys it first
     p: el => { const t = el?.textContent?.trim(), b = `「${t || '补到满'}」`; return el?.matches('[data-act="shelve"]') ? `点${b}。仓库里的包顾客看不到，只有货架上的才卖得出去；仓库会留 1 包给你自己拆。` : `仓库空了：先点${b}进货并上架。只有货架上的包才卖得出去。`; } },
-  { page: 'shelf', h: '定价', done: () => !!rec.price || Object.keys(G.state.price).length > 0,
+  // priceSeen lives in the save like luckSeen (a save copied to another browser brought 定价 back after 引导完成); a player who reached 欧气 is past it too
+  { page: 'shelf', h: '定价', done: () => !!G.state.feat.priceSeen || !!G.state.feat.luckSeen || Object.keys(G.state.price).length > 0,
     at: () => { const id = firstShelved(); return id ? shown(document.querySelector(`#shelf .pricer [data-id="${id}"]`)?.closest('.s-price') ?? null) : null; },
     // the 倒爷 line quotes their own ceiling (game.ts TYPES.flipper.tol): 「市价附近」 read like the default 95%, and at 95% they walked out
     p: () => { const id = firstShelved(), flip = Math.round(G.TYPES.flipper.tol * 100); return html`黄价签按市价的百分比定价，默认 ${Math.round(G.DEFAULT_PCT * 100)}%${id ? `（当前 ${money(G.ask(id))}）` : ''}；市价随行情波动，标价也跟着变。虚线框里 − / + 调比例，不想调就点「先按这个价卖」。标高了嫌贵的顾客会走，标低了少赚；倒爷肯出的上限平均约市价的 ${flip}%（每人不同），标价在它以下，开张 10 分钟后他们会一次买走一批。`; } },
@@ -216,6 +217,7 @@ export function renderGuide() {
 export function bindGuide() {
   const sawLuck = () => { if (page() === 'luck' && !G.state.feat.luckSeen && sum(G.state.opened)) G.state.feat.luckSeen = 1; };
   if (rec.luck) G.state.feat.luckSeen = 1; // the flag used to live in ptcg.guide: a player who saw 欧气 before the move keeps step 6 done
+  if (rec.price) G.state.feat.priceSeen = 1; // the same for 定价
   sawLuck(); // a reload straight onto #luck counts too
   addEventListener('hashchange', () => { sawLuck(); renderGuide(); });
   const sync = () => (memoOnScreen() !== memoSeen ? renderGuide() : place()); // the phone's box scrolled into or out of view: the bubble gives way or comes back
@@ -227,7 +229,7 @@ export function bindGuide() {
     if (badged) { rec.badges = 1; save(); }
     if (b.dataset.act === 'guide') { replay = 0; go(STEPS[0].page); }
     else if (b.dataset.act === 'sharemat') { if (!rec.share) { rec.share = 1; save(); } }
-    else if (b.dataset.coach === 'price') { rec.price = 1; save(); }
+    else if (b.dataset.coach === 'price') G.state.feat.priceSeen = 1;
     else if (b.dataset.coach === 'bill') { rec.bill = 1; save(); }
     else if (b.dataset.coach === 'off') { if (replay < 0) { rec.off = 1; save(); } replay = -1; }
     else if (b.dataset.coach === 'next') { replay = replay + 1 < STEPS.length ? replay + 1 : -1; if (replay >= 0) go(STEPS[replay].page); }

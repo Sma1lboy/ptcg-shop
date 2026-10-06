@@ -98,7 +98,7 @@ export function deepFill(id: string) {
   const f = shelfFill(id), w = G.wholesale(id), stock = G.state.stock[id] || 0;
   if (!G.lvl('clerk') || !G.state.auto[id] || f.n <= 1) return f;
   const n = Math.min(G.WAREHOUSE - stock, f.n + Math.max(0, Math.floor((G.spare() - f.n * w) / w)));
-  return n <= f.n ? f : { n, full: f.full, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * w, 'exact')}：一架的量，加上闲钱够的仓库存货，店员会接着搬上架` };
+  return n <= f.n ? f : { n, full: f.full, deep: true, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * w, 'exact')}：一架的量，加上闲钱够的仓库存货，店员会接着搬上架` };
 }
 // 补到满: the one key of a set's row on 货架 (shelf.ts), the same quote as the sold-out box (notice.ts fix): from the back room when it holds
 // more than the 1 pack 上架 keeps back (上架 N 包, free), else buy the shelf's gap and shelve it in the same press (events.ts 'refill'; with a
@@ -112,11 +112,12 @@ export function refillQuote(id: string, alone = true): Quote {
   if (own && G.shelfQty(id) >= own * G.depth()) return { act: 'refill', n: 0, cost: 0, ok: false, text: '货架已满', title: '这个系列的货架已经满了' };
   const up = toShelf(id);
   if (stock > keepsBack(id) && up) return { act: 'shelve', n: up, cost: 0, ok: true, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货；仓库留 ${keepsBack(id)} 包自己拆` };
-  const f = alone ? deepFill(id) : shelfFill(id);
+  const f: { n: number; full: boolean; deep?: boolean } = alone ? deepFill(id) : shelfFill(id);
   if (f.n > 1) {
     const cost = f.n * w;
-    return { act: 'refill', n: f.n, cost, ok: true, text: `${f.full ? '补到满' : `补 ${f.n} 包`} ${money(cost, 'exact')}`,
-      title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架，仓库留 ${keepsBack(id)} 包自己拆${f.full ? '' : '；现金只够这些'}` };
+    // the deep fill buys the back room too: 「补到满 $994」 read as the shelf alone and turned out to be 163 packs (a reviewer, twice)
+    return { act: 'refill', n: f.n, cost, ok: true, text: `${f.deep ? '补满+仓库' : f.full ? '补到满' : `补 ${f.n} 包`} ${money(cost, 'exact')}`,
+      title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架${f.deep ? '，其余放仓库，店员接着搬上架' : ''}，仓库留 ${keepsBack(id)} 包自己拆${f.full ? '' : '；现金只够这些'}` };
   }
   return { act: 'refill', n: 0, cost: 0, ok: false, text: '补到满', title: '现金不够进 2 包' };
 }
