@@ -87,7 +87,7 @@ function draw() {
       ${c.rail || verdict ? html`<div class="s-cust">${c.rail ?? nothing}${verdict ? html`<p class="c-note">${verdict}</p>` : nothing}</div>` : nothing}
       <details class="s-more"><summary>更多</summary>
         <div class="m-btns">
-          <button type="button" data-act="buy" data-id="${id}" data-n="10" ?disabled=${room < 1 || s.cash < w * Math.min(10, room)}>进 10</button>
+          <button type="button" data-act="buy" data-id="${id}" data-n="10" title="进 10 包放进仓库，不上架" ?disabled=${room < 1 || s.cash < w * Math.min(10, room)}>进仓库 10</button>
           <button type="button" data-act="buy" data-id="${id}" data-n="${more.n}" title="${more.title}" ?disabled=${more.n < 1}>${more.n === room ? '进满仓库' : '进仓库'} ${more.n}</button>
           <button type="button" data-act="open10" data-id="${id}" ?disabled=${stock < 2 || hold}>开 ${stock >= 2 ? Math.min(10, stock) : 10} 包</button></div>
         <label class="m-place">换货架 <select ?disabled=${!stock && !clerkOn && slot < 0} title="${!stock && !clerkOn ? '仓库没货，先进货才能摆上别的货架' : '摆到哪个货架：原来的系列退回仓库'}" @change=${(e: Event) => placeOn(e.target as HTMLSelectElement, id)}>

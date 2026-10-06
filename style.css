@@ -1623,8 +1623,8 @@ button:disabled { cursor: not-allowed; }
   .subnav { flex: 1 1 100%; } .subnav a { flex: 1; min-width: 0; padding: 0 6px; height: 44px; white-space: nowrap; } .sub-k { display: none; }
 }
 @media (max-width: 429px) { .cash .k { display: none; } } /* phones: the coin goes (the money box still reads as 所持金 by its white frame), so a 7-character sum ($129.62, $31,262) fits beside both readouts */
-@media (max-width: 379px) { .sub dd { font-size: var(--fs-cap); } .sub div { padding: 3px 5px; } } /* 320–379: three-digit readouts ("598 包") beside a 7-character sum */
-@media (max-width: 359px) { .due .bar { display: none; } } /* 320–359: retain the bill countdown */
+@media (max-width: 429px) { .sub dd { font-size: var(--fs-cap); } .sub div { padding: 3px 5px; } } /* phones: two readouts ("253 包", "11 包") beside a 7-character sum; at --fs-h the back-room plate ran under the money box at 390 ("11 ⌐") */
+@media (max-width: 389px) { .due .bar { display: none; } .sub, .sub div { gap: 2px; } .sub div { padding: 3px 3px; } .cash { padding-inline: 4px; } } /* 320–389: the bill keeps its amount and countdown, not its bar; both readouts ("253 包", "158 包") and a 7-character sum ($31,263) fit side by side — at 360 with the bar the back-room plate ran 23px under the money box */
 @media (min-width: 780px) and (max-width: 859px) { .due .bar { --due-bar: 44px; --in: 3px; } .due .bar::before { display: none; } .nav a { padding: 0 6px; } }
 
 /* 开包 on a phone turned sideways (844×390, 667×375 …): the viewport is short, not narrow. The table fills the height under the
