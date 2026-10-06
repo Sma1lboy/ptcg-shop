@@ -20,7 +20,7 @@ const sold: Record<string, { k: number; at: number; c: Single; n: number; gain: 
 const positions = new Map<string, Single>();
 function listen(list: [string, Single][]) {
   const s = G.state, now = Date.now();
-  const fresh = s.recent.filter(v => v.at > lastAt && v.t === 'seeker' && v.r === 'sold' && now - v.at < LIVE);
+  const fresh = s.recent.filter(v => v.at > lastAt && v.t === 'seeker' && v.r === 'sold' && G.now() - v.at < LIVE);
   lastAt = s.recent[0]?.at ?? lastAt;
   if (had) for (const [k, { c, n }] of Object.entries(had)) {
     const left = s.singles[k]?.count ?? 0;

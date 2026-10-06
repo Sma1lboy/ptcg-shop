@@ -37,7 +37,7 @@ function place(slots: number) {
     if (!c || cur.has(c)) return;
     pos![k] = null;
     const v = fresh.find(v => v.card === c.name || (v.t === 'seeker' && v.n! > 1));
-    if (v && now - v.at < LIVE) stamps[k] = { k: ++soldN, at: now, c, gain: G.cardAsk(c) };
+    if (v && G.now() - v.at < LIVE) stamps[k] = { k: ++soldN, at: now, c, gain: G.cardAsk(c) };
   });
   pos ||= [];
   const placed = new Set(pos);
@@ -52,7 +52,7 @@ const stamp = (k: number) => { const t = stamps[k]; return t && Date.now() - t.a
 // who looked at a card in the case and left it (balk records the card: a seeker's cheapest fit, a collector's priciest big card),
 // said under the first cube holding that card: the miss is pinned to the cube, and the rail above says what price would fix it
 function balked() {
-  const since = Date.now() - G.MISS_WINDOW * 1000, m = new Map<string, { dear: number; broke: number; max: number }>();
+  const since = G.now() - G.MISS_WINDOW * 1000, m = new Map<string, { dear: number; broke: number; max: number }>();
   for (const v of G.state.recent) {
     if (v.at <= since) break;
     if (v.r !== 'pricey' || !v.card || v.t === 'flipper') continue;

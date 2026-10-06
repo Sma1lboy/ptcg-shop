@@ -64,7 +64,7 @@ export function swapHint(): { i: number; id: string; miss: number; buyers: numbe
   const racks = G.shelves(); if (racks.some(r => !r.id)) return null;
   const want = SETS.filter(x => G.unlocked(x.id) && !racks.some(r => r.id === x.id)).map(x => ({ id: x.id, miss: G.missed(x.id) })).sort((a, b) => b.miss - a.miss)[0];
   if (!want?.miss) return null;
-  const since = Date.now() - G.MISS_WINDOW * 1000, buyers = (id: string) => G.state.recent.filter(v => v.at > since && v.r === 'sold' && v.set === id && v.n && !v.card && v.t !== 'seeker').length / racks.filter(r => r.id === id).length;
+  const since = G.now() - G.MISS_WINDOW * 1000, buyers = (id: string) => G.state.recent.filter(v => v.at > since && v.r === 'sold' && v.set === id && v.n && !v.card && v.t !== 'seeker').length / racks.filter(r => r.id === id).length;
   const idle = racks.map((r, i) => ({ i, b: buyers(r.id!) })).sort((a, b) => a.b - b.b)[0];
   return want.miss > idle.b ? { i: idle.i, id: want.id, miss: want.miss, buyers: Math.round(idle.b) } : null;
 }
@@ -74,7 +74,7 @@ export function point(id: string | null) { if (lit !== id) { lit = id; draw(); }
 
 function rack(r: Shelf, i: number, boards: number, deep: number, swap: ReturnType<typeof swapHint>) {
   // flippers who swept this set in the 顾客 window (the same one the 没买到 count uses): the player sees the packs gone and why
-  const s = G.state, id = r.id, since = Date.now() - G.MISS_WINDOW * 1000, swept = id ? s.recent.filter(v => v.at > since && v.t === 'flipper' && v.r === 'sold' && v.set === id && v.n) : [];
+  const s = G.state, id = r.id, since = G.now() - G.MISS_WINDOW * 1000, swept = id ? s.recent.filter(v => v.at > since && v.t === 'flipper' && v.r === 'sold' && v.set === id && v.n) : [];
   const per = G.DEPTH_STEP / FACES, miss = id ? G.missed(id) : 0;
   const others = SETS.filter(x => G.unlocked(x.id) && x.id !== id), clerk = G.lvl('clerk') > 0; // with a clerk, a shelf can wait for the next round's buying
   const opt = (x: typeof SETS[number]) => { const st = s.stock[x.id] || 0, m = G.missed(x.id);
@@ -119,7 +119,7 @@ function ghost(cost: number) {
 function clerkNote() {
   const short = G.clerkShort(); if (short <= 0) return nothing;
   const s = G.state, r = s.clerkRound!, cash = s.cash, need = G.clerkNeed(), b = G.nextBill(), missed = SETS.reduce((a, x) => a + G.missed(x.id), 0);
-  const ago = Math.round((Date.now() - r.at) / 60000), next = Math.max(1, Math.ceil((s.clerkT - Date.now()) / 60000));
+  const ago = Math.round((G.now() - r.at) / 60000), next = Math.max(1, Math.ceil((s.clerkT - G.now()) / 60000));
   const keep = G.clerkKeep(), cheap = Math.min(...G.shelves().filter(x => x.id && s.auto[x.id]).map(x => G.wholesale(x.id!))), spend = Math.min(Math.max(0, cash - keep), need), left = cash - spend;
   return html`<p class="wall-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮补到店员的目标库存要 ${money(r.need)}，到现在只进了 ${money(r.spent)}，还差 <b>${money(short)}</b> 的货${missed ? html`；${lately()} <b>${missed} 位</b>来买整包没买到` : ''}。
       店员只拿收银台里的现钱进货：轮到他进货时，现金被升级或账单花掉了，缺的货要等下一轮（约 ${next} 分钟后）。

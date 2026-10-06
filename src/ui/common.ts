@@ -4,7 +4,19 @@ import { createGame } from '../game.ts';
 import { html, nothing } from 'lit-html';
 import { card, logo } from '../assets.ts';
 
-export const G = createGame();
+// Dev-only shop clock (`npm run dev`; the build and the pen use Date.now as is): reviewers and the maintainer can run the shop faster
+// or jump over a wait instead of sitting it out in real minutes. `?speed=4` in the URL, or from the console / a test driver:
+// __dev.speed(n) (n× wall clock from now), __dev.skip(sec) (trades sec seconds at once, in steps short enough not to count as
+// 离开), __dev.now(). Every UI comparison against a game timestamp uses G.now(), so a fast clock stays consistent on screen.
+const DEV = !!(import.meta as { env?: { DEV?: boolean } }).env?.DEV;
+let devBase = Date.now(), devAt = devBase, devSpeed = DEV ? Math.max(1, +(new URLSearchParams(location.search).get('speed') || 1)) : 1;
+const devClock = () => devAt + (Date.now() - devBase) * devSpeed;
+export const G = createGame(DEV ? { now: devClock } : {});
+if (DEV) (window as unknown as { __dev: unknown }).__dev = {
+  now: () => G.now(),
+  speed(n: number) { devAt = devClock(); devBase = Date.now(); devSpeed = Math.max(0, n); return devSpeed; },
+  skip(sec: number) { for (let t = 0; t < sec; t += 10) { devAt += Math.min(10, sec - t) * 1000; G.tick(G.revealing()); } return G.now(); },
+};
 export const $ = (id: string) => document.getElementById(id)!;
 // Big sums shorten: $123.4K from $100,000, $1.23M from a million (the debt, late revenue); below that, whole dollars from $1,000.
 // Quotes use cents even above $1,000; overview readouts retain the compact format.

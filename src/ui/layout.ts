@@ -23,7 +23,7 @@ function route() {
   document.querySelectorAll<HTMLElement>('.page').forEach(p => { p.hidden = p.id !== `page-${home}`; });
   document.querySelectorAll('.nav a').forEach(a => { if (a.getAttribute('href') === `#${home}`) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   document.querySelectorAll('.subnav a').forEach(a => { if (a.getAttribute('href') === `#${id}`) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
-  if (home === 'shelf') { seen = Date.now(); shopLog(id); }
+  if (home === 'shelf') { seen = G.now(); shopLog(id); }
   renderTabs(); scrollTo(0, 0);
 }
 // 店内动态 is the whole till roll, packs and case cards: it follows the player to the bottom of whichever 货柜 view is open, so the
@@ -36,7 +36,7 @@ export const go = (id: string) => { if (currentPage() !== id) { location.hash = 
 
 // 货柜 dot: while the player is on another page, someone came for a pack that was on no shelf, or balked at a price. It lights only
 // for what happened since they last looked at 货柜, and the number is the one the shelf page shows (G.missed over the window).
-let seen = Date.now();
+let seen = G.now();
 function shelfDot() {
   const el = $('shelf-n'), s = G.state;
   const fresh = (HOME[currentPage()] ?? currentPage()) !== 'shelf' && (Object.values(s.miss).some(ts => ts.some(t => t > seen)) || s.recent.some(v => v.at > seen && v.r === 'pricey'));

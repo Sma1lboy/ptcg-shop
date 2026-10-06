@@ -85,7 +85,7 @@ function packs(rec: Visit[]) {
       const clerk = G.lvl('clerk') > 0 && !!s.auto[id], carry = clerk && racked, buf = carry ? G.CLERK_KEEP : 0, fill = restock(id);
       const buy = html`<button type="button" data-act="buy" data-id="${id}" data-n="${fill.n}" title="${fill.title}" ?disabled=${!fill.n}>${fill.n ? fill.text : '进货'}</button>`;
       const refill = stock > buf && !carry ? html`<button type="button" data-act="shelve" data-id="${id}" data-n="${racked ? 999 : toShelf(id)}">${racked ? '补满' : shelveLabel(id, false)}</button>` : buy;
-      const act = racked || free ? refill : '', mins = Math.max(1, Math.ceil((s.clerkT - Date.now()) / 60000));
+      const act = racked || free ? refill : '', mins = Math.max(1, Math.ceil((s.clerkT - G.now()) / 60000));
       const fix = !racked && !free ? '：在上面给一个货架换系列，或者加一个货架'
         : carry ? (stock > buf ? '' : `，仓库${stock ? `只剩 ${stock} 包` : '也空了'}：进到仓库的货店员随时搬上架，不然等他下一轮进货（约 ${mins} 分钟）`)
         : shelf ? '' : `，仓库${stock ? `还有 ${stock} 包` : '也没有'}`;
@@ -223,7 +223,7 @@ function sellerNote(vs: Visit[]) {
 // Three targets, one window: the head on 货柜's view bar (count, bar, 没找到 split) stays over both views, and each view's sub-tab says
 // how many of its own customers left empty-handed; the pack buyers sit under the shelf on 货架, the case browsers beside the case on 展示柜.
 function customers() {
-  const since = Date.now() - G.MISS_WINDOW * 1000, rec = G.state.recent.filter(v => v.at > since), n = rec.length; // the shelf wall's window
+  const since = G.now() - G.MISS_WINDOW * 1000, rec = G.state.recent.filter(v => v.at > since), n = rec.length; // the shelf wall's window
   const atCase = rec.filter(v => v.r === 'none' && (v.t === 'seeker' || v.t === 'collector')).length, none = count(rec, 'none');
   const tab = (el: HTMLElement, k: number, what: string) => { el.hidden = !k; render(html`${k}<span class="visually-hidden"> 位${what}</span>`, el); };
   tab($('n-packs'), none - atCase, '没买到整包'); tab($('n-case'), atCase, '在展示柜和卡本没找到');

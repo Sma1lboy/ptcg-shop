@@ -4,7 +4,7 @@ import { keyed } from 'lit-html/directives/keyed.js';
 import { G, $, money, bar } from './common.ts';
 import { nextStep } from './upgrades.ts';
 
-let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = Date.now(), why = '', lastAt = 0;
+let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = G.now(), why = '', lastAt = 0;
 let lastExtra: { tickets: number; idle: number; offline: number } | null = null;
 
 // What the till's change was made of, when it all came from the counter: packs sold stay a bare 「+$」 (the 第一笔生意 note says what
@@ -50,7 +50,7 @@ export function renderStats(reveal = false) {
 const spareSeen: [number, number][] = [];
 function goal() {
   const g = nextStep(); if (!g || G.canBranch()) return '';
-  const now = Date.now(), spare = G.spare();
+  const now = G.now(), spare = G.spare();
   spareSeen.push([now, spare]); while (spareSeen.length && spareSeen[0][0] < now - 300e3) spareSeen.shift();
   const [t0, s0] = spareSeen[0], per = now - t0 >= 60e3 ? (spare - s0) / ((now - t0) / 60e3) : 0, left = g.cost - spare;
   return html`<p class="pm-goal"><span>下一个目标：<b>${g.name} Lv ${g.lv + 1}</b> ${money(g.cost)}</span>

@@ -525,7 +525,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const m2 = { gapA: gapIn(0, 1800), gapB: gapIn(1800, N), emptyA: m2b.slice(0, 6).filter(n => !n).length, emptyB: m2b.slice(6).filter(n => !n).length };
   m2.a = !m2.emptyA && m2.gapA <= 240; m2.b = !m2.emptyB && m2.gapB <= 480;
   return { seed, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
-    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify(st()) : undefined }; // dump: the save at the end, to hand a reviewer the 30→60 min stretch
+    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify({ ...st(), feat: { ...st().feat, ...Object.fromEntries(Object.entries(seen).map(([k, v]) => [`story:${k}`, +v || 0])), 'story:return': 1 } }) : undefined }; // the scenes this player saw go with it (ui/story.ts keeps them in feat), so the reviewer's tab doesn't replay them // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
 
 // firsthour diagnosis (read-only on a run made with { series: true }): what the player's money did inside the longest event drought.
@@ -541,9 +541,32 @@ export function droughtWhy(r) {
     'buy waits min': Object.values(r.boughtAt).sort((x, y) => x - y).map((x, i, a) => Math.round((x - (a[i - 1] ?? 0)) / 60)).join(' ') };
 }
 
+// A checkpoint for a reviewer: the first-hour player's save at minute `minutes`, as a browser init script (pass it to addInitScript,
+// or run it once on a same-origin page) that installs it once per tab session with every timestamp shifted so the save reads as
+// just closed, and marks the guide done. With `npm run dev` the reviewer can then use ?speed=N / __dev.skip(sec) / __dev.speed(0)
+// (src/ui/common.ts) to fast-forward waits; skipped time is idle time and goes in the report.
+export function checkpoint(seed = 3, minutes = 30) {
+  const save = firstHour({ seed, minutes, dump: true }).save, tag = `ptcg.cp.${seed}.${minutes}`;
+  return `(() => {
+  if (sessionStorage.getItem(${JSON.stringify(tag)})) return; sessionStorage.setItem(${JSON.stringify(tag)}, '1');
+  const s = ${save}, d = Date.now() - s.savedAt, shift = v => (typeof v === 'number' && v > 1e12 ? v + d : v);
+  s.savedAt += d; s.heatT = shift(s.heatT); s.clerkT = shift(s.clerkT);
+  for (const k in s.flipT || {}) s.flipT[k] = shift(s.flipT[k]);
+  for (const k in s.miss || {}) s.miss[k] = s.miss[k].map(shift);
+  for (const v of s.recent || []) v.at = shift(v.at);
+  for (const l of s.log || []) l.t = shift(l.t);
+  for (const k in s.ach || {}) s.ach[k] = shift(s.ach[k]);
+  if (s.clerkRound) s.clerkRound.at = shift(s.clerkRound.at);
+  localStorage.setItem('ptcg-shop-v1', JSON.stringify(s));
+  localStorage.setItem('ptcg.guide', JSON.stringify({ done: 1, price: 1, bill: 1, share: 1 }));
+})();\n`;
+}
 
 if (process.argv[1]?.endsWith('autoplay.mjs')) {
   const [mode, ...rest] = process.argv.slice(2);
+  if (mode === 'checkpoint') { // node scripts/autoplay.mjs checkpoint [seed=3] [minutes=30] > /tmp/cp.js
+    const [seed = 3, minutes = 30] = rest.map(Number); process.stdout.write(checkpoint(seed, minutes));
+  } else
   if (mode === 'firsthour' && rest.includes('diag')) { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] diag [old]: why the longest drought, per seed (see droughtWhy); plus snaps and the starting-afford check. old = the message box before the collector/card notes (uiNotes: false)
     const [seeds = 12, react = 6] = rest.filter(x => x !== 'diag' && x !== 'old').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, snapEvery: 300, series: true, uiNotes: !rest.includes('old') }));
     console.table(runs.map(droughtWhy));

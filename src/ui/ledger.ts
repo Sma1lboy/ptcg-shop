@@ -112,7 +112,7 @@ function raiseLoan() {
 export function openRaise() { shutWeek = -1; renderRaise(); }
 // after a sale or a loan the bill is paid on the spot, not on the next second's tick
 const act = (f: () => unknown) => () => { f(); const o = G.state.overdue; if (o && G.state.cash >= o.amount) G.payBill(); };
-const recentTake = (secs: number) => G.state.recent.reduce((a, v) => a + (v.at > Date.now() - secs * 1000 ? v.gain || 0 : 0), 0);
+const recentTake = (secs: number) => G.state.recent.reduce((a, v) => a + (v.at > G.now() - secs * 1000 ? v.gain || 0 : 0), 0);
 function sellCase(idx: number[]) { for (const i of [...idx].sort((a, b) => b - a)) { const key = G.state.shown[i]?.key; G.unlist(i); if (key) G.sell(key, 1); } }
 const cardsNote = (pick: { c: { name: string }; n: number }[]) => pick.length <= 2 ? pick.map(p => `${p.c.name}${p.n > 1 ? ` ×${p.n}` : ''}`).join('、') : `${pick[0].c.name} 等 ${pick.reduce((a, p) => a + p.n, 0)} 张`;
 
