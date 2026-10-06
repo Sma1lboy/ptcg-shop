@@ -51,10 +51,13 @@ export const rarNames = (ks: readonly string[]) => ks.map(k => RAR[k]?.zh ?? k).
 
 // 上架 from a set row's key (refillQuote) and the sold-out box keeps 1 pack in the back room, so a new player who shelves a fresh box can
 // still open one. The count is what will actually move (the set's shelves, or one empty shelf, hold so many).
+// The back-room packs kept for the player to open: 1, or with the clerk restocking this set the CLERK_KEEP he never shelves — 补到满
+// with those in the back room used to turn into 「上架 9 包」 and hide the buying (a reviewer, twice, with the shelf at 0/160).
+export const keepsBack = (id: string) => (G.lvl('clerk') && G.state.auto[id] ? G.CLERK_KEEP : 1);
 export function toShelf(id: string) {
   const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth();
-  const st = G.state.stock[id] || 0;
-  return Math.min(room, st > 1 ? st - 1 : st);
+  const st = G.state.stock[id] || 0, k = keepsBack(id);
+  return Math.min(room, st > k ? st - k : k === 1 ? st : 0);
 }
 // The 顾客 / 没买到 window's name: the last MISS_WINDOW, or 开店以来 while every walk-in so far still falls inside it (a new shop
 // 1 minute in has not had 10 minutes of customers).
@@ -76,7 +79,7 @@ export function restock(id: string) {
 // sold out in about half a minute, a shelf of forty sells for minutes. n 0 when the back room already covers the shelf.
 export function shelfFill(id: string) {
   const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth();
-  const want = Math.max(0, Math.min(room + 1 - (G.state.stock[id] || 0), G.WAREHOUSE - (G.state.stock[id] || 0)));
+  const want = Math.max(0, Math.min(room + keepsBack(id) - (G.state.stock[id] || 0), G.WAREHOUSE - (G.state.stock[id] || 0)));
   const n = Math.min(want, Math.floor(G.state.cash / G.wholesale(id)));
   return { n, full: n === want, text: `进 ${n} 包`, title: `进 ${n} 包 ${money(n * G.wholesale(id), 'exact')}，数量按货架缺口、仓库空间和现金计算` };
 }
@@ -98,12 +101,12 @@ export function refillQuote(id: string, alone = true): Quote {
   const s = G.state, w = G.wholesale(id), stock = s.stock[id] || 0, racks = G.shelves(), own = racks.filter(r => r.id === id).length;
   if (!own && !racks.some(r => !r.id)) return { act: 'refill', n: 0, cost: 0, ok: false, text: '补到满', title: '没有空货架：在「更多」里给它换一个货架，或到成长里加一个货架' };
   const up = toShelf(id);
-  if (stock > 1 && up) return { act: 'shelve', n: up, cost: 0, ok: true, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货；仓库留 1 包自己拆` };
+  if (stock > keepsBack(id) && up) return { act: 'shelve', n: up, cost: 0, ok: true, text: `上架 ${up} 包`, title: `从仓库上架 ${up} 包，不另进货；仓库留 ${keepsBack(id)} 包自己拆` };
   const f = alone ? deepFill(id) : shelfFill(id);
   if (f.n > 1) {
     const cost = f.n * w;
     return { act: 'refill', n: f.n, cost, ok: true, text: `${f.full ? '补到满' : `补 ${f.n} 包`} ${money(cost, 'exact')}`,
-      title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架，仓库留 1 包自己拆${f.full ? '' : '；现金只够这些'}` };
+      title: `进 ${f.n} 包 ${money(cost, 'exact')} 并上架，仓库留 ${keepsBack(id)} 包自己拆${f.full ? '' : '；现金只够这些'}` };
   }
   const full = !!own && G.shelfQty(id) >= own * G.depth();
   return { act: 'refill', n: 0, cost: 0, ok: false, text: full ? '货架已满' : '补到满', title: full ? '这个系列的货架已经满了' : '现金不够进 2 包' };

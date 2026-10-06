@@ -217,7 +217,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // The draw uses its own mulberry32 (seeded from the clock, the shop number and the shop time), never random(): the walk-in stream, and so every seeded
   // test and every autoplay run, stays exactly what it was unless the player serves a request. COMM_GAP is 5 minutes, not 4: with 4 the 店员没本钱 gate (普通 seed 3 blind, 30 h)
   // drew its third 开分店 after 30 h instead of at 26 h. That gate is a knife edge: a plain $3–$19 of extra cash at hour 3, with no commission in sight, flips two of the six blind seeds the same way (ROADMAP loop 17).
-  const COMM_GAP = 5 * 60, COMM_LEN = 10 * 60, COMM_OPEN = 20 * 60, COMM_PAY = 1.6, COMM_MIN = 2, COMM_FLOOR = 0.2, COMM_CAP0 = 5, COMM_CAP1 = 40, COMM_CAP_REV = 1000;
+  const COMM_GAP = 5 * 60, COMM_LEN = 10 * 60, COMM_OPEN = 20 * 60, COMM_PAY = 1.6, COMM_MIN = 2, COMM_FLOOR = 0.2, COMM_CAP0 = 5, COMM_CAP1 = 40, COMM_CAP_REV = 1000, COMM_HELD = 0.5;
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 300;                    // a shop with no cash, stock or cards to sell is lent this much (soft-lock guard; bankrupt if there is no credit left)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
@@ -639,7 +639,10 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     const pool = ids.flatMap(id => commList(id).filter(c => c.price >= Math.max(COMM_MIN, cap * COMM_FLOOR) && c.price <= cap).map(c => ({ id, c, w: cardOdds(id, c.n) ** 2 })));
     const total = pool.reduce((a, p) => a + p.w, 0); if (!(total > 0)) return null;
     const seed = [Math.floor(clock() / 1000), state.branch.n, state.branch.broke || 0, Math.round(state.shopT)].reduce((a, v) => Math.imul(a ^ v, 0x9E3779B1) + 0x7F4A7C15 | 0, 0x811C9DC5);
-    let x = S.rng(seed)() * total; const { id, c } = pool.find(p => (x -= p.w) < 0) ?? pool[pool.length - 1];
+    // half the requests (when the binder holds a fitting card) ask for one the player already has: a choice to make now — hand it over at
+    // ×COMM_PAY, or keep it for the case — rather than a lottery on packs (a reviewer got three requests and could serve none)
+    const r = S.rng(seed), held = pool.filter(p => state.singles[`${p.id}|${p.c.n}|${p.c.r}`]?.count > 0), from = held.length && r() < COMM_HELD ? held : pool;
+    let x = r() * from.reduce((a, p) => a + p.w, 0); const { id, c } = from.find(p => (x -= p.w) < 0) ?? from[from.length - 1];
     return { set: id, n: c.n, name: c.name, r: c.r, kind: c.r, price: c.price, reward: cents(c.price * COMM_PAY), due: state.shopT + COMM_LEN };
   }
   // Once per tick, while the player is here: the open request lapses at its deadline (commAt = the deadline itself, however late the tick that saw it), or a new one is asked

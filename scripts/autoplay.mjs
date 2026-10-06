@@ -288,13 +288,14 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   let clerkAt = null, clerkSpent = 0;
   const pay = (id, n) => { const before = st().stock[id] || 0, ok = G.buy(id, n); if (ok) sp.refill += ((st().stock[id] || 0) - before) * G.wholesale(id); return ok; };
   // ----- common.ts -----
-  const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0; return Math.min(room, n > 1 ? n - 1 : n); };
-  const shelfFill = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), s = st().stock[id] || 0, want = Math.max(0, Math.min(room + 1 - s, G.WAREHOUSE - s)), n = Math.min(want, Math.floor(st().cash / G.wholesale(id))); return { n, full: n === want }; };
+  const keepsBack = id => (G.lvl('clerk') && st().auto[id] ? G.CLERK_KEEP : 1); // common.ts: the clerk's kept-back packs don't count as shelvable stock
+  const toShelf = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), n = st().stock[id] || 0, k = keepsBack(id); return Math.min(room, n > k ? n - k : k === 1 ? n : 0); };
+  const shelfFill = id => { const own = G.shelves().filter(r => r.id === id), room = own.length ? own.reduce((a, r) => a + G.depth() - r.qty, 0) : G.depth(), s = st().stock[id] || 0, want = Math.max(0, Math.min(room + keepsBack(id) - s, G.WAREHOUSE - s)), n = Math.min(want, Math.floor(st().cash / G.wholesale(id))); return { n, full: n === want }; };
   // shelf.ts: a set row's ONE yellow key (common.ts refillQuote), the same quote as the sold-out box: 上架 N 包 from the back room when it holds
   // more than the pack kept back, else 补到满 — buy the shelf's gap (deepFill: bigger with a clerk on the set) and shelve it in the same press
   // (events.ts 'refill'). null = the key is off: no empty shelf for a set on none, a full shelf, cash under 2 packs.
   const rowKey = id => { if (!racked(id) && !G.shelves().some(r => !r.id)) return null;
-    const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { act: 'shelve', id, n: up }; const f = deepFill(id); return f.n > 1 ? { act: 'refill', id, n: f.n } : null; };
+    const up = toShelf(id); if ((st().stock[id] || 0) > keepsBack(id) && up) return { act: 'shelve', id, n: up }; const f = deepFill(id); return f.n > 1 ? { act: 'refill', id, n: f.n } : null; };
   const canShelve = id => { const own = G.shelves().filter(r => r.id === id).length; return !!st().stock[id] && (own ? G.shelfQty(id) < own * G.depth() : G.shelves().some(r => !r.id)); };
   const unlockedIds = () => SETS.filter(x => G.unlocked(x.id)).map(x => x.id);
   // ----- guide.ts -----
@@ -370,7 +371,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   // ui/common.ts deepFill: with a clerk, the box naming one set also stocks the back room with what the 闲钱 covers (the clerk shelves it)
   const deepFill = id => { const f = shelfFill(id), w = G.wholesale(id), s = st().stock[id] || 0; if (process.env.NODEEP || !G.lvl('clerk') || !st().auto[id] || f.n <= 1) return f;
     const n = Math.min(G.WAREHOUSE - s, f.n + Math.max(0, Math.floor((G.spare() - f.n * w) / w))); return n <= f.n ? f : { n, full: f.full }; };
-  const fix = (id, alone = true) => { const up = toShelf(id); if ((st().stock[id] || 0) > 1 && up) return { cost: 0, up, n: 0 }; const f = alone ? deepFill(id) : shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
+  const fix = (id, alone = true) => { const up = toShelf(id); if ((st().stock[id] || 0) > keepsBack(id) && up) return { cost: 0, up, n: 0 }; const f = alone ? deepFill(id) : shelfFill(id); return f.n > 1 ? { cost: f.n * G.wholesale(id), up: 0, n: f.n } : null; };
   const outIds = () => { const all = [...out], fx = all.map(x => fix(x, false)), cost = fx.reduce((a, f) => a + (f?.cost ?? 0), 0); return all.length > 1 && fx.every(Boolean) && cost <= st().cash ? all : all.slice(0, 1); };
   const shelfMine = () => hold || STEPS[current()]?.h !== '补货'; // guide.ts guideShelf: only the guide's own 补货 step speaks for an empty shelf
   const holds = m => { switch (m.kind) {
@@ -458,8 +459,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     if (e?.open) note(G, e.open); watch(G); achFlush();
   });
   // ----- the player -----
-  const refill = (x, dataN) => { if ((st().stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
-    const n = dataN ?? shelfFill(x).n; if (n > 1 && pay(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - 1)); };
+  const refill = (x, dataN) => { if ((st().stock[x] || 0) > keepsBack(x) && toShelf(x)) { G.shelve(x, toShelf(x)); return; }
+    const n = dataN ?? shelfFill(x).n; if (n > 1 && pay(x, n)) G.shelve(x, Math.max(0, (st().stock[x] || 0) - keepsBack(x))); };
   const openPack = (id, buyFirst, n = 1) => { if (hold) return; if (buyFirst && !pay(id, 1)) return; hold = true; holdLeft = reveal; page = 'open'; if (!G.open(id, n).length) { hold = false; holdLeft = 0; } };
   const grow = b => { page = 'grow'; if (buy(b)) did(`成长 ${b.name} Lv${b.lv + 1}`); page = 'shelf'; };
   // the box's second key, the newly unlocked set: shelve what the back room holds, or buy the printed quantity and shelve it

@@ -20,9 +20,8 @@ function clerkNote() {
   const s = G.state, r = s.clerkRound!, cash = s.cash, need = G.clerkNeed(), b = G.nextBill(), missed = SETS.reduce((a, x) => a + G.missed(x.id), 0);
   const ago = Math.round((G.now() - r.at) / 60000), next = Math.max(1, Math.ceil((s.clerkT - G.now()) / 60000));
   const keep = G.clerkKeep(), cheap = Math.min(...G.shelves().filter(x => x.id && s.auto[x.id]).map(x => G.wholesale(x.id!))), spend = Math.min(Math.max(0, cash - keep), need), left = cash - spend;
-  return html`<p class="shelf-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮补到店员的目标库存要 ${money(r.need)}，到现在只进了 ${money(r.spent)}，还差 <b>${money(short)}</b> 的货${missed ? html`；${lately()} <b>${missed} 位</b>来买整包没买到` : ''}。
-      店员只拿收银台里的现钱进货：轮到他进货时，现金被升级或账单花掉了，缺的货要等下一轮（约 ${next} 分钟后）。
-      ${cash - keep >= cheap ? html`<button type="button" class="primary" @click=${() => G.clerkNow()}>现在补货 ${money(spend)}</button>${keep ? html` <small>九姐的 ${money(keep)} 先留着，补完剩 ${money(left)}</small>` : b && left < b.amount ? html` <small>补完剩 ${money(left)}，九姐来收 ${money(b.amount)}：卖出去才回得来</small>` : nothing}`
+  return html`<p class="shelf-alert"><b>店员没本钱：</b>${ago > 0 ? `${ago} 分钟前` : '刚才'}那一轮钱不够，还差 <b>${money(short)}</b> 的货${missed ? html`，${lately()} <b>${missed} 位</b>没买到` : ''}；下一轮约 ${next} 分钟后。
+      ${cash - keep >= cheap ? html`<button type="button" @click=${() => G.clerkNow()}>现在补货 ${money(spend)}</button>${keep ? html` <small>九姐的 ${money(keep)} 先留着，补完剩 ${money(left)}</small>` : b && left < b.amount ? html` <small>补完剩 ${money(left)}，九姐来收 ${money(b.amount)}：卖出去才回得来</small>` : nothing}`
         : html`<small>${keep && cash >= cheap ? `收银台的钱要留给九姐（${money(keep)}），付完账再补。` : '收银台里还不够一包，卖出几单再补。'}</small>`}</p>`;
 }
 

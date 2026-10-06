@@ -1,7 +1,7 @@
 // Every button carries data-act (+ data-id / data-n / data-key / data-i / data-d / data-k); one document listener routes them.
 // Works the same for lit-rendered panels and the mat's innerHTML, since it never holds element references.
 import * as FX from '../fx.ts';
-import { G, toShelf } from './common.ts';
+import { G, toShelf, keepsBack } from './common.ts';
 import { startPack, openBatch, startRun, stopRun, tear, advance, peek, flipAll, toggleMute, shareMat, resetMat, hold } from './mat.ts';
 import { showLuck } from './share.ts';
 import { resetGuide } from './guide.ts';
@@ -46,9 +46,9 @@ export function bindEvents() {
       case 'refill': { // Snapshot every quoted quantity before the first purchase emits and can repaint this button.
         const ns = b.dataset.n!.split(',').map(Number), ids = id.split(',');
         for (const [i, x] of ids.entries()) {
-          if ((G.state.stock[x] || 0) > 1 && toShelf(x)) { G.shelve(x, toShelf(x)); continue; }
+          if ((G.state.stock[x] || 0) > keepsBack(x) && toShelf(x)) { G.shelve(x, toShelf(x)); continue; }
           const n = ns[i];
-          if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - 1));
+          if (n > 1 && G.buy(x, n)) G.shelve(x, Math.max(0, (G.state.stock[x] || 0) - keepsBack(x)));
         }
         break;
       }
