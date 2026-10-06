@@ -260,7 +260,7 @@ console.log('ok luck percentile');
   st().heat = {}; st().heatT = T + 1e3; // neither 热销 nor 滞销, whatever the random stream rolled: a 热销 set is filled to the top (asserted next)
   const half = Math.ceil(G.depth() / 2); T += 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'level 1 tops a shelf up to half');
   G.shelves()[0].qty = 0; T += 60e3; G.tick(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
-  T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
+  T += G.CLERK_ROUND * 1e3; st().heat = {}; st().heatT = T; G.tick(); assert.equal(G.shelfQty('sv08'), half, 'next round restocks');
   st().heat = { sv08: 1.15 }; G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; st().heatT = T; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 1 fills a 热销 set to the top');
   st().heat = {};
   G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; G.tick(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills it');
