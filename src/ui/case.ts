@@ -92,7 +92,7 @@ export function renderCase() {
         <ol class="v-slots">${cubes.map((c, k) => { const m = c && !named.has(c.name) ? (named.add(c.name), miss.get(c.name)) : undefined;
             return c ? slot(c, s.shown.indexOf(c), k, m) : html`<li class="v-slot empty">
             <div class="v-cube">${stand}<span class="v-empty">空柜位</span>${stamp(k)}</div><p class="v-lip"></p></li>`; })}${up != null ? html`<li class="v-slot ghost">
-            <div class="v-cube"><span class="v-empty">还能加 ${G.CASE_STEP} 格</span></div>
+            <div class="v-cube"><span class="v-empty">还能加 ${G.CASE_GAINS[G.lvl('case')]} 格</span></div>
             <div class="v-ctl"><button type="button" data-act="up" data-k="case" ?disabled=${!!G.growthLock('case') || s.cash < up}>扩柜 ${money(up)}</button>${G.growthLock('case') ? html`<small>${G.growthLock('case')}</small>` : nothing}</div></li>` : nothing}</ol>
       </div>`, $('casepanel'));
 }

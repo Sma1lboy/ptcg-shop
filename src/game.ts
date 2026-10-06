@@ -165,7 +165,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // (+DEPTH_STEP per 加层 level). More shelves = more sets on sale at once (openers who find their set buy it; the rest only
   // settle half the time); deeper shelves = longer before a shelf sells out, while you are away or between the clerk's rounds.
   const RACK_BASE = 3, DEPTH_BASE = 40, DEPTH_STEP = 40;
-  const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots
+  const CASE_BASE = 3, CASE_STEP = 2;     // display-case slots; CASE_GAINS: slots each 展示柜 level adds (the old Lv 3, +2 for $2,920, is two levels of +1: ROADMAP loop 30)
+  const CASE_GAINS = [2, 2, 1, 1, 2];
   const OFFLINE_CAP = 6 * 3600;           // seconds of closed-shop time credited on return, with a clerk minding the shop (看店 adds more)
   const NOCLERK_CAP = 3600;               // without a clerk nobody minds the shop: at most an hour is credited (sales and the bill clock alike)
   // 离开 (game setting): the page hidden (another tab, a locked screen, a closed lid) or closed is one absence, from the moment
@@ -180,7 +181,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // Ticket money is not sales (see State.extra). 挂机加成 (game setting): the shop earns IDLE_BONUS more on every automatic sale (customers, the clerk's
   // bulk sale) while the player has the 货柜 page (货架 or 展示柜) open and in view; 看店 earns OFFLINE_BONUS a level on the same sales while they are away. Never both, never on
   // tickets or 成就奖金, and never on a card the player sells by hand.
-  const GALLERY_SLOTS = 5, ROOM_SLOTS = GALLERY_SLOTS + 1, PEDESTAL = 0, SAVE_V = 3, GALLERY_RATE = 2 / 60, TICKET_MIN = 1, TICKET_MAX = 20, IDLE_BONUS = 0.25, OFFLINE_BONUS = 0.05;
+  const GALLERY_SLOTS = 5, ROOM_SLOTS = GALLERY_SLOTS + 1, PEDESTAL = 0, SAVE_V = 4, GALLERY_RATE = 2 / 60, TICKET_MIN = 1, TICKET_MAX = 20, IDLE_BONUS = 0.25, OFFLINE_BONUS = 0.05;
   // 债务 (game setting, derivation in GAMEPLAY.md). A week is WEEK seconds of shop time while the page is open; a closed stretch
   // (sales credited up to offlineCap) moves the bill clock one week at most: 九姐 calls once while you are away. Shop n (0 = the first) owes
   // DEBT0 × (1 + DEBT_STEP·n); week w's bill is BILL0 × (1 + DEBT_STEP·n) × BILL_G^(w−1), capped at what is left, plus whatever
@@ -245,7 +246,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     signage:  { name: '招牌', desc: `顾客肯多付 +${Math.round(SIGN_STEP * 100)} 个百分点 / 级，更多收藏党和找卡的`, costs: [120, 260, 570, 1250, 2750].map(c => c * COST_X) },
     racks:    { name: '货架', desc: '多一个货架，可以多摆一个系列', costs: SETS.slice(RACK_BASE).map((_, i) => Math.round(Math.round(200 * 1.6 ** i / 10) * 10 * COST_X * (i < 2 ? EARLY_DISCOUNT : 1))) }, // up to one per set: a second shelf of a set is only more depth
     depth:    { name: '加层', desc: `每个货架多放 ${DEPTH_STEP} 包`, costs: [80, 160, 320, 640].map(c => c * COST_X) },
-    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位`, costs: [150, 330, 730, 1600].map(c => c * COST_X) },
+    case:     { name: '展示柜', desc: `多 ${CASE_STEP} 个柜位（3、4 级各多 1 个）`, costs: [150, 330, 360, 370, 1600].map(c => c * COST_X) },
     supplier: { name: '进货渠道', desc: `进货价再低 ${WHOLESALE_STEP * 100} 个百分点`, costs: [300, 750, 1900, 4700].map((c, i) => Math.round(c * COST_X * (i === 0 ? EARLY_DISCOUNT : 1))) },
     expand:   { name: '店面扩建', desc: `口碑客流的上限 +${ROOM_STEP}`, costs: Array.from({ length: 12 }, (_, i) => Math.round(2000 * 1.55 ** i / 100) * 100 * COST_X) },
     clerk:    { name: '店员', desc: `替你巡货架、用现金进货（含打烊时；钱不够时每架按缺的比例分；账单前 ${BILL_KEEP / 60} 分钟不动账款），仓库里的货随时搬上架（留 ${CLERK_KEEP} 包给你拆）。1 级帮工：每 ${CLERK_ROUND_1 / 60} 分钟一轮，补到半满；2 级：每 ${CLERK_ROUND / 60} 分钟一轮，热销的系列补满；3 级：全部补满，并把散卡卖给同行`, costs: [240, 260, 2600].map(c => c * COST_X) }, // ponytail: no wage; add one if cash piles up unspent
@@ -290,7 +291,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const racks = () => RACK_BASE + lvl('racks');
   const depth = () => DEPTH_BASE + DEPTH_STEP * lvl('depth');
   const shelves = () => { while (state.shelves.length < racks()) state.shelves.push({ id: null, qty: 0 }); return state.shelves; }; // padded here, so a level set any way shows up
-  const slots = () => CASE_BASE + CASE_STEP * lvl('case');
+  const slots = () => CASE_BASE + CASE_GAINS.slice(0, lvl('case')).reduce((a, b) => a + b, 0);
   const revenue = () => state.earned.sealed + state.earned.singles;
   const unlockAt = (id: string) => Math.round((UNLOCK[id] || 0) * COST_X * (1 - ACCESS_STEP * perk('access')));
   const unlocked = (id: string) => revenue() >= unlockAt(id);
@@ -397,6 +398,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         delete st.trophy;
         // v3: 店员 got a first level below the old one (帮工), so an old save's 店员 Lv 1 / Lv 2 is Lv 2 / Lv 3 now: the same clerk, same rounds
         if (!(s.v >= 3) && st.up?.clerk > 0) st.up = { ...st.up, clerk: Math.min(UPGRADES.clerk.costs.length, st.up.clerk + 1) };
+        // v4: the old 展示柜 Lv 3 (+2 slots) is Lv 3 + Lv 4 (+1 each) now, so an old Lv 3 / Lv 4 loads as Lv 4 / Lv 5: the same slots
+        if (!(s.v >= 4) && st.up?.case >= 3) st.up = { ...st.up, case: Math.min(UPGRADES.case.costs.length, st.up.case + 1) };
         st.v = SAVE_V;
         st.extra = { tickets: fin(s.extra?.tickets), idle: fin(s.extra?.idle), offline: fin(s.extra?.offline) }; st.galleryAcc = fin(s.galleryAcc) < 1 ? fin(s.galleryAcc) : 0;
         { const t = Number.isFinite(st.shopT) ? st.shopT : 0; st.comm = commCard(s.comm, t); st.commAt = Math.min(fin(s.commAt), Math.max(0, t)); st.commPaid = fin(s.commPaid); } // a save from before 找卡委托: nobody asking, cooldown 0, nothing paid
@@ -1224,6 +1227,6 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,
     demand, street, STREETS, lineup, crowdRaw, crowdMult, crowdCap, room, sealedPrice, ask, cardAsk, shelfQty, facings, missed, shelves, racks, depth, pctOf, cardPct, slots, revenue, unlocked, unlockAt, rate, trophyBonus, wholesaleRate, lvl,
-    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_ROUND_1, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,
+    UPGRADES, SKILLS, TYPES, DEMAND, SEEK, BIG_CARD, FLIP_COOLDOWN, DEX_TIERS, MASTER, BUY_R, BAILOUT, BUYLIST, WHOLESALE, WHOLESALE_STEP, ARRIVAL, SIGN_STEP, OFFLINE_CAP, HEAT_EVERY, CLERK_ROUND, CLERK_ROUND_1, CLERK_KEEP, MISS_WINDOW, CROWD_KNEE, CROWD_ROOM, ROOM_STEP, RACK_BASE, DEPTH_BASE, DEPTH_STEP, CASE_BASE, CASE_STEP, CASE_GAINS, WAREHOUSE, MIN_PCT, MAX_PCT, PCT_STEP, DEFAULT_PCT, CASE_PCT,
   };
 }

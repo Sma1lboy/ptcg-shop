@@ -923,12 +923,13 @@ console.log('ok luck percentile');
   const next = Z.state.clerkT; Z.state.cash = need + 1; assert.ok(Z.clerkNow() > 0);
   assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
   const { play } = await import('../scripts/autoplay.mjs'), run = (heed, seed) => play({ hours: 30, seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
-  // was seed 1 alone and `< blind / 2`: with 收卡 (GAMEPLAY §14) the blind player borrows far less ($21k → $7k on seed 1) and the
-  // gap is within seed noise per seed (seed 1 now borrows more heeding), so the claim is on the total over seeds 1–3
-  const runs = [1, 2, 3].map(seed => [run(false, seed), run(true, seed)]), sum = i => runs.reduce((a, r) => a + r[i].debt.borrowed, 0);
+  // was seed 1 alone and `< blind / 2`, then seeds 1–3: with 收卡 (GAMEPLAY §14), the 2-minute clerk and the 帮工 the blind player borrows only
+  // $0.5–2k a seed in 30 h, and three seeds are within noise of each other (heeding borrows more on seed 3 before loop 30's 展示柜 split,
+  // $622 → $1,854, and on seed 2 after it, $457 → $1,060). Nine seeds carry the claim: $13.0k → $6.9k before that split, $11.0k → $7.4k after.
+  const runs = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(seed => [run(false, seed), run(true, seed)]), sum = i => runs.reduce((a, r) => a + r[i].debt.borrowed, 0);
   const [blind, heeds] = [sum(0), sum(1)];
-  assert.ok(runs.every(r => r.every(x => x.G.state.branch.n >= 3)) && heeds < blind, `heeding them borrows less: $${heeds | 0} vs $${blind | 0} over seeds 1–3`);
-  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seeds 1–3, 30 h: borrowed $${Math.round(blind / 1000)}k → $${Math.round(heeds / 1000)}k heeding the notes`);
+  assert.ok(runs.every(r => r.every(x => x.G.state.branch.n >= 3)) && heeds < blind, `heeding them borrows less: $${heeds | 0} vs $${blind | 0} over seeds 1–9`);
+  console.log(`ok 店员没本钱: a short round is recorded and 现在补货 fills it; 普通 seeds 1–9, 30 h: borrowed $${Math.round(blind / 1000)}k → $${Math.round(heeds / 1000)}k heeding the notes`);
 }
 
 // 离开 (GAMEPLAY.md §3.1): a hidden page is one absence from the moment it was hidden, however the browser spaces the ticks (a
@@ -1361,7 +1362,7 @@ console.log('ok luck percentile');
   {
     const w = shop(1), G = w.G, st = w.st, A1 = pull('a', 100), B1 = pull('b', 50), C1 = pull('c', 0.1, 'C');
     const kA = w.give(A1, 2), kB = w.give(B1), kC = w.give(C1, 3), total = copies(G);
-    assert.deepEqual(st().gallery, Array(6).fill(null)); assert.deepEqual([G.GALLERY_SLOTS, G.ROOM_SLOTS, G.PEDESTAL, st().v, 'trophy' in st()], [5, 6, 0, 3, false], 'one pedestal and five slots, no separate trophy');
+    assert.deepEqual(st().gallery, Array(6).fill(null)); assert.deepEqual([G.GALLERY_SLOTS, G.ROOM_SLOTS, G.PEDESTAL, st().v, 'trophy' in st()], [5, 6, 0, 4, false], 'one pedestal and five slots, no separate trophy');
     assert.ok(G.collectToGallery(kA, 1)); assert.equal(st().singles[kA].count, 1); assert.equal(st().gallery[1].key, kA);
     assert.equal(G.collectToGallery(kA, 1), false, 'an occupied slot takes nothing');
     assert.ok(G.collectToGallery(kA, 2)); assert.equal(st().singles[kA], undefined, 'the last copy leaves its pocket, not a pocket of 0');
@@ -1541,10 +1542,10 @@ console.log('ok luck percentile');
     const w = shop(20), G = w.G, st = w.st, kA = w.give(pull('r1', 300), 2), kB = w.give(pull('r2', 20)); assert.ok(G.collectToGallery(kA, 4)); assert.ok(G.collectToGallery(kB, 0));
     st().extra = { tickets: 12, idle: 3.5, offline: 1.25 }; st().galleryAcc = 0.25; assert.ok(G.moveCollect(4, 3));
     const H = createGame({ ...w.env, random: S.rng(1) });
-    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue(), H.state.v], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320, 3], 'the room, its ledger and its carry come back as saved'); assert.equal(H.state.gallery[0].key, kB, 'the pedestal too'); assert.ok(!('trophy' in JSON.parse(w.store[KEY])), 'and no trophy field is written');
+    assert.deepEqual([H.state.gallery, H.state.extra, H.state.galleryAcc, H.ticketPrice(), H.galleryValue(), H.state.v], [st().gallery, st().extra, 0.25, G.ticketPrice(), 320, 4], 'the room, its ledger and its carry come back as saved'); assert.equal(H.state.gallery[0].key, kB, 'the pedestal too'); assert.ok(!('trophy' in JSON.parse(w.store[KEY])), 'and no trophy field is written');
     const store = {}, env = { now: () => 1_700_000_000_000, random: S.rng(2), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } };
     store[KEY] = JSON.stringify({ cash: 10, singles: {} }); const O = createGame(env); // a save from before the room
-    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice(), O.state.v], [Array(6).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0, 3]);
+    assert.deepEqual([O.state.gallery, O.state.extra, O.state.galleryAcc, O.ticketPrice(), O.state.v], [Array(6).fill(null), { tickets: 0, idle: 0, offline: 0 }, 0, 0, 4]);
     const real = PTCG_DATA.sv08.cards[0], good = { key: keyOf(pull(real.n, 12, real.r)), ...pull(real.n, 12, real.r), name: 'old English name' };
     store[KEY] = JSON.stringify({ cash: 10, v: 2, gallery: [null, {}, good, { ...good, price: null }, 'x', { ...good, key: 3 }, good], extra: { tickets: 'a', idle: -1, offline: 7 }, galleryAcc: 5 });
     const D = createGame(env);
@@ -1602,9 +1603,9 @@ console.log('ok luck percentile');
     const old = { cash: 10, singles: { [c.key]: { ...pull('c', 50), count: 2 } }, trophy: T, gallery: [a, null, b] };
     store[KEY] = JSON.stringify(old); const P = createGame(env);
     assert.deepEqual(keys(P), [T.key, a.key, null, b.key, null, null], 'the trophy is the pedestal, the slots follow it as 第 1–5 格');
-    assert.deepEqual([P.state.v, 'trophy' in P.state, P.state.gallery.length], [3, false, 6]); assert.deepEqual(copies(P), held(old), 'every copy is accounted for');
+    assert.deepEqual([P.state.v, 'trophy' in P.state, P.state.gallery.length], [4, false, 6]); assert.deepEqual(copies(P), held(old), 'every copy is accounted for');
     near(P.trophyBonus(), 300 / 450 * 0.5, 'the bonus reads the pedestal'); assert.equal(P.galleryValue(), 600); assert.equal(P.ticketPrice(), 4, 'the pedestal counts toward the ticket');
-    assert.ok(P.moveCollect(1, 2)); const raw = JSON.parse(store[KEY]); assert.deepEqual([raw.v, 'trophy' in raw, raw.gallery.length], [3, false, 6], 'it is saved in the new shape');
+    assert.ok(P.moveCollect(1, 2)); const raw = JSON.parse(store[KEY]); assert.deepEqual([raw.v, 'trophy' in raw, raw.gallery.length], [4, false, 6], 'it is saved in the new shape');
     assert.deepEqual(keys(createGame(env)), keys(P), 'a new-format save round-trips');
     // b. a trophy and all five slots
     const full = { cash: 10, trophy: T, gallery: [a, b, c, d, e] }; store[KEY] = JSON.stringify(full); const F = createGame(env);
@@ -1616,6 +1617,10 @@ console.log('ok luck percentile');
     const clerkAt = (s) => { store[KEY] = JSON.stringify({ cash: 10, ...s }); return createGame(env).lvl('clerk'); };
     assert.deepEqual([clerkAt({ v: 2, up: { clerk: 1 } }), clerkAt({ v: 2, up: { clerk: 2 } }), clerkAt({ up: { clerk: 1 } }), clerkAt({ v: 2, up: {} }), clerkAt({ v: 3, up: { clerk: 1 } })], [2, 3, 2, 0, 1],
       'old 店员 Lv 1 / Lv 2 load as Lv 2 / Lv 3 (the 2-minute clerk, the full one), none stays none, a v3 帮工 stays a 帮工');
+    // v4: the old 展示柜 Lv 3 (+2 slots) is two levels of +1 now: an old Lv 3 / Lv 4 loads as Lv 4 / Lv 5 with the same slots; lower levels and a v4 save are read as they are
+    const caseAt = (s) => { store[KEY] = JSON.stringify({ cash: 10, ...s }); const g = createGame(env); return [g.lvl('case'), g.slots()]; };
+    assert.deepEqual([caseAt({ v: 3, up: { case: 2 } }), caseAt({ v: 3, up: { case: 3 } }), caseAt({ v: 3, up: { case: 4 } }), caseAt({ v: 4, up: { case: 3 } })], [[2, 7], [4, 9], [5, 11], [3, 8]],
+      'old 展示柜 levels keep their slots: 7, 9, 11; a v4 Lv 3 is 8');
     // d. damage: each place is checked alone, a gallery that is no list is an empty room, a whole card past the end goes home
     const { kind: _k, ...noKind } = T;
     store[KEY] = JSON.stringify({ cash: 10, trophy: noKind, gallery: [a, b] }); assert.deepEqual(keys(createGame(env)), [null, a.key, b.key, null, null, null], 'a damaged trophy is an empty pedestal, the room is kept');
