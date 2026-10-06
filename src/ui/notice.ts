@@ -2,7 +2,7 @@
 // receipt (below). Both print out of the shared slot (#pops, style.css) above any achievement labels.
 import { html, render } from 'lit-html';
 import { keyed } from 'lit-html/directives/keyed.js';
-import { G, $, money, shelfFill, deepFill, toShelf } from './common.ts';
+import { G, $, money, shelfFill, deepFill, toShelf, rarLabel } from './common.ts';
 import { nextStep, growCount } from './upgrades.ts';
 import { go, currentPage } from './layout.ts';
 import { guiding, guideShelf } from './guide.ts';
@@ -137,7 +137,7 @@ export function initSlip() {
 // a box swapped for another between reading and clicking (新到 → another set's 进一架), or a key that read 40 and bought 46, did
 // something else than what the player read. Only a pack left mid-reveal on another page cuts in (after a sold-out shelf). ----------
 type Note = { kind: 'first'; n: number; gain: number; set: string } | { kind: 'intake'; n: number; paid: number } | { kind: 'done' }
-  | { kind: 'cards'; buyer: 'seeker' | 'collector'; card: string; n: number; gain: number };
+  | { kind: 'cards'; buyer: 'seeker' | 'collector'; card: string; n: number; gain: number } | { kind: 'comm'; key: string };
 type Memo = Note | { kind: 'out'; ids: string[] } | { kind: 'new'; id: string } | { kind: 'grow'; k: string } | { kind: 'hand' } | { kind: 'case'; key: string } | { kind: 'kept'; id: string }
   | { kind: 'dex'; id: string; need: number; cost: number; bonus: number; at: number };
 // out: sets whose shelf sold out and haven't been restocked or waved off (先不管); fresh: sets unlocked since the page opened, not yet
@@ -147,6 +147,7 @@ let memo: Memo | null = null, soldBefore = G.state.earned.sealed, tookBefore = G
 const notes: Note[] = [];
 let caseDismissed = false, keptDismissed = false;
 const dexDismissed = new Set<string>(); // set:tier waved off with 先不补, for this page session
+let commNoted = ''; // the 找卡委托 the note was said for (its set|n|deadline), '' while nobody is asking
 // 图鉴补卡 as a next step: the cheapest next 图鉴 tier of any unlocked set that 补卡 alone reaches (the missing hits, cheapest first, at
 // market) within the 闲钱 and within a tenth of the next upgrade (a side purchase: it must not push 成长's 下一步 back). A real permanent
 // unlock (that set's walk-ins), not a repeat purchase; the first-hour player never found it on the 欧气 page. Waits for the guide, a
@@ -210,7 +211,7 @@ function outIds() {
 }
 function holds(m: Memo) {
   switch (m.kind) {
-    case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
+    case 'first': case 'intake': case 'done': case 'cards': case 'comm': return notes[0] === m;
     case 'hand': return away();
     // a set that sells out while the box is up joins it when the cash covers both (it stood unsaid for a minute behind the first)
     case 'out': return (away() || shelfMine()) && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
@@ -253,6 +254,11 @@ function watchShop() {
     if (v?.card && !notes.some(n => n.kind === 'cards' && n.buyer === buyer))
       notes.push({ kind: 'cards', buyer, card: v.card, n: v.n ?? 1, gain: v.gain ?? 0 });
   }
+  // 找卡委托: one note per request, not while the guide speaks (the request is still on 展示柜, the note just waits for the guide to finish); it goes with the request, and once the player is
+  // looking at 展示柜 (the panel says it all there: a note left up there would sit on 钱够升级了 and the rest for no reason)
+  const cm = s.comm, ck = cm ? `${cm.set}|${cm.n}|${cm.due}` : '';
+  for (let i = notes.length - 1; i >= 0; i--) { const note = notes[i]; if (note.kind === 'comm' && (note.key !== ck || location.hash === '#case')) notes.splice(i, 1); }
+  if (!cm) commNoted = ''; else if (ck !== commNoted && !guiding()) { if (location.hash !== '#case') notes.push({ kind: 'comm', key: ck }); commNoted = ck; }
   const on = racked();
   for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; } // just sold out / restocked
   for (const id of out) if (!on.includes(id)) out.delete(id); // the shelf was given to another set
@@ -260,7 +266,7 @@ function watchShop() {
   for (const id of fresh) if (on.includes(id)) fresh.delete(id); // no free shelf means wait, not forget the unlocked set
   // cut in on the box up: a pack left mid-reveal (anything but a sold-out shelf); a sold-out shelf over a note (the note waits its turn
   // in `notes`: an unread 知道了 must not leave a shelf empty) or over 钱够升级 (an empty shelf costs money every minute, an upgrade can wait)
-  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case' || memo.kind === 'dex') && out.size > 0 && shelfMine());
+  const cut = memo && (away() ? memo.kind !== 'out' && memo.kind !== 'intake' && (memo.kind !== 'hand' || out.size > 0 || notes[0]?.kind === 'intake') : (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case' || memo.kind === 'dex' || memo.kind === 'comm') && out.size > 0 && shelfMine());
   const receiptReady = notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case' || memo?.kind === 'dex');
   const keep = memo && holds(memo) && !cut && !receiptReady;
   const next = !keep || memo?.kind === 'kept' ? pick() : null;
@@ -280,7 +286,7 @@ function showMemo() {
   // outgrown (today's would be at least twice the printed one) is printed again: 「进 3 包 $19」 stood while the cash went $79 → $1,873.
   const m = memo!, sets = m.kind === 'out' ? m.ids : m.kind === 'new' ? [m.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
   const ident = sets.length ? `${m.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}`
-    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'kept' ? `kept:${m.id}:${keptN(m.id)}` : m.kind === 'dex' ? `dex:${m.id}:${m.need}` : m.kind;
+    : m.kind === 'grow' ? `grow:${m.k}` : m.kind === 'case' ? `case:${m.key}` : m.kind === 'cards' ? `cards:${m.buyer}` : m.kind === 'comm' ? `comm:${m.key}` : m.kind === 'kept' ? `kept:${m.id}:${keptN(m.id)}` : m.kind === 'dex' ? `dex:${m.id}:${m.need}` : m.kind;
   const was$ = +(el.dataset.cost || 0), outgrown = was$ > 0 && cost >= 2 * was$ + 1;
   if (!was && el.dataset.ident === ident && was$ <= G.state.cash && !outgrown) { refreshBill(el); return; } // keep quantities, refresh the bill balance
   el.dataset.ident = ident; el.dataset.cost = '0';
@@ -321,6 +327,14 @@ function showMemo() {
       <p class="mm-say">补来的卡只进图鉴，不能卖、不能上柜。花的是留好账款后的闲钱。</p>
       <div class="mm-btns"><button type="button" class="primary" @click=${fill}>补 ${m.need} 张 ${money(m.cost, 'exact')}</button>
         <button type="button" class="mm-x" @click=${() => { dexDismissed.add(`${m.id}:${m.at}`); memo = null; watchShop(); }}>先不补</button></div></div>`), el);
+    return;
+  }
+  if (m.kind === 'comm') {
+    const c = G.state.comm; if (!c) return; // gone since it was queued: watchShop takes the note off the list next
+    render(keyed(ident, html`<div class="mm-box"><h2>有人来找卡</h2>
+      <p>有顾客想要${G.setById(c.set).name}的<b>${c.name}</b>（${rarLabel(c.kind)}，市价 ${money(c.price)}）：${G.COMM_LEN / 60} 分钟内交来，给 <b class="gain">${money(c.reward, 'exact')}</b>。</p>
+      <p class="mm-say">卡本里有这张就能直接交付；没有的话，靠收卡和开${G.setById(c.set).name}的包。图鉴补卡不算。不接、过期都没有损失，详情在展示柜页的「找卡委托」。</p>
+      <div class="mm-btns"><button type="button" class="primary" @click=${() => { close(); go('case'); }}>去展示柜看看</button><button type="button" @click=${close}>知道了</button></div></div>`), el);
     return;
   }
   if (m.kind === 'intake') { // money going out that nobody pressed for: 收卡 is the shop's second trade, and where the case's cards come from

@@ -46,7 +46,7 @@ export function renderSingles() {
       ${pockets.length ? html`<div class="bk-book sb-book"><ol class="bk-page sb-page">${repeat(pockets, ([k]) => k, ([k, c]) => { // keyed: a pocket stays its card's while others sell around it (a lit or flashed pocket too)
         const gone = !s.singles[k];
         return html`<li class="pk sb-pk ${gone ? 'gone' : ''} ${!gone && spotted(c) ? 'spot' : ''}" data-spot="card:${c.name}">
-          <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${chip(k)}</button>
+          <button type="button" class="sb-card inspect-trigger" aria-label="欣赏${c.name}" ?disabled=${gone} @click=${() => inspectCard(c)}>${gone ? html`<span class="sb-empty"></span>` : face(c, 'show', true)}${c.count > 1 && !gone ? html`<b class="sb-n">×${c.count}</b>` : nothing}${!gone && s.comm && G.commKey(s.comm) === k ? html`<i class="cm-tag" title="有人来找这张卡：到上面的找卡委托交付">委托</i>` : nothing}${chip(k)}</button>
           ${cap(c, 'show')}<span class="sb-name" title="${G.setById(c.set).name} #${c.n}">${c.name}</span>
           <span class="sb-btns"><button type="button" data-act="col-take" data-key="${k}" ?disabled=${gone || !canCollect()} title="放进收藏室：只看不卖，不标价">收藏</button><button type="button" data-act="list" data-key="${k}" ?disabled=${gone || full} title="挂进展示柜：收藏党只看柜里的卡">上柜</button>
             <button type="button" data-act="pedestal" data-key="${k}" ?disabled=${gone} title="摆上收藏室的镇店台，吸引收藏党，但不再出售；台上原来的卡回卡本">镇店</button>

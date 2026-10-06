@@ -1738,3 +1738,123 @@ console.log('ok luck percentile');
   for (const id of SR.TEAR_IDS) assert.match(SR.tearClip(id), /^polygon\((\d+(\.\d)?% \d+(\.\d)?%(, )?)+\)$/, id);
   console.log('ok 撕包: the gesture picks one of six tears, progress follows the finger, flights go out the torn side');
 }
+
+// 找卡委托 (game.ts COMM_GAP): an optional request for one hit card. It comes when the cooldown is over and the shop has a clerk or has traded COMM_OPEN seconds, only for a set
+// with a shelf; serving it moves exactly one copy out of the binder and pays exactly the reward; letting it lapse or turning it down costs nothing; old and damaged saves load
+// without one; a new shop starts clean; and the walk-in stream is exactly what it was without it.
+{
+  const NOW = 1_700_000_000_000, KEY = 'ptcg-shop-v1';
+  // a world has its own clock: games never share time. ticks 10 s apart, as a page that is open ticks (under G.AWAY is no absence)
+  const world = (seed = 5, extra = {}) => { const w = { T: NOW }; w.G = createGame({ now: () => w.T, random: S.rng(seed), storage: null, ...extra }); w.st = () => w.G.state;
+    w.run = secs => { for (let i = 0; i < secs; i += 10) { w.T += 10e3; w.G.tick(); } }; w.until = (max = 3600) => { for (let i = 0; i < max && !w.st().comm; i += 10) w.run(10); return w.st().comm; }; return w; };
+  // a shop in the middle of week 2 with money to burn and one shelf label: no bill falls inside the next ~19 minutes, the bank is never short
+  const shop = (seed, extra, sets = ['sv08']) => { const w = world(seed, extra); Object.assign(w.st(), { cash: 1e6, week: 2, shopT: 1250 }); sets.forEach((id, i) => w.G.place(i, id)); return w; };
+  const give = (G, c, count = 1) => { const key = G.commKey(c); G.state.singles[key] = { set: c.set, n: c.n, name: c.name, r: c.r, kind: c.kind, price: c.price, count }; return key; };
+
+  // 1. When one is asked for.
+  {
+    const w = world(), G = w.G; G.place(0, 'sv08'); w.run(19 * 60);
+    assert.equal(w.st().comm, null, 'no clerk, the shop has traded under COMM_OPEN: nobody asks');
+    const c = w.until(); assert.ok(c, 'COMM_OPEN passed: a request'); assert.equal(w.st().shopT, G.COMM_OPEN, 'asked the moment the shop had traded COMM_OPEN seconds');
+    const card = PTCG_DATA.sv08.cards.find(x => x.n === c.n);
+    assert.ok(c.set === 'sv08' && G.BUY_R.includes(card.r) && c.kind === card.r && c.r === card.r && c.name === card.name, 'one hit card of the set on the shelf');
+    const cap = G.commCap(); assert.ok(c.price === S.cardPrice('sv08', c.n, c.r) && c.price >= Math.max(G.COMM_MIN, cap * G.COMM_FLOOR) - 1e-9 && c.price <= cap + 1e-9, `market price $${c.price} inside $${G.COMM_MIN}…$${cap}`);
+    assert.equal(c.reward, Math.round(c.price * G.COMM_PAY * 100) / 100, 'the reward is the market price × COMM_PAY');
+    assert.equal(G.commLeft(), G.COMM_LEN, 'COMM_LEN of shop time to serve it');
+    const keyOf = JSON.stringify(c); w.run(300); assert.equal(JSON.stringify(w.st().comm), keyOf, 'at most one, and it is the same one until it ends');
+
+    const k = world(); k.st().up.clerk = 1; k.G.place(0, 'sv08'); k.run(k.G.COMM_GAP - 10);
+    assert.equal(k.st().comm, null, 'a clerk but not yet COMM_GAP of shop time since the shop opened');
+    k.run(20); assert.ok(k.st().comm, 'with a clerk the first request comes after COMM_GAP, not after COMM_OPEN');
+
+    const n = world(); Object.assign(n.st(), { cash: 1e6, week: 2, shopT: 1250 }); n.run(60);
+    assert.equal(n.st().comm, null, 'COMM_OPEN passed but no shelf holds a set: nothing to ask for'); n.G.place(2, 'sv10'); n.run(20); assert.equal(n.st().comm?.set, 'sv10', 'the set on the shelf is the one asked for');
+
+    const off = shop(5, { commissions: false }); off.run(900); assert.equal(off.st().comm, null, 'commissions: false switches them off');
+  }
+
+  // 2. Serving it: exactly one copy out, exactly the reward in, nothing else touched.
+  {
+    const w = shop(7), G = w.G, st = w.st; w.until(); const c = { ...st().comm };
+    assert.equal(G.deliverCommission(), false, 'no copy in the binder: nothing happens');
+    assert.equal(st().comm.n, c.n);
+    const key = G.commKey(c);
+    st().shown.push({ key, set: c.set, n: c.n, name: c.name, r: c.r, kind: c.kind, price: c.price, pct: 1.1 }); assert.equal(G.deliverCommission(), false, 'a copy in the case is not in the binder');
+    st().shown.length = 0; st().gallery[1] = { key, set: c.set, n: c.n, name: c.name, r: c.r, kind: c.kind, price: c.price }; assert.equal(G.deliverCommission(), false, 'nor is one in the 收藏室');
+    st().gallery[1] = null; assert.ok(st().comm, 'refusals leave the request open');
+    give(G, c, 2); const sold = st().earned.singles, customers = st().customers;
+    w.T += 10e3; G.tick(true); assert.equal(G.deliverCommission(), false, 'packs are being revealed: the binder holds cards not flipped yet'); assert.equal(st().singles[key].count, 2);
+    G.tick(); const after = st().cash, now = st().shopT; // the shop has no stock: the ticks sell nothing, and no bill falls inside this stretch
+    assert.ok(G.deliverCommission(), 'served');
+    assert.equal(st().singles[key].count, 1, 'exactly one copy left the binder');
+    assert.equal(st().cash, after + c.reward, 'exactly the reward'); assert.equal(st().earned.singles - sold, c.reward, 'booked as card sales');
+    assert.equal(st().customers, customers, 'not a walk-in'); assert.equal(st().comm, null); assert.equal(st().commAt, now, 'the cooldown starts when it was served'); assert.equal(st().commPaid, c.reward, 'the ledger the top bar reads 「交付」 from');
+    assert.ok(st().log[0].text.includes(c.name) && st().log[0].amt === c.reward, 'one line in 店内动态');
+    assert.equal(G.deliverCommission(), false, 'nothing open: nothing to serve');
+    w.run(G.COMM_GAP - 20); assert.equal(st().comm, null, 'the next one waits COMM_GAP'); w.run(30);
+    const d = st().comm; assert.ok(d, 'and then comes'); const dk = give(G, d, 1); assert.ok(G.deliverCommission()); assert.ok(!(dk in st().singles), 'the last copy takes the pocket with it');
+  }
+
+  // 3. Lapsing and 不接 cost nothing, and each restarts the cooldown from where it ended.
+  {
+    const w = shop(11), G = w.G, st = w.st; w.until(); const c = st().comm, cash = st().cash, binder = JSON.stringify(st().singles);
+    w.run(G.COMM_LEN - 10); assert.equal(st().comm?.n, c.n, 'still open just before its deadline'); w.run(20);
+    assert.equal(st().comm, null, 'gone at the deadline'); assert.equal(st().commAt, c.due, 'the cooldown counts from the deadline, not from the tick that saw it');
+    assert.equal(st().cash, cash, 'a lapsed request costs nothing'); assert.equal(JSON.stringify(st().singles), binder);
+    w.run(G.COMM_GAP - 40); assert.equal(st().comm, null, 'COMM_GAP after the deadline'); w.run(40); assert.ok(st().comm, 'then the next');
+    const now = st().shopT; assert.ok(G.dismissCommission(), '不接'); assert.equal(st().comm, null); assert.equal(st().commAt, now); assert.equal(st().cash, cash);
+    assert.equal(G.dismissCommission(), false, 'nothing left to turn down');
+    w.run(G.COMM_GAP - 20); assert.equal(st().comm, null, 'turned down: the cooldown restarts'); w.run(30); assert.ok(st().comm);
+  }
+
+  // 4. What is asked for: only the shelved sets, only hits inside the price band, and the same thing for the same shop at the same time (the draw owns its random numbers).
+  {
+    for (const [rev, lo, hi] of [[0, 2, 5], [1e5, 8, 40]]) {
+      const w = shop(3, undefined, ['sv10']); w.st().earned.sealed = rev; const seen = new Set();
+      for (let i = 0; i < 24; i++) { const c = w.until(); assert.ok(c, `request ${i}`); seen.add(c.n);
+        assert.equal(c.set, 'sv10'); assert.ok(c.price >= lo - 1e-9 && c.price <= hi + 1e-9 && PTCG_DATA.sv10.cards.find(x => x.n === c.n && x.r === c.kind), `${c.name} $${c.price} for $${lo}–$${hi}`);
+        assert.ok(w.G.dismissCommission()); w.run(w.G.COMM_GAP); }
+      assert.ok(seen.size >= 6, `${seen.size} different cards in 24 requests at revenue $${rev}`);
+    }
+    const a = shop(1), b = shop(2); assert.equal(JSON.stringify(a.until()), JSON.stringify(b.until()), 'the same shop at the same time asks the same, whatever the walk-in seed');
+  }
+
+  // 5. The walk-in stream, the till and the binder are exactly what they were without it, for an hour that never serves one.
+  {
+    const hour = extra => { const w = shop(9, extra, ['sv08', 'sv10']); Object.assign(w.st().up, { clerk: 1 }); w.st().auto = { sv08: true, sv10: true }; w.st().shopT = 0; w.st().week = 1; w.run(3600);
+      const s = w.st(); return { w, key: JSON.stringify([s.cash, s.earned, s.cust, s.customers, s.singles, s.stock, s.shelves, s.recent.length, s.intake, s.lost, s.billsPaid]) }; };
+    const on = hour(), off = hour({ commissions: false });
+    assert.equal(on.key, off.key, 'same cash, sales, binder and shelves with commissions on or off'); assert.ok(on.w.st().commAt > 0 || on.w.st().comm, 'and it did ask for cards meanwhile'); assert.equal(off.w.st().commAt, 0);
+  }
+
+  // 6. Saves: old ones have none; a request survives a reload; damaged ones become none without touching the rest; deadline and cooldown are bounded.
+  {
+    const mem = {}, env = w => ({ now: () => w.T, random: S.rng(2), storage: { getItem: k => mem[k] ?? null, setItem: (k, v) => { mem[k] = v; } } });
+    mem[KEY] = JSON.stringify({ cash: 10, singles: {} }); const o = { T: NOW }, Old = createGame(env(o));
+    assert.deepEqual([Old.state.comm, Old.state.commAt, Old.state.commPaid], [null, 0, 0], 'a save from before: nobody asking, cooldown 0, nothing paid');
+    for (const k of Object.keys(mem)) delete mem[k];
+    const w = { T: NOW }, G = createGame(env(w)); Object.assign(G.state, { cash: 123456, week: 2, shopT: 1250 }); G.place(0, 'sv08');
+    for (let i = 0; i < 400 && !G.state.comm; i++) { w.T += 10e3; G.tick(); } assert.ok(G.state.comm);
+    const good = JSON.parse(mem[KEY]), R = createGame(env({ T: w.T }));
+    assert.deepEqual([R.state.comm, R.state.commAt], [G.state.comm, G.state.commAt], 'a request survives a reload'); assert.equal(R.state.cash, good.cash);
+    const real = good.comm, cheap = PTCG_DATA.sv08.cards.find(x => x.r === 'C'), load = comm => { mem[KEY] = JSON.stringify({ ...good, comm }); return createGame(env({ T: w.T })); };
+    const bad = { 'unknown set': { ...real, set: 'nope' }, 'prototype set': { ...real, set: '__proto__' }, 'unknown card': { ...real, n: 'zzz' }, 'a common': { ...real, n: cheap.n, r: 'C', kind: 'C' }, 'kind not the rarity': { ...real, kind: 'REV' },
+      'no price': { ...real, price: null }, 'text price': { ...real, price: '5' }, 'negative price': { ...real, price: -1 }, 'no reward': { ...real, reward: 0 }, 'a reward above COMM_PAY × price': { ...real, reward: real.price * 5 },
+      'no deadline': { ...real, due: null }, 'text deadline': { ...real, due: 'soon' }, 'a string': 'x', 'a number': 5, 'a list': [], 'half of one': { set: real.set, n: real.n } };
+    for (const [what, comm] of Object.entries(bad)) { const L = load(comm); assert.equal(L.state.comm, null, `${what}: no request`); assert.equal(L.state.cash, good.cash, `${what}: the rest of the save loads`); }
+    assert.equal(load(null).state.comm, null);
+    assert.equal(load({ ...real, due: 1e12 }).state.comm.due, good.shopT + G.COMM_LEN, 'a deadline cannot lie beyond a fresh request');
+    assert.equal(load({ ...real, name: 'old name' }).state.comm.name, PTCG_DATA.sv08.cards.find(x => x.n === real.n).name, 'its name comes from the card data');
+    for (const [commAt, want] of [[1e9, good.shopT], [-5, 0], ['x', 0], [null, 0], [100, 100]]) { mem[KEY] = JSON.stringify({ ...good, commAt }); assert.equal(createGame(env({ T: w.T })).state.commAt, want, `commAt ${commAt}`); }
+    for (const [commPaid, want] of [[12.5, 12.5], [-3, 0], ['x', 0], [null, 0]]) { mem[KEY] = JSON.stringify({ ...good, commPaid }); assert.equal(createGame(env({ T: w.T })).state.commPaid, want, `commPaid ${commPaid}`); }
+  }
+
+  // 7. A new shop starts clean, 开分店 and 破产 alike.
+  {
+    const w = shop(13), G = w.G, st = w.st; w.until(); assert.ok(st().comm); st().commAt = 77;
+    st().commPaid = 9; G.bankrupt(); assert.deepEqual([st().comm, st().commAt, st().commPaid], [null, 0, 0], '破产 clears it, the cooldown and what it paid');
+    const v = shop(14), H = v.G; v.until(); assert.ok(v.st().comm); v.st().commAt = 77; Object.assign(v.st(), { owe: 0, loan: 0, debt: 0, overdue: null });
+    assert.ok(H.branch(), '开分店'); assert.deepEqual([v.st().comm, v.st().commAt, v.st().shopT], [null, 0, 0], 'a new shop: nobody asking, cooldown 0, the clock at zero');
+  }
+  console.log('ok 找卡委托: asked after COMM_GAP once there is a clerk or COMM_OPEN of shop time, only for a shelved set inside the price band; serving it moves one copy and pays the reward; lapse and 不接 are free; old and damaged saves load; new shops clean; the walk-in stream untouched');
+}

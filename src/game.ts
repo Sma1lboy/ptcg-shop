@@ -48,6 +48,9 @@ export interface State {
   // galleryAcc = visitors admitted so far but not yet counted (a fraction of one; no random draw). v = the save format: 2 = the pedestal is gallery[0]; a save without it has a separate `trophy` and five slots (load() merges them).
   // extra = this shop's money that is not product sales: ticket money, 挂机加成 and 离线加成. It is never part of earned, so it never unlocks a set, earns 名气 or lifts the credit line.
   gallery: (Exhibit | null)[]; galleryAcc: number; extra: { tickets: number; idle: number; offline: number }; v: number;
+  // 找卡委托 (game setting, see COMM_GAP): the one open request, null when nobody is asking; commAt = shopT when the last one ended (delivered, dismissed or expired), the cooldown's start;
+  // commPaid = what this shop has been paid for requests so far (already inside earned.singles: it only lets the top bar name 「交付」 as the source of a jump in the till).
+  comm: Commission | null; commAt: number; commPaid: number;
 }
 // secs = seconds the shop traded (up to offlineCap), sales = paying visits; bills / borrowed: paid to 九姐 / borrowed meanwhile
 // detail = the same absence taken apart, added up visit by visit as each is generated (state.recent keeps only MISS_WINDOW, an
@@ -61,13 +64,15 @@ export interface Takings { sales: number; revenue: number; lost: number }
 export interface ReceiptDetail { packs: Takings; seeker: Takings; collector: Takings; intake: number; restock: number; bulk: number; cash: number }
 // Tickets and offline bonus are separate from revenue and the sales breakdowns. detail.cash already includes both; never add them again.
 export interface Receipt { secs: number; sales: number; revenue: number; lost: number; bills?: number; borrowed?: number; tickets?: number; bonus?: number; detail?: ReceiptDetail }
+// A 找卡委托: one specific hit (set + number, kind = its rarity) a customer will pay reward for until shopT reaches due. price = the card's market price when it was asked for, reward = price × COMM_PAY, both frozen.
+export interface Commission { set: string; n: string; name: string; r: string; kind: string; price: number; reward: number; due: number }
 export interface Loan { at: number; week: number; amount: number; forced: boolean }
 export interface Wreck { at: number; week: number; shop: number; debt: number; cash: number; goods: number; cards: number; revenue: number; gallery?: { n: number; value: number } } // gallery = what 九姐 did not take
 // 开分店 (prestige): n = shops opened after the first; fame = 名气 not yet spent, got = all ever earned; life = revenue of the
 // shops before this one; perks = 名气 perk levels. Survives every branch; only 清空存档 clears it.
 export interface Branch { n: number; fame: number; got: number; life: number; perks: Record<string, number>; broke?: number; hands?: number } // broke = bankruptcies, ever (征信); hands = 亲手开齐 sets already paid in 名气
 export interface Luck { packs: number; pct: number | null; title: string; value: number; live: boolean; expected: number; cost: number; listEV: number; boosted: number }
-export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> | null } // storage null = never saved (autoplay: stringifying the save was 70% of its time)
+export interface GameEnv { now?: () => number; random?: () => number; storage?: Pick<Storage, 'getItem' | 'setItem'> | null; commissions?: boolean } // storage null = never saved (autoplay: stringifying the save was 70% of its time); commissions false = nobody ever asks for a card (autoplay's before/after switch)
 export type Game = ReturnType<typeof createGame>;
 // type = a debt event for the story (bill_due / bill_paid / bill_missed / loan_taken / bankrupt / story), with the bill's week and amount.
 export interface GameEvent { open?: Pull[][]; type?: string; week?: number; amount?: number; id?: string; forced?: boolean; set?: string } // what happened, for listeners that need more than the new state (achievements.ts)
@@ -82,7 +87,7 @@ function validDetail(d: unknown): d is ReceiptDetail {
 }
 function addDetail(to: ReceiptDetail, d: ReceiptDetail) { for (const k of SPLITS) for (const f of TAKINGS) to[k][f] += d[k][f]; for (const k of SUMS) to[k] += d[k]; }
 
-export function createGame({ now: clock = Date.now, random = Math.random, storage }: GameEnv = {}) {
+export function createGame({ now: clock = Date.now, random = Math.random, storage, commissions = true }: GameEnv = {}) {
   // Touched lazily inside try/catch, so a browser with storage blocked still plays (unsaved).
   const store = storage === null ? { getItem: () => null, setItem() {} } : storage ?? { getItem: (k: string) => localStorage.getItem(k), setItem: (k: string, v: string) => localStorage.setItem(k, v) };
   const SAVE_KEY = 'ptcg-shop-v1';
@@ -201,6 +206,18 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // packs per set, about 24k for all ten). Pulling a whole set by hand earns HAND_FAME 名气, once per set, ever, paid out at the next
   // 开分店 (never mid-shop: 名气 spent on perks at once would make heavy opening pay for itself inside one shop). Game setting.
   const HAND_FAME = 2;
+  // 找卡委托 (game setting; the idea is TCG Card Shop Simulator 0.50's optional counter request, ROADMAP 竞品拆解): now and then a customer asks for ONE
+  // specific hit (a card of BUY_R, by set + number) of a set that has a shelf, pays COMM_PAY × its market price for it and waits COMM_LEN seconds of shop time.
+  // The player can serve it from the counter binder (state.singles; 补卡 never counts: those cards only go into the 图鉴) or let it lapse or turn it down: nothing
+  // is lost either way. At most one is open; the next one comes COMM_GAP after the last ended, once the shop has a clerk or has traded COMM_OPEN seconds.
+  // The card is drawn among the hits of the shelved sets whose market price lies in COMM_FLOOR × cap … cap (never under COMM_MIN), cap = commCap(): COMM_CAP0 dollars growing with the
+  // shop's revenue (one dollar per COMM_CAP_REV of it) up to COMM_CAP1. Each card is weighted by the square of the chance one pack pulls it (cardOdds), so what is asked for is mostly what 收卡
+  // and 开包 really bring in (a flat draw: the model found the card in its binder for 11% of the requests, this one for 23%, ROADMAP loop 17). The pay counts as card sales revenue
+  // (earned.singles) like a sale to a seeker: at most COMM_PAY × COMM_CAP1 a request, 0.01% of the first hour's revenue in the model (ROADMAP loop 17).
+  // The draw uses its own mulberry32 (seeded from the clock, the shop number and the shop time), never random(): the walk-in stream, and so every seeded
+  // test and every autoplay run, stays exactly what it was unless the player serves a request. COMM_GAP is 5 minutes, not 4: with 4 the 店员没本钱 gate (普通 seed 3 blind, 30 h)
+  // drew its third 开分店 after 30 h instead of at 26 h. That gate is a knife edge: a plain $3–$19 of extra cash at hour 3, with no commission in sight, flips two of the six blind seeds the same way (ROADMAP loop 17).
+  const COMM_GAP = 5 * 60, COMM_LEN = 10 * 60, COMM_OPEN = 20 * 60, COMM_PAY = 1.6, COMM_MIN = 2, COMM_FLOOR = 0.2, COMM_CAP0 = 5, COMM_CAP1 = 40, COMM_CAP_REV = 1000;
   const MASTER = { tol: 0.1, w: 1.5 };    // 大师套 (a set's dex at 100%): its pack buyers pay +10% more, and 1.5× as many come for it
   const BAILOUT = 300;                    // a shop with no cash, stock or cards to sell is lent this much (soft-lock guard; bankrupt if there is no credit left)
   const CLERK_SLICE = 30;                 // seconds per catch-up step while a clerk is restocking (so a closed shop keeps being restocked)
@@ -317,7 +334,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const rate = () => ARRIVAL * (street().crowd ?? 1) * (1 + REG_STEP * perk('regulars')) * (1 + SKILLS.crowd.step * skill('crowd')) * crowdMult(); // walk-ins per second; 老主顾 and 人气 sit outside the cap (each has its own max)
   const fresh = (): State => ({ cash: START_CASH, stock: {}, singles: {}, opened: {}, tally: {}, pulled: 0, costOpened: 0, hits: [], earned: { sealed: 0, singles: 0 }, customers: 0, log: [], shelves: [], price: {}, cust: { visits: 0, sold: 0, pricey: 0, none: 0 }, recent: [],
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, away: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
-    debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null, gallery: Array(ROOM_SLOTS).fill(null), galleryAcc: 0, extra: { tickets: 0, idle: 0, offline: 0 }, v: SAVE_V });
+    debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null, gallery: Array(ROOM_SLOTS).fill(null), galleryAcc: 0, extra: { tickets: 0, idle: 0, offline: 0 }, comm: null, commAt: 0, commPaid: 0, v: SAVE_V });
 
   let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   // 暂停 (pause): while a story scene plays the shop clock stands still (no walk-ins, no sales, no bill clock, no clerk round, no 行情
@@ -333,6 +350,16 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // A pre-债务 save's first tick credits the closed time as usual, but its bill clock starts now: the first bill is a full week away.
   if (migrated) state.shopT = -Math.max(0, Math.min((clock() - state.savedAt) / 1000, offlineCap()));
 
+  // A saved request counts only if it still names a real hit card of a real set, with finite positive amounts and a reward no bigger than COMM_PAY × the price; a
+  // damaged one is no request (null), never half of one. Its deadline can't lie further out than a fresh request's.
+  function commCard(x: unknown, shopT: number): Commission | null {
+    try {
+      const c = x as Partial<Commission> | null; if (!c || typeof c.set !== 'string' || typeof c.n !== 'string' || !Object.hasOwn(DATA, c.set)) return null;
+      const d = DATA[c.set].cards.find(k => k.n === c.n);
+      if (!d || !BUY_R.includes(d.r) || c.kind !== d.r || c.r !== d.r || !(typeof c.price === 'number' && c.price > 0 && Number.isFinite(c.price)) || !(typeof c.reward === 'number' && c.reward > 0 && c.reward <= c.price * COMM_PAY + 0.01) || !(typeof c.due === 'number' && Number.isFinite(c.due))) return null;
+      return { set: c.set, n: c.n, name: d.name, r: d.r, kind: d.r, price: c.price, reward: c.reward, due: Math.min(c.due, shopT + COMM_LEN) };
+    } catch { return null; }
+  }
   // A saved gallery card counts only if it still is a whole card whose key is its own identity (set|n|kind, as every singles key is); a damaged
   // one is an empty slot, never half a card: a card without its kind would come home to the binder as bulk and be sold by the clerk.
   function galleryCard(x: unknown): Exhibit | null {
@@ -363,6 +390,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         for (const x of places.slice(ROOM_SLOTS)) { const c = galleryCard(x); if (c) { const { key, ...card } = c; (st.singles[key] ||= { ...card, count: 0 }).count++; } }
         delete st.trophy; st.v = SAVE_V;
         st.extra = { tickets: fin(s.extra?.tickets), idle: fin(s.extra?.idle), offline: fin(s.extra?.offline) }; st.galleryAcc = fin(s.galleryAcc) < 1 ? fin(s.galleryAcc) : 0;
+        { const t = Number.isFinite(st.shopT) ? st.shopT : 0; st.comm = commCard(s.comm, t); st.commAt = Math.min(fin(s.commAt), Math.max(0, t)); st.commPaid = fin(s.commPaid); } // a save from before 找卡委托: nobody asking, cooldown 0, nothing paid
         for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...st.gallery.filter(Boolean)] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
         return st;
       } } catch {}
@@ -598,6 +626,42 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   function moveCollect(from: number, to: number) { // an occupied slot and an empty one: moves; two occupied: swap
     if (!slotOk(from) || !slotOk(to) || from === to || (!state.gallery[from] && !state.gallery[to])) return false;
     [state.gallery[from], state.gallery[to]] = [state.gallery[to], state.gallery[from]];
+    emit(); return true;
+  }
+  // ---------- 找卡委托 (rules at COMM_GAP) ----------
+  const commKey = (c: Commission) => `${c.set}|${c.n}|${c.kind}`; // its card's key in singles
+  const commLeft = () => state.comm ? Math.max(0, state.comm.due - state.shopT) : 0; // seconds of shop time (the story pauses it, an absence moves it)
+  const commCap = () => Math.min(COMM_CAP1, COMM_CAP0 + revenue() / COMM_CAP_REV);
+  const commCards: Record<string, { n: string; name: string; r: string; price: number }[]> = {}; // per set, market data that never changes while the page is open: listed once
+  const commList = (id: string) => (commCards[id] ||= DATA[id].cards.filter(c => BUY_R.includes(c.r)).map(c => ({ n: c.n, name: c.name, r: c.r, price: S.cardPrice(id, c.n, c.r) ?? 0 })));
+  function commDraw(): Commission | null {
+    const cap = commCap(), ids = [...new Set(shelves().flatMap(s => s.id && unlocked(s.id) ? [s.id] : []))];
+    const pool = ids.flatMap(id => commList(id).filter(c => c.price >= Math.max(COMM_MIN, cap * COMM_FLOOR) && c.price <= cap).map(c => ({ id, c, w: cardOdds(id, c.n) ** 2 })));
+    const total = pool.reduce((a, p) => a + p.w, 0); if (!(total > 0)) return null;
+    const seed = [Math.floor(clock() / 1000), state.branch.n, state.branch.broke || 0, Math.round(state.shopT)].reduce((a, v) => Math.imul(a ^ v, 0x9E3779B1) + 0x7F4A7C15 | 0, 0x811C9DC5);
+    let x = S.rng(seed)() * total; const { id, c } = pool.find(p => (x -= p.w) < 0) ?? pool[pool.length - 1];
+    return { set: id, n: c.n, name: c.name, r: c.r, kind: c.r, price: c.price, reward: cents(c.price * COMM_PAY), due: state.shopT + COMM_LEN };
+  }
+  // Once per tick, while the player is here: the open request lapses at its deadline (commAt = the deadline itself, however late the tick that saw it), or a new one is asked
+  // for when the cooldown is over and the shop has a clerk or COMM_OPEN seconds behind it. True when that changed the request, so tick() tells the panels.
+  function commWork() {
+    if (!commissions) return false;
+    const c = state.comm;
+    if (c) { if (state.shopT < c.due) return false; state.comm = null; state.commAt = c.due; return true; }
+    if (state.shopT - state.commAt < COMM_GAP || !(lvl('clerk') || state.shopT >= COMM_OPEN)) return false;
+    return !!(state.comm = commDraw());
+  }
+  // Serves the request: one copy of its card leaves the binder (takeSingle: nothing while packs are being revealed, and none from the case or the 收藏室) and the reward comes in.
+  function deliverCommission() {
+    const c = state.comm; if (!c || !takeSingle(commKey(c))) return false;
+    state.cash += c.reward; state.earned.singles += c.reward; state.commPaid = cents(state.commPaid + c.reward);
+    log(`交付找卡委托：${c.name}`, 'gain', c.reward);
+    state.comm = null; state.commAt = state.shopT;
+    emit(); return true;
+  }
+  function dismissCommission() { // 不接: no penalty, the cooldown starts now
+    if (!state.comm) return false;
+    state.comm = null; state.commAt = state.shopT;
     emit(); return true;
   }
   const upgradeCost = (k: string): number | undefined => UPGRADES[k].costs[lvl(k)];  // undefined once maxed
@@ -898,10 +962,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
       for (const e of pending) { if (e.type === 'bill_paid') a.bills = (a.bills || 0) + e.amount!; if (e.type === 'loan_taken') a.borrowed = (a.borrowed || 0) + e.amount!; }
       if (d) { d.restock += acc.spent; d.bulk += acc.bulkV; d.cash += state.cash - cash0; } // the till as it stands before home(), bailout() or a listener (成就奖金) touch it
     }
+    const asked = !a && commWork(); // 找卡委托: lapses or asked for, only while the player is here
     if (gap) home(now);
     const rescued = !state.away && bailout(); // nobody is lent money, or goes bankrupt, while away
     if (flush()) return;
-    if (n || a || tickets || acc.packs || acc.short || acc.bulk || acc.listed || rescued) emit(); else save();
+    if (n || a || tickets || acc.packs || acc.short || acc.bulk || acc.listed || rescued || asked) emit(); else save();
   }
   // The player is back: the absence ends. One of AWAY or longer goes on the 打烊小票 (added to one still on screen, breakdown and all
   // when both have one) and gets one line in 店内动态 saying how long they were gone and, if longer than the shop could trade, for how long it did.
@@ -1138,6 +1203,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkKeep, clerkBudget, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
     pause, paused: () => pausedAt !== null, OPENING, OPENING_CAP, FLIP_SHARE,
+    deliverCommission, dismissCommission, commKey, commLeft, commCap, COMM_GAP, COMM_LEN, COMM_OPEN, COMM_PAY, COMM_MIN, COMM_FLOOR, COMM_CAP0, COMM_CAP1, COMM_CAP_REV,
     GALLERY_SLOTS, ROOM_SLOTS, PEDESTAL, GALLERY_RATE, TICKET_MIN, TICKET_MAX, IDLE_BONUS, OFFLINE_BONUS, galleryValue, ticketPrice, collectToGallery, toPedestal, uncollect, moveCollect, setIdle, idling, revealing,
     WEEK, GRACE, DEBT0, BILL0, BILL_G, DEBT_STEP, LOAN_RATE, LOAN_MARK, LOAN_K, LOAN_FLOOR, LOAN_PAY, LOAN_MIN, LOAN_FLOAT, NOCLERK_CAP, AWAY,
     branch, canBranch, fameFor, learnPerk, perk, perkCost, PERKS, FAME_UNIT, START_CASH, SEED_STEP, REG_STEP, ACCESS_STEP,

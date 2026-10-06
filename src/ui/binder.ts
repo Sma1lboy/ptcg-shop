@@ -102,11 +102,12 @@ function tierOf(id: string) {
 }
 
 function pocket(c: Pocket, st: string, i: number, nu: boolean) {
-  const hits = at.tab === HITS;
-  if (st === 'none') return html`<li class="pk none"><button type="button" class="pk-slot" data-bk-zoom=${i} aria-label="${c.n} 号 ${c.name}，还没有">
-      <b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}<small>${c.name}</small></button><span class="cf-cap"><b class="cf-price">${money(c.price)}</b></span></li>`;
-  return html`<li class="pk ${st}"><button type="button" class="pk-card" data-bk-zoom=${i} aria-label="${hits ? '' : `${c.n} 号 `}${c.name}${st === 'bought' ? '，补的' : ''}">
-      ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}</button>${nu ? html`<i class="hand-new">新</i>` : nothing}${cap(c, 'show')}</li>`;
+  const hits = at.tab === HITS, q = G.state.comm, ask = !!q && q.set === c.set && q.n === c.n && q.kind === c.kind; // 找卡委托: this card is the one a customer is asking for
+  const tag = ask ? html`<i class="cm-tag" title="有人来找这张卡：到货柜的展示柜页交付">委托</i>` : nothing;
+  if (st === 'none') return html`<li class="pk none"><button type="button" class="pk-slot" data-bk-zoom=${i} aria-label="${c.n} 号 ${c.name}，还没有${ask ? '，有人来找这张卡' : ''}">
+      <b>${c.n}</b>${mark({ kind: c.r, r: c.r }, false)}<small>${c.name}</small>${tag}</button><span class="cf-cap"><b class="cf-price">${money(c.price)}</b></span></li>`;
+  return html`<li class="pk ${st}"><button type="button" class="pk-card" data-bk-zoom=${i} aria-label="${hits ? '' : `${c.n} 号 `}${c.name}${st === 'bought' ? '，补的' : ''}${ask ? '，有人来找这张卡' : ''}">
+      ${face(c, 'show')}${st === 'bought' ? html`<i class="pk-buy" aria-hidden="true">补</i>` : nothing}${tag}</button>${nu ? html`<i class="hand-new">新</i>` : nothing}${cap(c, 'show')}</li>`;
 }
 
 // The 收齐 scene's centrepiece (ui/story.ts): the set's last page — its nine dearest cards — with the cover swinging shut over it,

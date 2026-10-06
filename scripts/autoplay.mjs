@@ -15,10 +15,12 @@ import { SCENES, sceneFor, BIG_PULL } from '../src/story.ts';
 // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json] [old]: the deterministic first hour of a new player who does what the guide (ui/guide.ts) and the shop's message box (ui/notice.ts) say; see firstHour() below.
 // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] diag [old]: where the longest drought's money went, the cost ladder it stalls on, and whether the afford events at the start are decisions the player can take (droughtWhy()).
 
-export function boot(seed = 1, t0 = 1_700_000_000_000) {
+// NOCOMM=1 in the environment (or commissions: false) switches 找卡委托 off (game.ts GameEnv.commissions): the before/after pair of ROADMAP loop 17. The request's draw never
+// touches the walk-in stream, so a run that never serves one is bit-identical either way.
+export function boot(seed = 1, t0 = 1_700_000_000_000, { commissions = !process.env.NOCOMM } = {}) {
   let T = t0, s = seed >>> 0;
   const rnd = () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const G = createGame({ now: () => T, random: rnd, storage: null });
+  const G = createGame({ now: () => T, random: rnd, storage: null, commissions });
   return { G, S, SETS, rnd, advance: sec => { T += sec * 1000; }, now: () => T };
 }
 
@@ -35,6 +37,24 @@ function watchDebt(G, clock) {
   return d;
 }
 
+// 找卡委托 the model saw and served: seen = requests asked for, held = of those, how many ever had their card in the binder or the case while open, done / paid = served and what they paid (seenAt / doneAt = seconds of play when each was asked / served).
+function watchComm(G, clock) {
+  const c = { seen: 0, held: 0, done: 0, paid: 0, seenAt: [], doneAt: [] }; let key = '', had = false;
+  G.on(() => {
+    const x = G.state.comm, k = x ? `${G.commKey(x)}@${x.due}` : ''; if (k !== key) { if (x) { c.seen++; c.seenAt.push(clock()); } key = k; had = false; }
+    if (x && !had && (G.state.singles[G.commKey(x)]?.count || G.state.shown.some(s => s.key === G.commKey(x)))) { had = true; c.held++; }
+  });
+  return c;
+}
+// A player who serves the request whenever the binder holds its card (taking it off the case first if that is where it stands). True when it was served.
+function serveComm(G, c, clock) {
+  const x = G.state.comm; if (!x) return false;
+  const key = G.commKey(x), i = G.state.singles[key]?.count ? -1 : G.state.shown.findIndex(k => k.key === key);
+  if (i >= 0) G.unlist(i); else if (!G.state.singles[key]?.count) return false;
+  if (!G.deliverCommission()) return false;
+  c.done++; c.paid += x.reward; c.doneAt.push(clock()); return true;
+}
+
 // One "visit" every `step` seconds: buy the cheapest upgrade (up to `cap` levels; 货架 first while an unlocked set has no shelf) or 技能 first (手气 only if this player opens packs; 看店 never, it never closes), then stock (kept back for opening or put on the shelf at `pct` of market),
 // open `openShare` of the back-room stock, sell cheap singles to peers and put hits in the case at `cardPct`.
 // branch = this shop's revenue at which the player 开分店 (prestige; false = never; 'paid' = as soon as the debt is cleared), then spends all 名气: 老主顾 (traffic) first, then the cheapest perk.
@@ -49,7 +69,7 @@ function watchDebt(G, clock) {
 // Shelves: an empty shelf gets the unlocked set with the fewest shelves (pricier sets first), so every set is on sale before any doubles up.
 export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1.0, cardPct = 1.0, masterShare = 0, luck, cap = {}, off = 0, branch = false, reserve = 0, repay = false, away, clerkFirst = false, heed = false, spare = false, binder = false, log = 600, hook } = {}) {
   const { G, SETS, advance } = boot(seed), rows = [], buys = []; let spent = 0, pot = 0, rev = 0, t = 0, nextRow = 0;
-  const debt = watchDebt(G, () => t);
+  const debt = watchDebt(G, () => t), comm = watchComm(G, () => t);
   const each = hook?.(G); // hook(G) may return a function called after every visit with the game time in seconds (test/: achievements)
   const pctOf = id => typeof pct === 'number' ? pct : pct[id] ?? 1;
   const baseLeft = id => G.dexTotal(id) - G.dexCount(id) - G.missing(id).length; // C/U/R still to pull
@@ -62,6 +82,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     const rowNow = () => { while (t >= nextRow) { rows.push(row(nextRow)); nextRow += log; } };
     if (t % 3600 >= (60 - off) * 60) { rowNow(); continue; }
     if (G.state.wreck) G.ackWreck();
+    serveComm(G, comm, () => t); // 找卡委托 first: before this visit sells the card to a peer or stands it in the case
     if (branch && G.canBranch() && (branch === 'paid' || G.revenue() >= branch)) { G.branch(); spent = 0; rev = 0; pot = 0; }
     for (let k; (k = Object.keys(G.PERKS).filter(k => G.perkCost(k) <= G.state.branch.fame).sort((a, b) => (b === 'regulars') - (a === 'regulars') || G.perkCost(a) - G.perkCost(b))[0]);) G.learnPerk(k); // 老主顾 first, then the cheapest
     G.sellBulk();
@@ -110,7 +131,7 @@ export function play({ hours = 3, openShare = 0.15, step = 20, seed = 1, pct = 1
     return { min: t / 60, cash: Math.round(st.cash), net: Math.round(st.cash + spent + SETS.reduce((a, x) => a + (G.shelfQty(x.id) + (st.stock[x.id] || 0)) * G.wholesale(x.id), 0)), perMin: '', rev: Math.round(G.revenue()), revMin: '', up: Object.values(st.up).reduce((a, b) => a + b, 0) + Object.values(st.skills).reduce((a, b) => a + b, 0), packs: Object.values(st.opened).reduce((a, b) => a + b, 0), dex: SETS.map(x => G.master(x.id) ? '★' : Math.round(G.dexCount(x.id) / G.dexTotal(x.id) * 100)).join('/'), rate: +(G.rate() * 60).toFixed(1), sold: st.cust.sold, pricey: st.cust.pricey, none: st.cust.none, shop: st.branch.n + 1, fame: st.branch.got, week: st.week, debt: Math.round(st.debt), loan: Math.round(st.loan), broke: st.branch.broke || 0 };
   }
   for (let i = 1; i < rows.length; i++) { rows[i].perMin = Math.round((rows[i].net - rows[i - 1].net) / (log / 60)); rows[i].revMin = Math.round((rows[i].rev - rows[i - 1].rev) / (log / 60)); }
-  rows.debt = debt; rows.G = G; rows.buys = buys;
+  rows.debt = debt; rows.G = G; rows.buys = buys; rows.comm = comm;
   return rows;
 }
 
@@ -233,15 +254,19 @@ export function pace(opts, { hours = 16, win = 2 } = {}) {
 //  - uiNotes (default true) mirrors the message box of the current ui/notice.ts: the first-sale note is gated on earned.sealed, the first seeker / collector sale each leave a 知道了 note, a collector's big card in the binder
 //    gets the 上柜 box (least valuable eligible hit, pressed = G.list), a waiting note cuts in over a 钱够升级 / 上柜 box, and 收卡's button (去看收到的卡) takes the player to the case page. `old` (uiNotes: false) is the box
 //    before that: the baseline of ROADMAP (mean 20.4 events, mean longest drought 1055.8 s, worst 1557 s over seeds 1–12).
+//  - 找卡委托 (comm, default on; `nocomm` on the command line / NOCOMM=1 switches it off for the before/after pair): the box shows its 「有人来找卡」 note once per request (not while the guide speaks, dropped when the
+//    request is gone or the player is on 展示柜; its key goes to the case page), and a player who finds the card in the binder (or the case) serves it with one press, on to 展示柜 and 交付. The model knows at once
+//    when the card is in the binder: the real panel shows it only on 展示柜, so this is the generous end. Requests are NOT M2 events (no ev() for them); their effect is only the cash and the presses they take.
 //  - NOT modelled (so no events from them): receipts (SLIP), selling cards to peers, price changes, 离开/打烊, 还款 (repay), 破产 UI, the
 //    phone layout, the sound/animation timings, 先不管 / 先不摆 (the player never waves a box off).
 // Event metric = the FIRST occurrence of each distinct thing: a set unlock, an upgrade/skill level becoming affordable (spare cash, 闲钱; only
 // the levels nextStep() could recommend — 看店, 手气 and sub-2% 人气/扩建 are left out, as there), an achievement, a story scene, a 图鉴 tier
 // of a set reached (a permanent walk-in step; `nodex` on the command line leaves it uncounted for comparison). Refills never count.
-export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare', snapEvery = 300, series = false, uiNotes = true, countDex = true, dump = false } = {}) {
-  const { G, SETS, advance } = boot(seed, new Date(2023, 10, 14, 12, 0, 0).getTime()), N = minutes * 60;
+export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal = 15, others = true, countOpening = false, basis = 'spare', snapEvery = 300, series = false, uiNotes = true, countDex = true, dump = false, comm = true } = {}) {
+  const { G, SETS, advance } = boot(seed, new Date(2023, 10, 14, 12, 0, 0).getTime(), { commissions: comm && !process.env.NOCOMM }), N = minutes * 60;
   const sum = o => Object.values(o).reduce((a, b) => a + b, 0), st = () => G.state;
   let t = 0, page = 'open', hold = false, holdLeft = 0, storyLeft = 0, cashPrev = st().cash;
+  const cq = watchComm(G, () => t); let commNoted = ''; // cq: the requests this player saw and served; commNoted: the request its note was said for
   const rec = {}, events = [], seenEv = new Set(), acts = [];
   const stamp = () => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
   const ev = (kind, key, label, count = true, extra) => { const k = kind + ':' + key; if (seenEv.has(k)) return; seenEv.add(k); events.push({ t, at: stamp(), kind, key, label, count, ...(typeof extra === 'function' ? extra() : extra) }); };
@@ -338,7 +363,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       if (cost <= G.spare() && cost <= cap && (!best || cost < best.cost)) best = { id: s.id, need, cost, bonus: tier[1] }; }
     return best; };
   const holds = m => { switch (m.kind) {
-    case 'first': case 'intake': case 'done': case 'cards': return notes[0] === m;
+    case 'first': case 'intake': case 'done': case 'cards': case 'comm': return notes[0] === m;
     case 'out': return shelfMine() && m.ids.every(i => out.has(i)) && outIds().length <= m.ids.length;
     case 'new': return !guiding() && fresh.has(m.id) && G.shelves().some(r => !r.id);
     case 'grow': return !guiding() && page !== 'grow' && m.k !== grew && m.k === growKey();
@@ -368,12 +393,17 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       if (uiNotes) for (const buyer of ['seeker', 'collector']) {
         if (s.cardFirst?.[buyer]?.card && !notes.some(n => n.kind === 'cards' && n.buyer === buyer)) notes.push({ kind: 'cards', buyer });
       }
+      if (uiNotes && comm) { // ui/notice.ts 找卡委托: one note per request, not while the guide speaks; it goes with the request, or once the player is looking at 展示柜
+        const x = s.comm, k = x ? `${G.commKey(x)}@${x.due}` : '';
+        for (let i = notes.length - 1; i >= 0; i--) if (notes[i].kind === 'comm' && (notes[i].key !== k || page === 'case')) notes.splice(i, 1);
+        if (!x) commNoted = ''; else if (k !== commNoted && !guiding()) { if (page !== 'case') notes.push({ kind: 'comm', key: k }); commNoted = k; }
+      }
       const on = rackedIds();
       for (const id of on) { const q = G.shelfQty(id) > 0; if (stocked[id] && !q) out.add(id); if (q) out.delete(id); stocked[id] = q; }
       for (const id of out) if (!on.includes(id)) out.delete(id);
       for (const id of unlockedIds()) if (!known.has(id)) { known.add(id); if (!on.includes(id)) fresh.add(id); }
       for (const id of fresh) if (on.includes(id)) fresh.delete(id); // keep a newly unlocked set pending until a shelf is free
-      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case' || memo.kind === 'dex') && out.size > 0 && shelfMine();
+      const cut = memo && (memo.kind === 'first' || memo.kind === 'intake' || memo.kind === 'done' || memo.kind === 'grow' || memo.kind === 'cards' || memo.kind === 'case' || memo.kind === 'dex' || memo.kind === 'comm') && out.size > 0 && shelfMine();
       const receiptReady = uiNotes && notes.length > 0 && (memo?.kind === 'grow' || memo?.kind === 'case' || memo?.kind === 'dex');
       const keep = memo && holds(memo) && !cut && !receiptReady;
       const next = !keep || memo?.kind === 'kept' ? pickMemo() : null;
@@ -382,7 +412,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       const shown = !!memo && !(hold && memo.kind !== 'out');
       if (shown) {
         const sets = memo.kind === 'out' ? memo.ids : memo.kind === 'new' ? [memo.id] : [], fixes = sets.map(x => fix(x, sets.length === 1)), cost = fixes.reduce((a, f) => a + (f?.cost ?? 0), 0);
-        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}:${st().stock[memo.id] || 0}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind;
+        const ident = sets.length ? `${memo.kind}:${sets.join()}:${fixes.map((f, i) => (f ? (f.up ? 'u' : `b${G.wholesale(sets[i])}`) : '-')).join(',')}` : memo.kind === 'grow' ? `grow:${memo.k}` : memo.kind === 'case' ? `case:${memo.key}` : memo.kind === 'cards' ? `cards:${memo.buyer}` : memo.kind === 'kept' ? `kept:${memo.id}:${st().stock[memo.id] || 0}` : memo.kind === 'dex' ? `dex:${memo.id}:${memo.need}` : memo.kind === 'comm' ? `comm:${memo.key}` : memo.kind;
         if (!(memoShown && printed?.ident === ident && printed.cost <= s.cash && !(printed.cost > 0 && cost >= 2 * printed.cost + 1))) printed = { ident, cost, fixes, sets }; // ui/notice.ts: an outgrown quote is printed again
       }
       memoShown = shown;
@@ -446,6 +476,8 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
       else if (tg && (tg.always || page === s.page || tg.act === 'open1' || tg.act === 'buyopen')) ps.push({ id: `g:${i}:${page}:${tg.act}:${tg.id ?? ''}:${tg.n ?? ''}`, press: () => guideKey(s, tg) });
       else if (page !== s.page) ps.push({ id: `g:${i}:tab`, press: () => { page = s.page; did(`tab ${s.page}`); } }); }
     if (m && m.kind !== 'out') ps.push({ id: 'm:' + printed.ident, press: () => memoKey(m) });
+    const x = comm && !hold && st().comm; // 找卡委托: serve it once the binder (or the case) holds the card
+    if (x && (st().singles[G.commKey(x)]?.count || st().shown.some(k => k.key === G.commKey(x)))) ps.push({ id: `c:${G.commKey(x)}@${x.due}`, press: () => { did(`deliver ${x.name}`); page = 'case'; serveComm(G, cq, () => t); watchShop(); } });
     return ps; }
   function guideKey(s, tg) {
     did(`guide ${s.h} ${tg.act}${tg.id ? ' ' + tg.id : ''}${tg.n ? ' ×' + tg.n : ''}`);
@@ -454,7 +486,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
     else if (tg.act === 'open1') openPack(tg.id, false); else if (tg.act === 'buyopen') openPack(tg.id, true); }
   function memoKey(m) {
     did(`box ${m.kind}${m.ids ? ' ' + m.ids.join() : m.id ? ' ' + m.id : ''}${m.key ? ' ' + m.key : ''}${m.buyer ? ' ' + m.buyer : ''}`);
-    if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards') { if (uiNotes && m.kind === 'intake') page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's primary button is 去看收到的卡 (closes the note, goes to the case page)
+    if (m.kind === 'first' || m.kind === 'intake' || m.kind === 'done' || m.kind === 'cards' || m.kind === 'comm') { if (uiNotes && (m.kind === 'intake' || m.kind === 'comm')) page = 'case'; notes.shift(); memo = null; memoShown = false; if (m.kind === 'cards') G.ackCardSale(m.buyer); } // 收卡's and 找卡's primary button goes to the case page (收卡: 去看收到的卡, 找卡: 去展示柜看看)
     else if (m.kind === 'case') G.list(m.key);
     else if (m.kind === 'grow') grow();
     else if (m.kind === 'kept') openPack(m.id, false, Math.min(10, st().stock[m.id] || 0));
@@ -524,7 +556,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const m2b = Array.from({ length: Math.ceil(N / 300) }, () => 0); for (const x of m2t) m2b[Math.min(m2b.length - 1, Math.floor(Math.max(0, x - 1) / 300))]++;
   const m2 = { gapA: gapIn(0, 1800), gapB: gapIn(1800, N), emptyA: m2b.slice(0, 6).filter(n => !n).length, emptyB: m2b.slice(6).filter(n => !n).length };
   m2.a = !m2.emptyA && m2.gapA <= 240; m2.b = !m2.emptyB && m2.gapB <= 480;
-  return { seed, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
+  return { seed, comm: cq, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
     bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify({ ...st(), feat: { ...st().feat, ...Object.fromEntries(Object.entries(seen).map(([k, v]) => [`story:${k}`, +v || 0])), 'story:return': 1 } }) : undefined }; // the scenes this player saw go with it (ui/story.ts keeps them in feat), so the reviewer's tab doesn't replay them // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
 
@@ -578,12 +610,14 @@ if (process.argv[1]?.endsWith('autoplay.mjs')) {
     console.log('afford events after the guide:', lag.length + unbought, '— bought later:', lag.length, `(median wait ${lag[lag.length >> 1]} s, max ${lag.at(-1)} s); never bought in the hour:`, unbought);
     console.log('hour totals over', seeds, 'seeds: revenue', rev, 'refill', tot('refill'), `(${Math.round(100 * tot('refill') / rev)}% of revenue)`, 'growth', tot('growth'), 'bill', tot('bill'), 'intake', tot('intake'), 'bonus', tot('bonus'));
   } else
-  if (mode === 'firsthour') { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json] [old]  (old = uiNotes: false, the baseline box before the collector/card notes)
-    const [seeds = 12, react = 6] = rest.filter(x => x !== 'json' && x !== 'old' && x !== 'nodex').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, uiNotes: !rest.includes('old'), countDex: !rest.includes('nodex') }));
+  if (mode === 'firsthour') { // node scripts/autoplay.mjs firsthour [seeds=12] [react=6] [json] [old] [nodex] [nocomm]  (old = uiNotes: false, the baseline box before the collector/card notes, and no 找卡委托; nocomm = 找卡委托 off)
+    const [seeds = 12, react = 6] = rest.filter(x => x !== 'json' && x !== 'old' && x !== 'nodex' && x !== 'nocomm').map(Number), runs = Array.from({ length: seeds }, (_, i) => firstHour({ seed: i + 1, react, uiNotes: !rest.includes('old'), countDex: !rest.includes('nodex'), comm: !rest.includes('nocomm') && !rest.includes('old') }));
     if (rest.includes('json')) console.log(JSON.stringify(runs, null, 1));
     else { console.table(runs.map(r => ({ seed: r.seed, events: r.events, per5: r.per5.join(' '), 'drought s': r.drought.secs, 'from–to': `${r.drought.from}–${r.drought.to}`, 'unlock/afford/ach/story s': [r.firsts.unlock, r.firsts.afford, r.firsts.ach, r.firsts.story].join('/'), cash: r.end.cash, level: r.end.level, racks: r.end.racks, 'walk-ins/min': r.end.rate, billsPaid: r.billsPaid, loan: r.loan })));
       const mean = f => +(runs.reduce((a, r) => a + f(r), 0) / runs.length).toFixed(1); console.log('mean events', mean(r => r.events), 'mean longest drought s', mean(r => r.drought.secs), 'worst', Math.max(...runs.map(r => r.drought.secs)));
-      console.log(`M2 (a) 0–30 min ≤240 s: ${runs.filter(r => r.m2.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapA))} s)  (b) 30–60 min ≤480 s: ${runs.filter(r => r.m2.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapB))} s)  [no 图鉴 tiers, afford only if bought; node ${process.version}]`); }
+      console.log(`M2 (a) 0–30 min ≤240 s: ${runs.filter(r => r.m2.a).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapA))} s)  (b) 30–60 min ≤480 s: ${runs.filter(r => r.m2.b).length}/${runs.length} (worst ${Math.max(...runs.map(r => r.m2.gapB))} s)  [no 图鉴 tiers, afford only if bought; node ${process.version}]`);
+      const late = (r, k) => r.comm[k + 'At'].filter(x => x > 1800).length, tot = (f, k) => runs.reduce((a, r) => a + f(r, k), 0); // 找卡委托 are not M2 events; this is what the model saw and served
+      console.log(`找卡委托 (not M2 events): asked ${tot(r => r.comm.seen)} / card ever in the binder ${tot(r => r.comm.held)} / served ${tot(r => r.comm.done)} in the hour over ${runs.length} seeds (paid $${Math.round(tot(r => r.comm.paid))}); minutes 30–60: asked ${tot(late, 'seen')} / served ${tot(late, 'done')}`); }
   } else if (mode === 'opening') { const [packs = 10, seeds = 10] = rest.map(Number), guide = rest.includes('guide'); console.log(guide ? 'following the guide (进一架 of every sellable set)' : `${packs} packs a restock`); console.table(Array.from({ length: seeds }, (_, i) => opening({ packs, seed: i + 1, guide }))); }
   else if (mode === 'pace') { const [hours = 16, ...kinds] = rest; for (const k of kinds.length ? kinds : ['纯经营', '普通']) { const o = { 纯经营: { openShare: 0, pct: 0.95 }, 普通: { step: 90, openShare: 0.02, pct: 1 }, 收图鉴: { openShare: 0, pct: 1, masterShare: 0.02 } }[k]; console.log(k); console.table(pace({ ...o, reserve: 1, repay: true }, { hours: +hours })); } }
   else if (mode === 'survive') { const [hours = 10, seeds = 20] = rest.map(Number), kinds = rest[2] ? rest[2].split(',') : undefined; console.table(survive({ hours, seeds, kinds })); }

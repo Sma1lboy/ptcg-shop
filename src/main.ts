@@ -8,6 +8,7 @@ import { renderLog } from './ui/log.ts';
 import { renderLuck } from './ui/luck.ts';
 import { renderBinder, initBinder } from './ui/binder.ts';
 import { renderSingles } from './ui/singles.ts';
+import { renderCommission } from './ui/commission.ts';
 import { renderUpgrades } from './ui/upgrades.ts';
 import { renderCase } from './ui/case.ts';
 import { renderCollection, initCollection } from './ui/collection.ts';
@@ -29,14 +30,14 @@ import { renderBoard, initBoard } from './ui/board.ts';
 
 const sourceDetails = document.getElementById('sources')!.parentElement as HTMLDetailsElement;
 sourceDetails.addEventListener('toggle', () => { if (sourceDetails.open) renderSources(); });
-const cardPanels = ['luck', 'dex', 'singles', 'casepanel', 'case-cust', 'board'].map(id => document.getElementById(id)!); // 排行 shows the live collection value and 图鉴 count, so it waits for a reveal too
+const cardPanels = ['luck', 'dex', 'singles', 'comm', 'casepanel', 'case-cust', 'board'].map(id => document.getElementById(id)!); // 排行 shows the live collection value and 图鉴 count, so it waits for a reveal too; so does 找卡委托 (it says whether the binder holds the card)
 // While a pack is being revealed the panels that would show the pull early (luck, binder, singles, the till roll, the case, the closing
 // receipt) wait; the rest keep up with the shop, which goes on selling (a player who leaves a pack half-flipped for 货柜 or 成长 saw
 // frozen counts): the top bar (its singles' worth stays at the pre-pack value), the bill, the ledger, 成长, the tab counts, the shelf
 // and the rail (their open buttons off). The mat fires ptcg:release when done.
 function renderAll() {
   for (const panel of cardPanels) if (panel.hasAttribute('inert') !== hold) panel.toggleAttribute('inert', hold);
-  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderBoard(); renderNotice(); refreshMat();
+  if (sourceDetails.open) renderSources(); renderEarnings(); renderCollection(); if (hold) { renderStats(true); renderDue(); renderLedger(); renderShelf(); renderUpgrades(); renderTabs(); renderRail(); return; } renderStats(); renderDue(); renderLedger(); renderWreck(); renderShelf(); renderLog(); renderLuck(); renderBinder(); renderSingles(); renderCommission(); renderUpgrades(); renderTabs(); renderRail(); renderCase(); renderBoard(); renderNotice(); refreshMat();
 }
 
 bindEvents(); bindMatInput();

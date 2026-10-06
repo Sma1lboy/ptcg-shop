@@ -15,6 +15,7 @@
 | 配色约束 | `node scripts/contrast.mjs`（对比度、胶垫明度差、黄/金色相差，不过就退出 1） |
 | 像素字 | `node scripts/pixel-font.mjs`（加了新文案后重切字体子集，要 `uv`：用户已同意，用 uvx 跑 fonttools，不进 package.json）；`--check` 列出源码里有、字体里没有的字，缺就退出 1 |
 | 评审存档与加速 | `node scripts/autoplay.mjs checkpoint [种子=3] [分钟=30] > /tmp/cp.js`：首小时模型玩到第 N 分钟的存档，做成浏览器 init 脚本（时间戳平移成刚关店、引导和看过的剧情都带上）。`npm run dev` 下 URL 加 `?speed=N` 让店里的钟 N 倍速，控制台 `__dev.skip(秒)` 一次经营过去（按 10 秒一步，不算离开）、`__dev.speed(0)` 暂停、`__dev.now()`；只在 dev 有，build 和 pen 里没有。评审跳过的时长就是空闲时长，要写进报告 |
+| 找卡委托前后对照 | `NOCOMM=1 node scripts/autoplay.mjs …`（任何模式）或 `node scripts/autoplay.mjs firsthour 24 nocomm` 关掉找卡委托，其余同一份代码；不加就是开着。模型玩家会按卡本里有没有这张卡去交付，`firsthour` 末尾另报 30–60 分钟内看到／交付了几张（委托不计入 M2 事件） |
 
 根目录的 `index.html` 是 Vite 的入口（引用 `/src/main.ts`），不能再双击打开；双击入口是 `dist/index.html`。
 
@@ -49,6 +50,7 @@
 | `src/ui/card.ts` | 卡面：全站唯一的 2D 卡（`face` 卡图 + 闪面 + 加载失败的白卡纸、`cap` 卡下的记号和价、`mark` 印刷的稀有度记号 SVG、`back` / `energy` 卡背和能量卡的 SVG 图，分享图也用）。规格在 DESIGN.md「卡面」；开包台拼字符串的地方用 `toHTML()` |
 | `src/ui/inspect.ts` | 共用卡片欣赏：原生 dialog，放大、翻面、指针／触控闪面；复用 `card.ts`，明确关闭键。图鉴未收录的卡不展示原图，翻牌期间卡册入口不得泄露新卡 |
 | `src/ui/collection.ts` | 收藏室 `#gallery`（货柜页展示柜视图最上面的一间房，镇店之宝并在里面）：镇店台加五个固定展位、纯展示与布置模式、实体卡移入／换位／取回、门票与展品总值；不进入售卖展示柜或店员补柜逻辑 |
+| `src/ui/commission.ts` | 找卡委托 `#comm`（货柜页展示柜视图，在展示柜和卡本之间）：这张卡的卡面、报酬、剩余时间、卡在哪、「交付」（卡本里有才是主键）和「不接」。规则、数字和存档在 `game.ts`（`COMM_GAP` 一带）：`state.comm` / `state.commAt` / `state.commPaid`、`deliverCommission()` / `dismissCommission()`，`createGame({ commissions: false })` 关掉；抽卡用自己的随机数（不碰 `random()`），所以不交付时客流、开包哈希和所有带种子的测试都和没有它时逐字一样。卡本（`singles.ts`）和卡册（`binder.ts`）里同一张卡戴「委托」小牌；店里的话（`notice.ts`）出一次「有人来找卡」；顶栏现金浮标写「交付 +$」（`stats.ts` 的 `sources()` 读 `commPaid`）。翻牌期间整格 `inert` |
 | `src/ui/{stats,shelf,log,luck,binder,singles,upgrades,skills,case,notice,guide,goals,sources}.ts` | 每个面板一个文件，各自 `render()` 进 `index.html` 里对应的容器；只读 `G.state`、只调 `G` 的方法。`goals` 是顾客/店员（货柜页），`binder` 是欧气页的卡册（战利品 + 各系列图鉴、补卡、亲手开出），`upgrades` + `skills` 是成长页（店铺等级、开分店和名气加成、升级和技能的口袋、手气的官方/加成后概率对照），`sources` 是页脚的来源、游戏设定和价格口径，`guide` 是新手引导：一个原生 popover（`#coach`）贴在当前步要按的按钮旁，步骤从存档状态推出，页脚「新手引导」重放 |
 | `src/ui/mat.ts` | 开包台：撕包、逐张翻、批量开、拖拽／滑动／空格输入及 3D 适配。命令式 DOM；`mat.up` / `mat.cur` 管翻牌进度，`held` 镜像 3D 举牌状态，说明牌和「放回」键跟它走。举牌可用放回键、桌面点击、Esc／X、空格／回车／Z 结束，对话框优先处理自己的键。撕包有六种撕法，拖动的起点和方向决定（2D 的指针输入在这里，3D 的在 table3d.js，规则同在 series.ts）；点一下、空格照「上次的撕法」，记在 localStorage `ptcg.tear`，经 `tearStyle()` / `onTear(style)` 和 3D 台面来回 |
 | `src/table3d.js` | 开包台 three.js 场景，纯演出，不读游戏状态。`mountTable(el, { onTear(style), onFlip, onDone, onPick, onLost, onHold, onLook, tearStyle, reducedMotion })` → `{ showShelf, hover, showPack, showBatch, lookAt, putBack, flip, flipAll, resize, dispose }`。`tearStyle()` 给点一下／空格／`flip(0)` 用的撕法（`TearId`），`onTear(style)` 报这包实际怎么撕开的。`showShelf(items)` 读 mat.ts 提供的 `{ set, n, off }`；`showBatch(set,packs,picks,{news,quick})` 的重点卡与新卡下标由 mat.ts 决定。`onLook(k)` 在第 k 张举到眼前时触发，放下时为 -1；`putBack()` 放回举着的卡。`ready` 等待 three 加载；静止不渲染，开发时 `window.__t3` 读帧数和 renderer.info |

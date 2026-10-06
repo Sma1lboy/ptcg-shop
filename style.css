@@ -306,7 +306,7 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
 :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled,
-:where(#luck, #dex, #singles, #casepanel, #case-cust, #board)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
+:where(#luck, #dex, #singles, #comm, #casepanel, #case-cust, #board)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
 :where(.page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .rail) .primary:disabled { color: var(--sticker-ink); }
@@ -669,6 +669,21 @@ button:disabled { cursor: not-allowed; }
 .page .sb-btns button { flex: 1 1 auto; min-width: 44px; min-height: 44px; padding: 2px 6px; font-size: var(--fs-cap); }
 .page .sb-btns [data-act="sell"] { flex-basis: 100%; }
 .sb-pk.gone .sb-btns { visibility: hidden; }
+/* 找卡委托 (commission.ts): one request, in the same window as the 卡本 under it. The card (a pocket's width) on the left, the words, the time bar and the two keys
+   stacked on the right. 委托 on a pocket in the 卡本 / 卡册 is the 新 tag's twin: ink face, page-colour type, never yellow (yellow is the 交付 key) */
+.cm { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px 16px; align-items: start; }
+.cm-card { display: grid; gap: 4px; }
+.cm-card .cf { width: 100%; }
+.cm-main { display: grid; gap: 8px; min-width: 0; }
+.cm-main > p, #comm > p { margin: 0; }
+.cm-name b { font-weight: 600; overflow-wrap: anywhere; }
+.cm-have { font-size: var(--fs-cap); color: var(--muted); }
+.cm-btns { display: flex; flex-wrap: wrap; gap: 8px; }
+.page .cm-btns button { flex: 1 1 auto; min-width: 88px; min-height: 44px; }
+.cm-tag { position: absolute; top: 3px; z-index: 1; margin: 0; pointer-events: none; }
+.sb-card > .cm-tag { left: 3px; margin: 0; }
+#dex .cm-tag { right: 3px; margin: 0; }
+#dex .pk-slot { position: relative; }
 .s-name { min-width: 0; overflow-wrap: anywhere; }
 .s-count { color: var(--muted); }
 
@@ -1338,7 +1353,7 @@ button:disabled { cursor: not-allowed; }
 /* 新 (first pulled by hand, new in the book, a medal earned since you last looked): one small inverted label everywhere — the
    surface's own ink as the face, its colour as the type, pixel type — the way a BW menu marks a new entry. Not yellow (that's
    for what you press), not gold (rarity), not the cursor blue (that's where you are) */
-:is(.hand-new, .a-new) { display: inline-block; margin-right: 6px; padding: 0 4px; border-radius: 3px; background: var(--ink); color: var(--panel); font: 400 12px/16px var(--font-pixel); font-style: normal; text-shadow: none; vertical-align: 1px; }
+:is(.hand-new, .a-new, .cm-tag) { display: inline-block; margin-right: 6px; padding: 0 4px; border-radius: 3px; background: var(--ink); color: var(--panel); font: 400 12px/16px var(--font-pixel); font-style: normal; text-shadow: none; vertical-align: 1px; }
 .mat .hand-new { background: var(--mat-ink); color: var(--hud); }
 .s3-tag .hand-new { float: left; margin: 2px 4px 0 -2px; }
 .slot figcaption:has(> .hand-new) { display: flex; align-items: baseline; }

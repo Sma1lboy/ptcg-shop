@@ -9,7 +9,7 @@ import { branchClick } from './upgrades.ts';
 import { loanClick } from './ledger.ts';
 import { resetStory } from './story.ts';
 
-const CARD_ACTIONS = new Set(['shareluck', 'sell', 'bulk', 'list', 'fillcase', 'caseprice', 'buyprice', 'unlist', 'pedestal', 'cprice', 'collect']);
+const CARD_ACTIONS = new Set(['shareluck', 'sell', 'bulk', 'list', 'fillcase', 'caseprice', 'buyprice', 'unlist', 'pedestal', 'cprice', 'collect', 'comm-deliver']);
 
 export function bindEvents() {
   let resetArmed = 0;
@@ -35,6 +35,8 @@ export function bindEvents() {
       case 'sell': { const n = Number(b.dataset.n); if (Number.isInteger(n) && n > 0) G.sell(b.dataset.key!, n); break; }
       case 'bulk': G.sellBulk(); break;
       case 'list': G.list(b.dataset.key!); break;
+      case 'comm-deliver': G.deliverCommission(); break;
+      case 'comm-dismiss': G.dismissCommission(); break;
       case 'fillcase': G.fillCase(); break;
       case 'caseprice': G.setCasePct(G.casePct() + +b.dataset.d! * G.PCT_STEP); break;
       case 'buyprice': G.setBuyPct(G.buyPct() + +b.dataset.d! * G.PCT_STEP); break;

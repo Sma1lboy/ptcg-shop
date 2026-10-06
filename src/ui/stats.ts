@@ -5,18 +5,18 @@ import { G, $, money, bar } from './common.ts';
 import { nextStep } from './upgrades.ts';
 
 let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = G.now(), why = '', lastAt = 0;
-let lastExtra: { tickets: number; idle: number; offline: number } | null = null;
+let lastExtra: { tickets: number; idle: number; offline: number } | null = null, lastCommPaid: number | null = null;
 
 // What the till's change was made of, when it all came from the counter: packs sold stay a bare 「+$」 (the 第一笔生意 note says what
 // it is), a case card sold reads 「卖卡 +$」, hits bought off a customer 「收卡 −$」 — a net −$136 with packs sold and cards bought in the
-// same second read as money gone for nothing. Other changes (including the player's buys) are explicitly labelled as a net, not a transaction price.
-function sources(d: number, extra: { tickets: number; idle: number; offline: number }) {
+// same second read as money gone for nothing. 找卡委托 paid is 「交付 +$」 (comm). Other changes (including the player's buys) are explicitly labelled as a net, not a transaction price.
+function sources(d: number, extra: { tickets: number; idle: number; offline: number }, comm: number) {
   const vs = G.state.recent.filter(v => v.at > seenAt);
   seenAt = Math.max(seenAt, ...vs.map(v => v.at));
   const sum = (f: (v: (typeof vs)[number]) => number) => vs.reduce((a, v) => a + f(v), 0);
   const packs = sum(v => (v.r === 'sold' && !v.card ? v.gain || 0 : 0)), cards = sum(v => (v.r === 'sold' && v.card ? v.gain || 0 : 0)), paid = sum(v => v.paid || 0);
-  if (Math.abs(packs + cards - paid + extra.tickets + extra.idle + extra.offline - d) >= .01) return '';
-  return [packs >= .005 ? `卖包 +${money(packs)}` : '', cards >= .005 ? `卖卡 +${money(cards)}` : '', paid >= .005 ? `收卡 −${money(paid)}` : '',
+  if (Math.abs(packs + cards - paid + extra.tickets + extra.idle + extra.offline + comm - d) >= .01) return '';
+  return [packs >= .005 ? `卖包 +${money(packs)}` : '', cards >= .005 ? `卖卡 +${money(cards)}` : '', paid >= .005 ? `收卡 −${money(paid)}` : '', comm >= .005 ? `交付 +${money(comm)}` : '',
     extra.tickets >= .005 ? `门票 +${money(extra.tickets)}` : '', extra.idle >= .005 ? `挂机奖励 +${money(extra.idle)}` : '', extra.offline >= .005 ? `离线奖励 +${money(extra.offline)}` : ''].filter(Boolean).join(' · ');
 }
 
@@ -30,10 +30,11 @@ export function renderStats(reveal = false) {
   const extra = { tickets: 0, idle: 0, offline: 0 };
   if (lastExtra) for (const k of ['tickets', 'idle', 'offline'] as const) extra[k] = Math.max(0, s.extra[k] - lastExtra[k]);
   lastExtra = { ...s.extra };
+  const comm = lastCommPaid == null ? 0 : Math.max(0, s.commPaid - lastCommPaid); lastCommPaid = s.commPaid; // 找卡委托 paid since the last render
   if (lastCash != null && Math.abs(s.cash - lastCash) >= .005) {
     // changes in one go (都补上 buys and shelves set after set, one emit each) add up to one tag: it showed only the last set's −$
     const now = performance.now(), same = now - lastAt < 60; lastAt = now;
-    if (same) { delta += s.cash - lastCash; why = ''; } else { delta = s.cash - lastCash; why = sources(delta, extra); stamp++; }
+    if (same) { delta += s.cash - lastCash; why = ''; } else { delta = s.cash - lastCash; why = sources(delta, extra, comm); stamp++; }
   }
   else if (lastCash == null) seenAt = Math.max(seenAt, ...s.recent.map(v => v.at)); // what happened before this page opened isn't news
   lastCash = s.cash;
