@@ -660,12 +660,20 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
   // Once per tick, while the player is here: the open request lapses at its deadline (commAt = the deadline itself, however late the tick that saw it), or a new one is asked
   // for when the cooldown is over and the shop has a clerk or COMM_OPEN seconds behind it. True when that changed the request, so tick() tells the panels.
+  // 店内动态 says each turn of a request: asked for, its card in the binder (from a pack or 收卡: a reviewer's arrived with no line naming it), lapsed.
+  let commHeld = false; // the open request's card was in the binder at the last look; not saved
   function commWork() {
     if (!commissions) return false;
     const c = state.comm;
-    if (c) { if (state.shopT < c.due) return false; state.comm = null; state.commAt = c.due; return true; }
+    if (c) {
+      if (state.shopT >= c.due) { state.comm = null; state.commAt = c.due; commHeld = false; log(`找卡委托过期：${c.name}`); return true; }
+      if (!reveal) { const held = (state.singles[commKey(c)]?.count ?? 0) > 0; if (held && !commHeld) log(`委托要的${c.name}进了卡本，可以交付`, 'hit'); commHeld = held; } // not mid-reveal: the line would give away the pull before its card is flipped
+      return false;
+    }
     if (state.shopT - state.commAt < COMM_GAP || !(lvl('clerk') || state.shopT >= COMM_OPEN)) return false;
-    return !!(state.comm = commDraw());
+    state.comm = commDraw(); if (!state.comm) return false;
+    commHeld = !reveal && (state.singles[commKey(state.comm)]?.count ?? 0) > 0; log(`有人来找卡：${state.comm.name}，报酬 $${state.comm.reward.toFixed(2)}${commHeld ? '（卡本里就有）' : ''}`);
+    return true;
   }
   // Serves the request: one copy of its card leaves the binder (takeSingle: nothing while packs are being revealed, and none from the case or the 收藏室) and the reward comes in.
   function deliverCommission() {
