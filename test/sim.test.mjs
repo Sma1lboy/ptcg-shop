@@ -264,7 +264,8 @@ console.log('ok luck percentile');
   G.shelves()[0].qty = 0; T += 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), half, '帮工: an empty shelf brings him at once, to half even when 热销');
   G.shelves()[0].qty = 0; T += 1e3; round(); assert.equal(G.shelfQty('sv08'), 0, '帮工: not again within CLERK_EMPTY');
   T += G.CLERK_EMPTY * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, '帮工: after CLERK_EMPTY the empty shelf brings him back');
-  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND_1 * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 2 tops up to half');
+  // raised to 店员 right after a 帮工 round: the 帮工's 4-minute deadline does not hold the empty shelf — he comes within CLERK_EMPTY and from then on every CLERK_ROUND
+  G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_EMPTY * 1e3; round(); assert.equal(G.shelfQty('sv08'), half, 'level 2 just hired: an empty shelf does not wait out the 帮工 deadline');
   G.shelves()[0].qty = 0; T += 60e3; round(); assert.equal(G.shelfQty('sv08'), 0, 'no restock between rounds');
   T += G.CLERK_ROUND * 1e3; round({ sv08: 1.15 }); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 2 fills a 热销 set to the top, every CLERK_ROUND');
   G.upgrade('clerk'); G.shelves()[0].qty = 0; T += G.CLERK_ROUND * 1e3; round(); assert.equal(G.shelfQty('sv08'), G.depth(), 'level 3 fills it');
@@ -662,7 +663,7 @@ console.log('ok luck percentile');
   let T = 1_700_000_000_000; const K = createGame({ now: () => T, random: () => 0.99, storage: { getItem: () => null, setItem() {} } }); // 0.99: nobody walks in
   const s = K.state, id = 'sv10'; s.cash = 1e6; K.upgrade('depth'); K.buy(id, 40); K.place(0, id); K.buy(id, 60); // an 80-pack shelf, 40 on it, 60 in the back room
   assert.equal(K.shelfQty(id), 40); T += 1000; K.tick(); assert.equal(K.shelfQty(id), 40, 'no clerk: the back room stays put');
-  K.upgrade('clerk'); K.upgrade('clerk'); s.clerkT = T + 1e9; // no round due: only the carrying (level 2: the 帮工 would go round for the empty shelf below)
+  K.upgrade('clerk'); K.upgrade('clerk'); s.clerkT = T + 60e3; // no round due in these few seconds: only the carrying (level 2 inside his own interval; a 帮工 would go round for the empty shelf below)
   T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [80, 20], 'clerk carries up to the shelf\'s depth');
   K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.deepEqual([K.shelfQty(id), s.stock[id]], [10, K.CLERK_KEEP], 'all but CLERK_KEEP');
   K.shelves()[0].qty = 0; T += 1000; K.tick(); assert.equal(K.shelfQty(id), 0, 'at CLERK_KEEP the rest is the player\'s');

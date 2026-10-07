@@ -897,7 +897,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     for (const id of new Set(shelves().filter(sh => sh.id && state.auto[sh.id] && sh.qty < depth() && state.stock[sh.id] > CLERK_KEEP).map(sh => sh.id!))) fill(id, state.stock[id] - CLERK_KEEP);
     // 帮工 (level 1) also goes round as soon as a shelf of his sets stands empty, at most every CLERK_EMPTY seconds: on 4-minute rounds
     // to half a 40-pack shelf sold out a minute in, and the first hire barely changed the 卖空→补到满 loop (a fresh-save reviewer, loop 30)
-    const emptyNow = L === 1 && t - (state.clerkRound?.at ?? 0) >= CLERK_EMPTY * 1000 && shelves().some(sh => sh.id && state.auto[sh.id] && unlocked(sh.id) && !sh.qty);
+    // and so does a 店员 just raised from 帮工 while the 帮工's longer deadline still stands (a reviewer bought Lv 2 right after a round and three shelves stood empty ~3 minutes)
+    const lingering = L > 1 && state.clerkT - t > clerkRoundSecs() * 1000;
+    const emptyNow = (L === 1 || lingering) && t - (state.clerkRound?.at ?? 0) >= CLERK_EMPTY * 1000 && shelves().some(sh => sh.id && state.auto[sh.id] && unlocked(sh.id) && !sh.qty);
     if (t >= state.clerkT || emptyNow) {
       state.clerkT = t + clerkRoundSecs() * 1000;
       const need = clerkNeed(), b = clerkBuy(); acc.packs += b.packs; acc.spent += b.spent; acc.short = clerkNeed();
