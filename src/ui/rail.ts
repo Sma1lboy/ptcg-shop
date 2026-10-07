@@ -36,8 +36,8 @@ export function renderRail() {
     <ul class="rail-sets">${SETS.filter(x => G.unlocked(x.id)).map(x => {
       const n = s.stock[x.id] || 0, w = G.wholesale(x.id);
       return html`<li><img src="${logoUrl(x.id)}" alt="" loading="lazy"><span class="rs-name">${x.name}<small>${n ? `仓库 ${n} 包` : '仓库空了'}</small></span>
-        <span class="rs-btns">${n ? html`<button type="button" data-act="open1" data-id="${x.id}" ?disabled=${hold}>开 1 包</button>${n > 1 ? html`<button type="button" data-act="${batchBtn(x.id).act}" data-id="${x.id}" ?disabled=${hold}>${batchBtn(x.id).text}</button>` : ''}`
-          : html`<button type="button" data-act="buyopen" data-id="${x.id}" ?disabled=${hold || s.cash < w}>进 1 包就开 ${money(w)}</button>`}</span></li>`;
+        <span class="rs-btns">${n ? html`<button type="button" data-act="open1" data-id="${x.id}" aria-label="开 1 包${x.name}" ?disabled=${hold}>开 1 包</button>${n > 1 ? html`<button type="button" data-act="${batchBtn(x.id).act}" data-id="${x.id}" aria-label="${batchBtn(x.id).text}${x.name}" ?disabled=${hold}>${batchBtn(x.id).text}</button>` : ''}`
+          : html`<button type="button" data-act="buyopen" data-id="${x.id}" aria-label="进 1 包${x.name}就开 ${money(w)}" ?disabled=${hold || s.cash < w}>进 1 包就开 ${money(w)}</button>`}</span></li>`;
     })}</ul>
     ${hold ? html`<p class="rail-more muted">先翻完手里这包，才能开下一包。</p>` : html`<p class="rail-more"><a href="#shelf">去货柜进货、上架、定价 →</a></p>`}
     ${boost()}
