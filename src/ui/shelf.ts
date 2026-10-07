@@ -9,7 +9,7 @@ import { live } from 'lit-html/directives/live.js';
 import { repeat } from 'lit-html/directives/repeat.js';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
-import { G, $, money, logoUrl, lately, restock, refillQuote, swapHint, bar } from './common.ts';
+import { G, $, money, logoUrl, lately, restock, refillQuote, shelfFill, swapHint, bar } from './common.ts';
 import { hold } from './mat.ts';
 import { packCust } from './goals.ts';
 
@@ -61,6 +61,8 @@ function draw() {
     const id = set.id, name = set.name, w = G.wholesale(id), ev = S.packEV(S.rateKey(id, G.luckMult())), stock = s.stock[id] || 0, onShelf = G.shelfQty(id);
     const own = shelves.filter(r => r.id === id).length, cap = own * deep, pct = G.pctOf(id), margin = G.ask(id) - w, heat = s.heat[id], tag = G.demand(id).tag;
     const q = refillQuote(id), c = cust(id), more = restock(id), room = G.WAREHOUSE - stock, slot = shelves.findIndex(r => r.id === id);
+    // with the clerk the key is the deep quote (shelf + back room, often $1,000+): a second, plain key buys only the shelf's gap (a fresh-save reviewer had to dig into 更多 for it)
+    const just = q.act === 'refill' && q.ok && q.text.startsWith('补满+仓库') ? shelfFill(id) : null;
     // the missing set's row says the swap, with the move: every shelf is taken and customers keep asking for it
     const sw = swap?.id === id ? swap : null, held = sw ? shelves[sw.i].id! : '', canSwap = !!sw && (!!stock || clerkOn) && (s.stock[held] || 0) + shelves[sw!.i].qty <= G.WAREHOUSE;
     const verdict = sw ? html`<b>${c.missed} 位没买到</b>：没有空货架；第 ${sw.i + 1} 架的${G.setById(held).name}最近只卖给 ${sw.buyers} 位${canSwap ? html` <button type="button" @click=${() => G.place(sw.i, id)}>换到第 ${sw.i + 1} 架</button>` : '，在「更多」里换'}。` : c.verdict;
@@ -83,6 +85,7 @@ function draw() {
         <span class="margin ${margin >= 0 ? 'gain' : 'loss'}" title="每包毛利 = 标价 − 进货价">每包 ${margin >= 0 ? '+' : '−'}${money(Math.abs(margin))}</span></div>
       <div class="s-act" role="group" aria-label="${name} 补货和开包">
         <button type="button" class="primary" data-act="${q.act}" data-id="${id}" data-n="${q.n}" title="${q.title}" ?disabled=${!q.ok}>${q.text}</button>
+        ${just && just.n > 1 ? html`<button type="button" data-act="refill" data-id="${id}" data-n="${just.n}" title="只进货架缺的 ${just.n} 包并上架，不往仓库多进">只补货架 ${money(just.n * w, 'exact')}</button>` : nothing}
         <button type="button" data-act="open1" data-id="${id}" title="${hold ? '手里这包翻完再开' : stock ? `从仓库拆 1 包（仓库 ${stock} 包）` : '自己拆的包从仓库拿，货架上的留给顾客；仓库空了，先进货'}" ?disabled=${!stock || hold}>开 1 包</button></div>
       ${c.rail || verdict ? html`<div class="s-cust">${c.rail ?? nothing}${verdict ? html`<p class="c-note">${verdict}</p>` : nothing}</div>` : nothing}
       <details class="s-more"><summary>更多</summary>
