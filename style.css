@@ -1550,6 +1550,8 @@ button:disabled { cursor: not-allowed; }
   .tn > .tn-badge { grid-column: 1; width: 48px; height: 48px; }
   .tn-badge::before { inset: 6px; }
   .tn > :is(.gt-buy, .gt-done) { grid-column: 3; grid-row: 1 / span 3; align-self: center; justify-items: end; text-align: right; max-width: 9.5em; }
+  /* a price with the bill warning under it (upgrades.ts billNote) gets the whole row: in the 9.5em price column the sentence wrapped right-aligned into a sliver */
+  .tn > .gt-buy:has(.gt-bill) { grid-column: 2 / -1; grid-row: auto; align-self: start; justify-items: start; text-align: left; max-width: none; }
   .tn .gt-desc { display: none; }
   .tn > .gt-lock { grid-column: 2 / -1; grid-row: auto; justify-items: start; text-align: left; max-width: none; } /* the lock's reason is a sentence, not a price */
   .tn-top b { font-size: var(--fs-h); }

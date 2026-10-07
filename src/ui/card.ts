@@ -35,10 +35,12 @@ const MARKS: Record<string, { tone: string; w: number; h?: number; d: string[] }
   MHR: { tone: 'gold mk-mhr', w: 14, d: ['M7 .8Q8.4 5.6 13.2 7Q8.4 8.4 7 13.2Q5.6 8.4 .8 7Q5.6 5.6 7 .8Z'] }, // four-pointed star, dark outline
 };
 // REV / PB / MB are printings of a C/U/R card and carry its symbol; basic energy has none. aria: false when the rarity name is written next to it.
+// The title names the printing too (「稀有 · 精灵球闪」): a 精灵球闪 read as a plain 稀有 while 一包双闪 counted it as a hit (a fresh-save reviewer).
 const markKey = (c: Pick<Card, 'r' | 'kind'>) => (['REV', 'PB', 'MB'].includes(c.kind) ? c.r : c.kind);
 export function mark(c: Pick<Card, 'r' | 'kind'>, aria = true) {
   const k = markKey(c), m = MARKS[k]; if (!m) return nothing;
-  return html`<svg class="mk mk-${m.tone}" viewBox="0 0 ${m.w} ${m.h ?? 14}" style="width:${m.w / 14}em;height:${(m.h ?? 14) / 14}em" role=${aria ? 'img' : nothing} aria-hidden=${aria ? nothing : 'true'}>${aria ? svg`<title>${rarLabel(k)}</title>` : nothing}${m.d.map(d => svg`<path d=${d}/>`)}</svg>`;
+  const name = k === c.kind ? rarLabel(k) : `${rarLabel(k)} · ${rarLabel(c.kind)}`;
+  return html`<svg class="mk mk-${m.tone}" viewBox="0 0 ${m.w} ${m.h ?? 14}" style="width:${m.w / 14}em;height:${(m.h ?? 14) / 14}em" role=${aria ? 'img' : nothing} aria-hidden=${aria ? nothing : 'true'}>${aria ? svg`<title>${name}</title>` : nothing}${m.d.map(d => svg`<path d=${d}/>`)}</svg>`;
 }
 
 // ---------- the card back, the basic-energy face and blank stock, as SVG images (2D <img>, share.ts drawImage, table3d.js textures) ----------

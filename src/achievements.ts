@@ -38,9 +38,9 @@ const maxLevel = (G: Game) => Object.values(G.UPGRADES).reduce((a, u) => a + u.c
 // Game settings (rewards are invented, shown in the footer). Paced for a player's first 10 minutes, first hour and first 10 hours.
 export const ACH: Ach[] = [
   { id: 'open-1', group: 'open', seal: '开张', name: '开张第一包', desc: '店里拆开的第一包', cash: 5, prog: G => [Math.min(packs(G), 1), 1] },
-  { id: 'hit-1', group: 'open', seal: '初闪', name: '第一张闪卡', desc: '开出双稀有或更稀有的卡', cash: 5, prog: G => [Math.min(tally(G, S.HITS), 1), 1] },
+  { id: 'hit-1', group: 'open', seal: '初闪', name: '第一张闪卡', desc: '开出第一张闪卡（双稀有、ACE SPEC、精灵球闪或更稀有）', cash: 5, prog: G => [Math.min(tally(G, S.HITS), 1), 1] },
   { id: 'ten-1', group: 'open', seal: '十连', name: '第一次十连', desc: '一次开 10 包', cash: 10, prog: G => [Math.min(f(G, 'ten'), 1), 1] },
-  { id: 'double', group: 'open', seal: '双闪', name: '一包双闪', desc: '同一包里开出两张双稀有或更稀有的卡', cash: 30, prog: G => [Math.min(f(G, 'dbl'), 2), 2] },
+  { id: 'double', group: 'open', seal: '双闪', name: '一包双闪', desc: '同一包里开出两张闪卡（双稀有、ACE SPEC、精灵球闪或更稀有）', cash: 30, prog: G => [Math.min(f(G, 'dbl'), 2), 2] },
   { id: 'gold-1', group: 'open', seal: '金星', name: '第一张金星', desc: '开出插画稀有、特殊插画或金卡（卡面右下角是金星）', cash: 30, prog: G => [Math.min(tally(G, GOLD), 1), 1] },
   { id: 'sir-1', group: 'open', seal: '特殊插画', name: '特殊插画', desc: '开出第一张特殊插画', cash: 100, prog: G => [Math.min(tally(G, ['SIR']), 1), 1] },
   { id: 'hr-1', group: 'open', seal: '金卡', name: '第一张金卡', desc: '开出金卡或超级金卡', cash: 150, prog: G => [Math.min(tally(G, ['HR', 'MHR']), 1), 1] },
@@ -85,7 +85,7 @@ export const ACH: Ach[] = [
   { id: 'level-max', group: 'shop', seal: '满级', name: '满级卡店', desc: '店铺等级升满（只有标签，没有奖金）', cash: 0, prog: G => [level(G), maxLevel(G)] },
 
   { id: 'flipped', group: 'hidden', seal: '被扫货', name: '被倒爷扫了货', desc: '标价低到倒爷一口气扫走一个系列', hint: '有人专挑便宜货下手', cash: 20, prog: G => yes(Object.keys(G.state.flipT).length > 0) },
-  { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张双稀有以上都没有', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },
+  { id: 'ten-blank', group: 'hidden', seal: '十连空', name: '十连空军', desc: '一次十连一张闪卡都没有（双稀有、ACE SPEC、精灵球闪或更稀有）', hint: '十连也有空手的时候', cash: 100, prog: G => [Math.min(f(G, 'tenBlank'), 1), 1] },
   { id: 'pikachu', group: 'hidden', seal: '皮卡丘', name: '皮卡丘来了', desc: '开出任何一张皮卡丘', hint: '店里的招牌电气鼠', cash: 30, prog: G => yes(pulled(G, PIKACHU)) },
   { id: 'charizard', group: 'hidden', seal: '喷火龙', name: '喷火龙', desc: '开出任何一张喷火龙', hint: '每个世代都有人追它', cash: 50, prog: G => yes(pulled(G, CHARIZARD)) },
   { id: 'moon', group: 'hidden', seal: '月亮', name: '月亮伊布', desc: '在棱镜进化里开出月亮伊布 ex 的特殊插画', hint: '棱镜进化里最贵的那一张', cash: 200, prog: G => yes(pulled(G, MOON)) },

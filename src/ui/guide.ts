@@ -183,12 +183,15 @@ export function renderGuide() {
   // but only while it is on screen (it hangs at the top of the page and scrolls away: the bubble used to vanish with the box far above)
   memoSeen = memoOnScreen();
   const printing = document.getElementById('ach-pop')?.hidden === false || memoSeen;
-  if (!step || hold || storyOpen() || printing) { if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
+  // 账单's 8 s count only while its bubble is up: hidden behind the pack, an achievement label or the phone's box they ran out unseen and a
+  // fresh-save reviewer never read the bill step at all (it gave way to 补货 on the first empty shelf)
+  const unseen = () => { if (step?.h === '账单') billAt = 0; };
+  if (!step || hold || storyOpen() || printing) { unseen(); if (pop.matches(':popover-open')) pop.hidePopover(); return; } // leave `last` alone: the step that turns up during a pack still gets scrolled to on release
   // the step's own button wherever it is visible (at() only finds shown ones: 开一包's 「开 1 包」 right there on 货柜, the top bar's
   // bill chip on any page), else that page's tab (货柜's 货架 view tab when the player is on its 展示柜 view)
   const here = step.at() ?? step.alt?.() ?? null;
   anchor = here ?? pick(`.subnav a[href="#${step.page}"]`, `.nav a[href="#${step.page}"]`);
-  if (!anchor) { if (pop.matches(':popover-open')) pop.hidePopover(); return; }
+  if (!anchor) { unseen(); if (pop.matches(':popover-open')) pop.hidePopover(); return; }
   anchor.classList.add('coach-on');
   if (step.h === '账单' && !billAt) billAt = Date.now();
   const n = replay >= 0, end = i === STEPS.length - 1;
