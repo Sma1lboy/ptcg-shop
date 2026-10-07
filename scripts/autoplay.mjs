@@ -565,7 +565,7 @@ export function firstHour({ seed = 1, minutes = 60, react = 6, read = 3, reveal 
   const m2 = m2Of(m2ev.map(e => (e.kind === 'afford' ? stableAt[e.key] ?? e.t : e.t)));
   m2.first = m2Of(m2ev.map(e => e.t));
   return { seed, comm: cq, per5, byKind, drought, firsts, m2, events: counted.length, timeline: events, snaps: rows, end: snap(), opened: sum(st().opened), sold: st().cust.sold, revenue: Math.round(G.revenue()), billsPaid: st().billsPaid, loan: Math.round(st().loan), loans: st().loans.map(l => ({ week: l.week, amount: l.amount, forced: l.forced })),
-    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, series: series ? ser : undefined, save: dump ? JSON.stringify({ ...st(), feat: { ...st().feat, ...Object.fromEntries(Object.entries(seen).map(([k, v]) => [`story:${k}`, +v || 0])), 'story:return': 1 } }) : undefined }; // the scenes this player saw go with it (ui/story.ts keeps them in feat), so the reviewer's tab doesn't replay them // dump: the save at the end, to hand a reviewer the 30→60 min stretch
+    bills: [1, 2, 3].map(w => bills[w]), shelves: G.shelves().map(r => r.id), acts, spent: spent(), bare, boughtAt, stableAt, series: series ? ser : undefined, save: dump ? JSON.stringify({ ...st(), feat: { ...st().feat, ...Object.fromEntries(Object.entries(seen).map(([k, v]) => [`story:${k}`, +v || 0])), 'story:return': 1 } }) : undefined }; // the scenes this player saw go with it (ui/story.ts keeps them in feat), so the reviewer's tab doesn't replay them // dump: the save at the end, to hand a reviewer the 30→60 min stretch
 }
 
 // firsthour diagnosis (read-only on a run made with { series: true }): what the player's money did inside the longest event drought.

@@ -348,6 +348,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // reroll), unlike 离开, which is the shop trading without you. Set by pause(true) and read only by tick(); not saved.
   let pausedAt: number | null = null;
   let idle = false; // 挂机: the player has the 货柜 page open and in view (setIdle); not saved
+  let listedRun = 0, listedLogAt = 0; // 带徒弟's listings not yet in 店内动态, and when the last line went in; not saved
   const listeners: ((ev?: GameEvent) => void)[] = [];
   const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
@@ -976,7 +977,8 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     }
     if (acc.packs || acc.short) log(`店员进货 ${acc.packs} 包${acc.short ? `，钱不够，货架还差 $${Math.round(acc.short).toLocaleString('en-US')} 的货` : ''}`, acc.short ? 'loss' : '', acc.packs ? -acc.spent : undefined);
     if (acc.bulk) log(`店员把散卡 ${acc.bulk} 张卖给同行`, 'gain', acc.bulkV);
-    if (acc.listed) log(`店员把 ${acc.listed} 张闪卡挂进了展示柜`);
+    // 带徒弟's listings go in 店内动态 at most once a CLERK_ROUND, summed: one line a tick buried the clerk's rounds and the bill (a reviewer, minutes 57–60)
+    listedRun += acc.listed; if (listedRun && clock() - listedLogAt >= CLERK_ROUND * 1000) { log(`店员把 ${listedRun} 张闪卡挂进了展示柜`); listedRun = 0; listedLogAt = clock(); }
     if (a) {
       a.secs += dt; a.sales += sales; a.revenue += revenue; a.lost += state.lost - lost0;
       if (tickets) a.tickets = cents((a.tickets || 0) + tickets);
