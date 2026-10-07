@@ -883,16 +883,18 @@ console.log('ok luck percentile');
   console.log(`ok 街口: 老街 unchanged, streets tilt demand; branching at once clears ${shops.map(s => `${s.h.toFixed(1)} h (+${s.fame} 名气)`).join(' / ')}`);
 }
 
-// 店员留账款: the clerk's buying (a round or 现在补货) leaves the bill in the till in its last BILL_KEEP seconds; further out he spends the till.
+// 店员留账款: the clerk's rounds leave the bill in the till in its last BILL_KEEP seconds and spend the till further out; 现在补货, pressed
+// by the player, always leaves what 闲钱 sets aside (it emptied the till 8 minutes before a bill for a blind reviewer, loop 32).
 {
-  const mk = (due, round = false) => { const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(5), storage: null });
-    Z.state.up.depth = 1; Z.state.up.clerk = 1; Z.state.shelves = [{ id: 'sv08', qty: 0 }]; Z.state.auto = { sv08: true };
-    if (round) Z.state.clerkRound = { at: 0, need: 0, spent: 0 }; Z.state.shopT = Z.state.week * Z.WEEK - due; Z.state.cash = Z.nextBill().amount + 40; Z.clerkNow(); return Z; };
-  const late = mk(60 * 4), early = mk(60 * 6), last = mk(60 * 4, true);
-  assert.ok(late.state.cash >= late.nextBill().amount, `in the last minutes the clerk keeps the bill: cash ${late.state.cash} vs bill ${late.nextBill().amount}`);
-  assert.ok(early.state.cash < early.nextBill().amount, `six minutes out he spends past it: cash ${early.state.cash}`);
-  assert.ok(last.state.cash >= last.nextBill().amount, 'any round in the last 5 minutes keeps it');
-  console.log('ok 店员留账款: any round keeps the bill in its last 5 minutes and spends it before them');
+  const mk = (due, round = false) => { let T = 1_700_000_000_000; const Z = createGame({ now: () => T, random: () => 0.99, storage: null }); // 0.99: nobody walks in
+    Z.state.up.depth = 1; Z.state.up.clerk = 2; Z.state.shelves = [{ id: 'sv08', qty: 0 }]; Z.state.auto = { sv08: true };
+    Z.state.clerkRound = { at: T, need: 0, spent: 0 }; Z.state.shopT = Z.state.week * Z.WEEK - due; Z.state.cash = Z.nextBill().amount + 40;
+    if (round) { Z.state.clerkT = T + 1000; T += 1000; Z.tick(); } else Z.clerkNow(); return Z; };
+  const roundLate = mk(60 * 4, true), roundEarly = mk(60 * 6, true), nowLate = mk(60 * 4), nowEarly = mk(60 * 6);
+  assert.ok(roundLate.state.cash >= roundLate.nextBill().amount, `in the last minutes a round keeps the bill: cash ${roundLate.state.cash} vs bill ${roundLate.nextBill().amount}`);
+  assert.ok(roundEarly.state.cash < roundEarly.nextBill().amount, `six minutes out a round spends past it: cash ${roundEarly.state.cash}`);
+  assert.ok(nowLate.state.cash >= nowLate.nextBill().amount && nowEarly.state.cash >= nowEarly.nextBill().amount && nowEarly.state.cash < nowEarly.nextBill().amount + 40, `现在补货 keeps the bill however far it is, and spends the rest: ${nowLate.state.cash} / ${nowEarly.state.cash}`);
+  console.log('ok 店员留账款: rounds keep the bill in its last 5 minutes and spend it before them; 现在补货 always keeps it');
 }
 
 // 店员分货: a round short of cash gives every shelf the same share of what it lacks before any shelf is topped up, so no set is
@@ -901,7 +903,7 @@ console.log('ok luck percentile');
   const Z = createGame({ now: () => 1_700_000_000_000, random: S.rng(9), storage: null });
   Z.state.up.clerk = 1; Z.state.up.racks = 1; for (const [i, id] of ['sv08', 'sv10', 'sv08.5'].entries()) { Z.place(i, id); Z.state.auto[id] = true; }
   for (const sh of Z.shelves()) sh.qty = 0;
-  Z.state.cash = Z.clerkNeed() / 2; Z.clerkNow();
+  Z.state.cash = 1e9; const keep = Z.state.cash - Z.spare(); Z.state.cash = Z.clerkNeed() / 2 + keep; Z.clerkNow(); // half of what the round needs, on top of what 现在补货 leaves for the bill
   const qs = Z.shelves().filter(sh => sh.id).map(sh => sh.qty);
   assert.ok(qs.every(q => q > 0), `half the money: every shelf gets some (${qs.join('/')})`);
   assert.ok(Math.max(...qs) - Math.min(...qs) <= 2, `and about the same (${qs.join('/')})`);
@@ -922,7 +924,7 @@ console.log('ok luck percentile');
   assert.ok(short > 0 && Math.abs(short - need) < 0.01 && Z.state.clerkRound.spent > 0 && Z.state.clerkRound.spent <= 50, `a round with $50 is short: ${short}`);
   assert.match(Z.state.log.find(l => l.text.startsWith('店员进货')).text, /钱不够/);
   assert.ok(Z.clerkBudget() >= need, 'the 成长 page warns against what a round takes');
-  const next = Z.state.clerkT; Z.state.cash = need + 1; assert.ok(Z.clerkNow() > 0);
+  const next = Z.state.clerkT; Z.state.cash = 1e9; const keep2 = Z.state.cash - Z.spare(); Z.state.cash = need + keep2 + 1; assert.ok(Z.clerkNow() > 0); // + what 现在补货 leaves for the bill
   assert.equal(Z.clerkShort(), 0, '现在补货 with enough cash fills the shelves'); assert.equal(Z.state.clerkT, next, 'and leaves his round where it was');
   const { play } = await import('../scripts/autoplay.mjs'), run = (heed, seed) => play({ hours: 30, seed, step: 90, openShare: 0.02, pct: 1, reserve: 1, repay: true, branch: 'paid', heed, log: 3600 });
   // was seed 1 alone and `< blind / 2`, then seeds 1–3: with 收卡 (GAMEPLAY §14), the 2-minute clerk and the 帮工 the blind player borrows only

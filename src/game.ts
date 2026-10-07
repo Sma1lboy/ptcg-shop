@@ -917,9 +917,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   const clerkKeep = () => (dueIn() < BILL_KEEP ? nextBill()?.amount || 0 : 0);
   // When the till can't cover every shelf, each gets the same share of what it lacks first, then what is left goes emptiest first:
   // in shelf order the first sets were filled and the last stayed at 0 round after round (a reviewer's 151 shelf, twice).
-  function clerkBuy() {
+  function clerkBuy(keep = clerkKeep()) {
     let packs = 0, spent = 0;
-    const keep = clerkKeep(), want = shelves().filter(sh => sh.id && state.auto[sh.id] && unlocked(sh.id) && sh.qty < clerkGoal(sh.id));
+    const want = shelves().filter(sh => sh.id && state.auto[sh.id] && unlocked(sh.id) && sh.qty < clerkGoal(sh.id));
     const need = want.reduce((a, sh) => a + (clerkGoal(sh.id) - sh.qty) * wholesale(sh.id!), 0), f = need > 0 ? Math.min(1, Math.max(0, state.cash - keep) / need) : 1;
     const buy = (sh: Shelf, n: number) => { const cost = n > 0 ? stockUp(sh.id!, n, sh) : 0; if (cost) { packs += n; spent += cost; } };
     if (f < 1) for (const sh of want) buy(sh, Math.floor((clerkGoal(sh.id) - sh.qty) * f));
@@ -931,10 +931,11 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   // What a round takes to fill the shelves: now, or what the last round needed if more (right after a round the shelves are full,
   // but they sell down again by the next one). The 成长 page's buy buttons warn when a buy leaves less than this.
   const clerkBudget = () => lvl('clerk') ? Math.max(clerkNeed(), state.clerkRound?.need || 0) : 0;
-  // 现在补货: the clerk's buying now, with the cash in the till, without waiting for (or moving) his next round.
+  // 现在补货: the clerk's buying now, with the cash in the till, without waiting for (or moving) his next round. It leaves what 闲钱 sets aside
+  // (the next bill, 顺手还) in the till: pressed right after an upgrade it used to empty the till 8 minutes before a bill (a blind reviewer, loop 32).
   function clerkNow() {
     if (!lvl('clerk')) return 0;
-    const b = clerkBuy(); if (!b.packs) return 0;
+    const b = clerkBuy(Math.max(clerkKeep(), state.cash - spare())); if (!b.packs) return 0;
     if (state.clerkRound) state.clerkRound.spent = cents(state.clerkRound.spent + b.spent);
     log(`店员提前补货 ${b.packs} 包`, '', -b.spent);
     emit(); return b.packs;
