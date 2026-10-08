@@ -1406,9 +1406,23 @@ function tap(e) {
 // ---------- frame ----------
 // raf is -1 while a frame runs, so a wake() from inside it (particles spawned by a show) doesn't queue a second one; a frame
 // that throws still hands the loop back (the error surfaces in the console, the next wake() starts it again).
+// 太卡就换 2D (M3): the gaps between frames of a running loop (not the first SLOW_SKIP after it starts, which compile shaders and
+// upload textures; not while the page is hidden or the table scrolled away; not a gap over 250 ms, which is the browser pausing
+// us) are kept for the last SLOW_N frames. If their median is under SLOW_FPS the table gives up the way a lost context does:
+// the 2D mat takes the pack where it is and keeps the table for the rest of the session.
+const SLOW_N = 90, SLOW_SKIP = 20, SLOW_FPS = 30;
+let prevT = 0, warmN = 0, gaps = [];
+function slow(t) {
+  if (!prevT || document.hidden || !seen || ++warmN <= SLOW_SKIP) return false;
+  const g = t - prevT; if (g > 250) return false;
+  gaps.push(g); if (gaps.length > SLOW_N) gaps.shift();
+  return gaps.length === SLOW_N && [...gaps].sort((a, b) => a - b)[SLOW_N >> 1] > 1000 / SLOW_FPS + 1; // +1: a 30 Hz screen's 33.3 ms passes
+}
 function frame(t) {
   raf = -1; let again = false;
-  try { again = tick(t); } finally { raf = again ? requestAnimationFrame(frame) : 0; }
+  if (slow(t)) { raf = 0; prevT = 0; dead = true; console.info('[table3d] under 30 fps; the 2D mat takes over'); const o = opts; close?.(); o?.onLost?.(); return; }
+  prevT = t;
+  try { again = tick(t); } finally { raf = again ? requestAnimationFrame(frame) : 0; if (!again) { prevT = 0; warmN = 0; } }
 }
 function tick(t) {
   renderer.info.reset();
