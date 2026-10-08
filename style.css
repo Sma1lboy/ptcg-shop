@@ -1639,6 +1639,9 @@ button:disabled { cursor: not-allowed; }
   /* Receipts and non-opening memos hang over reserved document space, not over the viewport's scrolled controls. */
   .pops:has(> #notice:not([hidden])),
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])) { position: absolute; }
+  /* the box alone scrolls under the sticky top bar, as on 开包 (z 9 < the bar's 10): scrolled past it, it lay over the bill and the cash (M3 review 5) */
+  :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])):not(:has(> #notice:not([hidden]))) { z-index: auto; }
+  :root:not([data-page="open"]) .pops:not(:has(> #notice:not([hidden]))) > #memo:not([hidden]) { position: relative; z-index: 9; }
   :root:not([data-page="open"]):has(#notice:not([hidden])) main { padding-top: calc(12px + 22px + var(--notice-h, 44px)); }
   /* 店里的话 (no receipt up): the page starts under the box, so the 货架 / 展示柜 view tabs aren't covered at the top of the page */
   :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
@@ -1710,24 +1713,31 @@ button:disabled { cursor: not-allowed; }
   .page-open::before { content: ""; order: 1; display: none; }
   .page-open > .rail { order: 2; }
   :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { display: block; height: var(--memo-h, 160px); }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])) { position: absolute; z-index: 9; top: var(--lane-top); left: var(--gap); right: var(--gap); width: auto; max-width: 400px; margin-inline: auto; }
+  /* no stacking context of its own (z auto), only the box under the top bar (z 9): a label in it has to rise over the tabs (z 20) */
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) { position: absolute; z-index: auto; top: var(--lane-top); left: var(--gap); right: var(--gap); width: auto; max-width: 400px; margin-inline: auto; }
+  :root[data-page="open"] .pops > #memo:not([hidden]) { position: relative; z-index: 9; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 132px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
-  /* the label: the bottom toast below, box or no box (the first pack always has 第一笔生意 up: under the bar it still lay over the 2D stage card, M3 review 4) */
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: auto; bottom: env(safe-area-inset-bottom); left: 16px; right: 16px; zoom: .6; }
+  /* the label: the bottom toast over the tabs, box or no box (the first pack always has 第一笔生意 up: under the bar it still lay over the
+     2D stage card, M3 review 4). z 21: at 16 it sat under the tabs (20) and was never seen */
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: auto; bottom: env(safe-area-inset-bottom); left: 16px; right: 16px; zoom: .6; z-index: 21; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden]))::before { display: none; } /* everything that prints went fixed: the slot would hang over the box alone */
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])):not(:has(> :is(#notice, #slip):not([hidden])))::before { display: none; } /* the label went fixed under the bar: the box alone has no slot */
   /* a label on the 开包 page (no box): a small toast over the bottom tabs for its 4.8 s. Under the top bar it lay over the first row of
      cards just turned (M3 review), and on the 2D mat over the stage card the page had scrolled up to (M3 review 3); the tabs are not
      what anyone presses while a pack's result is being read */
-  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: auto; bottom: env(safe-area-inset-bottom); padding-top: 0; }
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: auto; bottom: env(safe-area-inset-bottom); padding-top: 0; z-index: 21; }
   :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden])))::before { display: none; }
   :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) > #ach-pop { zoom: .6; } /* no taller than the tabs (56px): the rail's 开 1 包 sits right above them */
 }
 @media (orientation: landscape) and (max-height: 520px) {
   /* the row gap is 12 here and the slot's own padding 8 */
   :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { height: calc(var(--memo-h, 160px) + 8px); }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { top: calc(var(--top-h) + 8px); bottom: auto; right: calc(clamp(200px, 30vw, 280px) + 14px); left: auto; width: min(300px, 42vw); max-width: none; margin: 0; zoom: 1; }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])):has(> #ach-pop:not([hidden])) > :is(#notice, #slip):not([hidden]) { top: calc(var(--top-h) + 108px); }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip):not([hidden]) { top: calc(var(--top-h) + 8px); right: calc(clamp(200px, 30vw, 280px) + 14px); left: auto; width: min(300px, 42vw); max-width: none; margin: 0; }
+  /* the label: a small toast over the page tabs, which are in the top bar here (at the bottom it lay over the dealt cards; beside the
+     box, at full size, over the 2D mat's stage card, M3 review 5) */
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: 2px; bottom: auto; left: 8px; right: auto; width: 300px; margin: 0; }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: 2px; bottom: auto; left: 8px; right: auto; width: 300px; max-width: none; margin: 0; }
+  :root:has(#coach:popover-open) body { padding-bottom: calc(var(--coach-h, 0px) + 16px); } /* a folded strip at the bottom (guide.ts place, short screens): the page's end scrolls clear of it */
 }
 
 /* 奖章 (ui/ach.ts, DESIGN.md「奖章」): BW2's medal box. Earned: a round medal struck in its tier with the achievement's word on it,

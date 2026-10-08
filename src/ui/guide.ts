@@ -120,6 +120,9 @@ function place() {
   const pop = $('coach');
   if (!pop.matches(':popover-open') || !anchor) return;
   const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav, .subnav'); // 货柜's 货架/展示柜 sub-tabs too: a 300×310 box from 定价 lay over 展示柜's keys (M3 review 2)
+  // a short landscape phone (844×390) is laid out as a desktop, and a 300×266 box from 账单 or 测欧气 covered most of it, footer and tabs
+  // included (M3 review 5): no box beside the mat there, and any box that lies over a key folds (below)
+  const short = !phone() && innerHeight <= 520;
   // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
   // 「测欧气：到「欧气」页」, on every screen: the full text under a tab covered what the player was reading on this page (成长's
   // 账本, 成就's totals, the 开包 title) and had nothing to do with it.
@@ -147,7 +150,7 @@ function place() {
     else if ((free ? t.top : a.top) < 70 || a.bottom > room) { seek = 0; scrollBy({ top: free ? Math.max(t.top - 90, a.bottom - room) : a.top - Math.max(90, (70 + room - a.height) / 2), behavior: 'smooth' }); }
   }
   if (dock) { pop.style.left = ''; pop.style.top = ''; return; } // style.css places it
-  if (onMat && !phone()) {
+  if (onMat && !phone() && !short) {
     let right = a.right; const sum = anchor.closest('.summary');
     if (sum) for (const el of sum.querySelectorAll('p, button')) {
       const r = document.createRange(); r.selectNodeContents(el); // a <p> is full width; its line boxes are where the text ends
@@ -177,7 +180,7 @@ function place() {
   // A strip under a summary's button folds too (测欧气 on 分享这次开包 lay over 进 1 包马上开, M3 review 2). So does any box whose button
   // the player has scrolled away from (a 300×266 box from 测欧气 lay over the footer's 存档 at the page's end, M3 review 3): it points at nothing.
   const away = a.bottom < 0 || a.top > vh;
-  if (phone() && (pop.dataset.strip !== 'tab' || (away && anchor.closest('.subnav'))) && (away || ((tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && covers(y, h)))) { // 货柜's sub-tab scrolls with the page, its strip went with it (M3 review 4)
+  if ((phone() || short) && (pop.dataset.strip !== 'tab' || (away && anchor.closest('.subnav'))) && (away || ((short || tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && covers(pop.getBoundingClientRect().top, h)))) { // 货柜's sub-tab scrolls with the page, its strip went with it (M3 review 4)
     pop.dataset.strip = 'tab'; w = pop.offsetWidth; h = pop.offsetHeight;
     pop.style.left = `${(vw - w) / 2}px`; pop.style.top = `${vh - h - 8}px`; pop.dataset.side = 'free';
   }
