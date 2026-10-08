@@ -1915,3 +1915,22 @@ console.log('ok luck percentile');
   }
   console.log('ok 存档: export → import round-trips, non-saves refused without side effects, no away pay for the gap, unreadable saves kept aside');
 }
+
+// One listener that throws (a panel, achievements, sound) doesn't stop the ones after it; its error is thrown on outside the game,
+// where the page's error bar sees it (M3 出错能恢复).
+{
+  const G = createGame({ now: () => 1_700_000_000_000, random: S.rng(1), storage: null }), boom = new Error('panel');
+  let after = 0; G.on(() => { throw boom; }); G.on(() => after++);
+  const thrown = new Promise(res => process.once('uncaughtException', res));
+  G.setPrice('sv08', 1);
+  assert.equal(after, 1, 'the next listener still hears the change');
+  assert.equal(await thrown, boom, 'and the error still surfaces');
+  console.log('ok 出错隔离: a throwing listener does not silence the others; its error surfaces outside the game');
+}
+{ // a damaged 店内动态 in a save is dropped, the rest of the shop loads (a log that is no list broke its panel on every visit)
+  for (const [log, want] of [[5, 0], ['x', 0], [[{ t: 1, text: 'ok' }, 7, null, { t: 2 }], 1]]) {
+    const store = { 'ptcg-shop-v1': JSON.stringify({ cash: 42, log }) }, G = createGame({ now: () => 1_700_000_000_000, random: S.rng(1), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } });
+    assert.deepEqual([G.loadFailed(), G.state.cash, G.state.log.length], [false, 42, want], `log ${JSON.stringify(log)}`);
+  }
+  console.log('ok 店内动态: a damaged log loads as what is left of it');
+}

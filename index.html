@@ -88,6 +88,8 @@
 <div class="sound backup" id="backup" popover aria-label="存档"></div>
 <div class="coach" id="coach" popover="manual" role="dialog" aria-label="新手引导"></div>
 <div class="raise" id="raise" popover="manual" role="dialog" aria-label="凑钱"></div>
+<div class="oops" id="oops" popover="manual" role="alert"><p class="oops-what"></p>
+  <p class="oops-btns"><button class="primary" type="button" data-reload>重新载入</button><button type="button" data-save>导出存档</button><button type="button" data-close>先不管</button></p></div>
 <footer class="foot">
   <details><summary>数据来源与游戏设定</summary><div id="sources"></div></details>
   <details class="basis" id="basis"></details>
@@ -99,5 +101,19 @@
   <p class="disclaimer">这是玩家自制的模拟器，不是宝可梦出品，和 Nintendo、The Pokémon Company、Game Freak 没有关系。</p>
 </footer>
 <script type="module" src="/src/main.ts"></script>
+<script>
+  // The game didn't start (a script failed to load or threw before main.ts finished): say so with the same bar, and let the last
+  // save be taken away as stored. main.ts sets ptcgUp once it is running; from then on src/ui/oops.ts owns the bar.
+  addEventListener('load', function () {
+    if (window.ptcgUp) return;
+    var b = document.getElementById('oops'), save = localStorage.getItem('ptcg-shop-v1');
+    b.querySelector('.oops-what').textContent = '游戏没能启动。重新载入试试；进度存在这台设备的浏览器里，没有丢，可以先导出一份。';
+    b.querySelector('[data-reload]').onclick = function () { location.reload(); };
+    b.querySelector('[data-close]').onclick = function () { b.hidePopover(); };
+    var s = b.querySelector('[data-save]'); s.hidden = !save;
+    s.onclick = function () { var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([save], { type: 'application/json' })); a.download = 'PTCG卡店存档.json'; a.click(); };
+    b.showPopover();
+  });
+</script>
 </body>
 </html>

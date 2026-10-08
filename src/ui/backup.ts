@@ -14,6 +14,11 @@ function download(text: string, name: string) {
   document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 const fileName = () => `PTCG卡店存档-${stamp(G.now()).replace(/[ :]/g, '-')}.json`;
+// Also the error bar's 导出存档: if the shop itself is what broke, the last save as stored is the copy to keep.
+export function downloadSave() {
+  let text: string | null; try { text = G.exportSave(); } catch { text = localStorage.getItem('ptcg-shop-v1'); }
+  if (text) download(text, fileName());
+}
 const say = (ok: boolean, text: string) => { msg = { ok, text }; draw(); };
 
 async function copy() {
@@ -43,7 +48,7 @@ function draw() {
   render(html`<h3>存档</h3>
     ${G.loadFailed() ? html`<p class="bk-warn">上次的存档读不出来，所以这是新开的一局。原来那份没有删，原样另存着，可以下载下来。</p>` : nothing}
     <p class="sd-note">存档只在这台设备的浏览器里。换设备、清浏览器数据之前，先导出一份。</p>
-    <p class="bk-btns"><button type="button" class="primary" @click=${() => { download(G.exportSave(), fileName()); say(true, '已下载存档文件。'); }}>下载存档</button>
+    <p class="bk-btns"><button type="button" class="primary" @click=${() => { downloadSave(); say(true, '已下载存档文件。'); }}>下载存档</button>
       <button type="button" @click=${copy}>复制文本</button></p>
     ${copied ? html`<textarea class="bk-text" readonly rows="3" aria-label="存档文本" .value=${copied} @focus=${(e: Event) => (e.target as HTMLTextAreaElement).select()}></textarea>` : nothing}
     <h4>读入存档</h4>

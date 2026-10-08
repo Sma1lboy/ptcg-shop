@@ -350,7 +350,9 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   let idle = false; // 挂机: the player has the 货柜 page open and in view (setIdle); not saved
   let listedRun = 0, listedLogAt = 0; // 带徒弟's listings not yet in 店内动态, and when the last line went in; not saved
   const listeners: ((ev?: GameEvent) => void)[] = [];
-  const emit = (ev?: GameEvent) => { save(); listeners.forEach(f => f(ev)); };
+  // One listener that throws doesn't stop the others (the page's other panels, achievements, sound); the error is thrown on again
+  // outside the game, where the page's error bar (ui/oops.ts) and node's test run see it.
+  const emit = (ev?: GameEvent) => { save(); for (const f of listeners) try { f(ev); } catch (e) { queueMicrotask(() => { throw e; }); } };
   // Debt events raised inside tick() wait here and go out one emit each once the tick is done.
   let pending: GameEvent[] = [];
   let reveal = false; // tick(busy): packs are being revealed, so their cards (already in singles) are not in the binder yet
@@ -396,6 +398,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         if (s.week == null) { migrated = true; st.owe = st.debt = Math.round(DEBT0 * (1 + DEBT_STEP * st.branch.n)); } // pre-债务 saves: 九姐 turns up now
         if (!s.packsBy) st.packsBy = { ...st.opened }; // pre-手气 saves: every pack was opened at the measured odds
         st.recent = st.recent.filter((v: Visit) => v.at); // pre-顾客流水 saves kept each walk-in as a line of text only
+        st.log = Array.isArray(s.log) ? s.log.filter((l: unknown) => l && typeof (l as { text?: unknown }).text === 'string') : []; // 店内动态 is only a record: a damaged one is dropped, not a shop that can't draw it
         for (const r of [st.offline, st.away]) if (r) {
           if (!validDetail(r.detail)) delete r.detail; // a receipt from before the breakdown has none, and a damaged one is no better: neither is ever half-filled
           for (const f of ['tickets', 'bonus'] as const) if (f in r) { const v = fin(r[f]); if (v) r[f] = v; else delete r[f]; } // a damaged amount would break the sums and the 离开 line: it counts as none
