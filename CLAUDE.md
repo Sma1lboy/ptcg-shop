@@ -62,6 +62,7 @@
 | `src/ui/share.ts` | 分享图（canvas 绘制）和分享弹窗 |
 | `src/board.ts` / `src/ui/board.ts` | 排行：`board.ts` 纯函数（node 能测）——从 `G` 只读取快照（累计营业额 = `branch.life` + 本店、名气 = `branch.got`、分店、开包、欧气千分位（开满 30 包才计）、成就、图鉴、藏品总值）、分享码 `P1.<base64url(JSON 数组)>.<CRC-32>`（校验盖的是编码后的文本；解码拒绝畸形和超长输入、从不抛错）、`upsert`（同设备 id + 昵称再导入就替换，上限 50 位）、`rank`、`parseStore`（localStorage 读回来的东西和贴进来的码走同一个 `check`）。`ui/board.ts` 渲染 `#board`（我的卡 + 复制码／链接／系统分享、导入框、按指标排的表），读写 localStorage `ptcg.board`（设备 id、昵称、好友、指标），`?board=` 链接启动时导入并用 `history.replaceState` 去掉查询。码是玩家自报、可改的，页面明写这是朋友榜、不防作弊；游戏不联网。翻牌未完时 `#board` 和欧气页一样 `inert` |
 | `src/ui/events.ts` | 按钮的 `data-act` 点击分发 |
+| `src/ui/backup.ts` | 页脚「存档」弹层：下载／复制导出，选文件／粘贴导入（先给摘要再「换成这份」，翻牌未完时禁用，换档时 `stats.ts` 的 `forgetTill()` 让顶栏重新起算）；读不出的存档由 `game.ts` 的 `load()` 原文另存到 `ptcg-shop-v1.bad`，这次载入自动弹出、页脚键写「存档 读不出」，之后一直可「下载原文」。存档逻辑在 `game.ts`：`exportSave / readSave / useSave / badCopy / loadFailed`，导入按现在的时间算，不发离店钱 |
 | `src/fx.ts` | 全部声音的合成（WebAudio，不用音频文件）：开包、店里（风铃/收银/倒爷/催账/锤子/卷帘门…）、界面按键、循环的环境声；总线、音量、静音、环境声开关（localStorage `ptcg.mute` `ptcg.vol` `ptcg.amb`）。还有稀有卡爆闪、卡面倾斜。纯演出，不读游戏状态 |
 | `src/ui/sound.ts` | 什么时候出声：订阅 `G.on`（顾客走 `state.recent`，债务走 `debt.ts`）、翻页、按键、剧情的 `ptcg:line`；同类声音限频，开包演出和剧情时店里不出声；页脚「声音」弹层。规矩见 DESIGN.md「声音」 |
 | `src/ui/menu.ts` | 键盘菜单：方向键在最上面那一层里移 ▶ 光标到最近的控件，Enter/空格/Z 确认，Esc/X 退出；声音走 `ptcg:ui`。规矩见 DESIGN.md「菜单与光标」 |

@@ -1884,3 +1884,34 @@ console.log('ok luck percentile');
   }
   console.log('ok 找卡委托: asked after COMM_GAP once there is a clerk or COMM_OPEN of shop time, only for a shelved set inside the price band; serving it moves one copy and pays the reward; lapse and 不接 are free; old and damaged saves load; new shops clean; the walk-in stream untouched');
 }
+
+// 存档 export/import and the save that can't be read (M3): a save goes out and comes back unchanged, a text that is not a save is
+// refused without touching the shop, the time between export and import is not paid as time away, and an unreadable save is copied
+// aside before the fresh shop's first save writes over it.
+{
+  const KEY = 'ptcg-shop-v1', mk = (store, T) => ({ now: () => T.t, random: S.rng(31), storage: { getItem: k => store[k] ?? null, setItem: (k, v) => { store[k] = v; } } });
+  const T = { t: 1_700_000_000_000 }, a = {}, A1 = createGame(mk(a, T));
+  A1.buy('sv08', 20); A1.shelve('sv08', 10); for (let i = 0; i < 600; i++) { T.t += 1000; A1.tick(); }
+  A1.open('sv08', 1);
+  const text = A1.exportSave();
+  assert.ok(A1.state.earned.sealed > 0 && A1.state.opened.sv08 >= 1, 'the exported shop has traded and opened a pack');
+  const b = {}, B1 = createGame(mk(b, T)), before = JSON.stringify(B1.state);
+  for (const junk of ['', 'x', 'null', '[]', '5', '{"cash":5}', '{"cash":"5","savedAt":1}', '{"cash":5,"savedAt":1,"recent":5}', text.slice(0, -20)])
+    assert.equal(B1.readSave(junk), null, `not a save: ${junk.slice(0, 30)}`);
+  const st = B1.readSave(text);
+  assert.ok(st, 'a real export reads'); assert.equal(JSON.stringify(B1.state), before, 'reading a file leaves the shop alone');
+  T.t += 5 * 3600e3; B1.useSave(st); B1.tick();
+  const back = JSON.parse(B1.exportSave()), was = JSON.parse(text);
+  assert.deepEqual({ ...back, savedAt: 0 }, { ...was, savedAt: 0 }, 'export → import → export: the same save, five hours later not paid as time away');
+  assert.equal(b[KEY], JSON.stringify(B1.state), 'the imported shop is saved at once');
+  assert.equal(B1.loadFailed(), false); assert.equal(B1.badCopy(), null);
+
+  for (const broken of ['{"cash":10,', '{"cash":10,"savedAt":1,"recent":5}']) { // bad JSON; JSON whose migration throws
+    const c = { [KEY]: broken }, C1 = createGame(mk(c, T));
+    assert.deepEqual([C1.loadFailed(), C1.badCopy(), C1.state.cash], [true, broken, C1.START_CASH], `unreadable save: a fresh shop, the text kept (${broken})`);
+    T.t += 1000; C1.tick(); C1.buy('sv08', 1);
+    assert.notEqual(c[KEY], broken, 'the fresh shop saves'); assert.equal(c[`${KEY}.bad`], broken, 'and the copy is not touched');
+    const C2 = createGame(mk(c, T)); assert.deepEqual([C2.loadFailed(), C2.badCopy()], [false, broken], 'the next visit reads the new shop and still offers the copy');
+  }
+  console.log('ok 存档: export → import round-trips, non-saves refused without side effects, no away pay for the gap, unreadable saves kept aside');
+}

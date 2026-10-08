@@ -27,6 +27,7 @@ import { initSound } from './ui/sound.ts';
 import { initMenu } from './ui/menu.ts';
 import { initWalk } from './ui/walk.ts';
 import { renderBoard, initBoard } from './ui/board.ts';
+import { initBackup } from './ui/backup.ts';
 
 const sourceDetails = document.getElementById('sources')!.parentElement as HTMLDetailsElement;
 sourceDetails.addEventListener('toggle', () => { if (sourceDetails.open) renderSources(); });
@@ -62,4 +63,5 @@ bindGuide();
 
 initGoals(); initBinder(); initCollection(); initMenu(); initWalk();
 initBoard(); // after bindLayout: a ?board= link imports its entry and opens the page
+initBackup(); // opens itself when the save could not be read
 initAch(); // last: its first check may pay out an old save's stamps, which re-renders everything above

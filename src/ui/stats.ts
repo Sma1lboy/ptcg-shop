@@ -6,6 +6,8 @@ import { nextStep } from './upgrades.ts';
 
 let lastCash: number | null = null, delta = 0, stamp = 0, lastHeld = 0, seenAt = G.now(), why = '', lastAt = 0;
 let lastExtra: { tickets: number; idle: number; offline: number } | null = null, lastCommPaid: number | null = null;
+// A save read in (存档 panel) is another shop, not money in or out: start the till's tag over, and its walk-ins aren't news.
+export function forgetTill() { lastCash = lastExtra = lastCommPaid = null; stamp = 0; }
 
 // What the till's change was made of, when it all came from the counter: packs sold stay a bare 「+$」 (the 第一笔生意 note says what
 // it is), a case card sold reads 「卖卡 +$」, hits bought off a customer 「收卡 −$」 — a net −$136 with packs sold and cards bought in the

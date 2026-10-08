@@ -283,25 +283,25 @@ main { max-width: 1680px; margin: 0 auto; padding: 20px var(--gap) 32px; }
 /* game buttons (DESIGN.md「按钮」): BW command buttons — a rounded face with a darker lip underneath, a dark rim, pixel print.
    Secondary is the pale command, primary the card-border yellow (one per group), danger deep red (清空存档 only). Hover lifts
    the face under the blue cursor ring, pressed drops onto the lip, disabled is a flat grey face. All CSS: no images to miss */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :is(button, .dl) {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head) :is(button, .dl) {
   --lip: color-mix(in oklab, var(--btn-face) 72%, var(--frame));
   min-height: 34px; padding: 6px 16px 8px; border: 2px solid var(--frame); border-radius: 8px;
   background: var(--btn-face); color: var(--btn-ink); box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5);
   font: 400 var(--fs-cap)/1.5 var(--font-pixel); text-decoration: none; text-shadow: 1px 1px 0 color-mix(in oklab, var(--btn-ink) 16%, var(--btn-face));
   transition: box-shadow .12s, transform .08s, background-color .12s;
 }
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head, .mat-pack) :where(button, .dl):not(.pack, :disabled):hover {
   box-shadow: inset 0 -4px 0 var(--lip), inset 0 1px 0 rgba(255, 255, 255, .5), 0 0 0 2px var(--sel); }
 /* pressed: the face drops onto its lip */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head, .mat-pack) :is(button, .dl):not(.pack, :disabled):active {
   box-shadow: inset 0 -1px 0 var(--lip), inset 0 2px 0 rgba(0, 0, 0, .12); transform: translateY(2px); padding-bottom: 6px; }
 /* primary = the card-border yellow command: dark print, dark rim */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) .primary {
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head) .primary {
   --lip: #C9A018; background-color: var(--sticker); color: var(--sticker-ink); border-color: var(--sticker-ink); text-shadow: 1px 1px 0 #FCE68A; }
 /* danger: the one irreversible button, a deep red command so it can't pass for a normal one */
 #reset { --lip: #6A1A13; background-color: var(--danger-face); color: var(--danger-ink); text-shadow: 1px 1px 0 #6A1A13; }
 /* disabled: a flat grey face, no lip. Never louder than a live secondary */
-:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) button:disabled,
+:where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .inspect, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head) button:disabled,
 :where(#luck, #dex, #singles, #comm, #casepanel, #case-cust, #board)[inert] :is(button:not(.inspect-trigger):not(.pk-card), .dl) {
   background: color-mix(in oklab, var(--btn-face) 70%, var(--muted) 30%); border-color: color-mix(in oklab, var(--frame) 50%, transparent);
   box-shadow: none; opacity: .7; color: var(--btn-ink); text-shadow: none; cursor: not-allowed; }
@@ -948,6 +948,21 @@ button:disabled { cursor: not-allowed; }
 .sd-row input[type="range"]::-webkit-slider-thumb { appearance: none; width: 12px; height: 18px; border: 2px solid #101318; border-radius: 3px; background: var(--sel); }
 .sd-row input[type="range"]::-moz-range-thumb { width: 8px; height: 14px; border: 2px solid #101318; border-radius: 3px; background: var(--sel); }
 .sd-note { margin: 6px 0 0; font-size: var(--fs-cap); color: var(--muted); text-wrap: pretty; }
+/* 存档 (src/ui/backup.ts): the same footer window as 声音 (it carries .sound too), wider for the summary of a save. Warnings are
+   bold ink (a sentence, not money: no gain/loss colour); the file picker is a button face over the real, transparent input */
+.backup { width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; }
+.backup h4 { margin: 12px 0 4px; padding-top: 10px; border-top: 1px solid var(--line); font: 400 var(--fs-cap)/1.5 var(--font-pixel); }
+.bk-btns { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 0; }
+.bk-warn { margin: 0 0 6px; font-size: var(--fs-cap); font-weight: 700; text-wrap: pretty; }
+.bk-pick p { margin: 0 0 6px; font-size: var(--fs-cap); } .bk-pick b { display: block; }
+.bk-file { position: relative; display: inline-grid; place-items: center; cursor: pointer; } /* .dl gives it the button face */
+.bk-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.bk-file:has(input:focus-visible) { outline: 3px solid var(--sel); outline-offset: 1px; }
+.bk-form { display: flex; gap: 8px; align-items: stretch; margin: 8px 0 0; }
+.backup textarea { flex: 1; width: 100%; min-width: 0; padding: 4px 8px; border: 2px solid var(--frame); border-radius: 8px; background: var(--panel); color: var(--ink);
+  font: var(--fs-cap)/1.4 ui-monospace, monospace; resize: vertical; box-shadow: inset 0 2px 0 rgba(0, 0, 0, .08); }
+.bk-msg { min-height: 1.55em; margin: 8px 0 0; font-size: var(--fs-cap); }
+.backup .bk-link { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--ink); font: inherit; text-decoration: underline; cursor: pointer; }
 :is(.nav, .subnav) a.coach-on { outline-offset: -6px; }
 
 /* share card (extras.js) */
@@ -1619,7 +1634,7 @@ button:disabled { cursor: not-allowed; }
   :root:not([data-page="open"]):has(#memo:not([hidden])):not(:has(#notice:not([hidden]))) main { padding-top: calc(28px + 8px + var(--memo-h, 120px)); }
   /* Keep the paper below both fixed header rows, including 全部翻开. The canvas itself does not reflow with the notice. */
   :root[data-page="open"] .pops { top: calc(var(--top-h) + 132px); }
-  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
+  :where(.rail, .page-shelf, .page-luck, .page-grow, .page-ach, .page-board, .foot, .notice, .memo, #share-pop, .wreck, .story, .coach, .raise, .backup, .mat .btns, .mat-head) :where(button, .dl) { min-height: 40px; }
   .page .pricer button { width: 40px; }
   .s-more summary { min-height: 40px; } .m-place select { min-height: 40px; }
   .subnav { flex: 1 1 100%; } .subnav a { flex: 1; min-width: 0; padding: 0 6px; height: 44px; white-space: nowrap; } .sub-k { display: none; }

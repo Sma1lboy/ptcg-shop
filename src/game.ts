@@ -343,7 +343,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     up: {}, dex: {}, dexPacks: 0, dexSeen: {}, auto: {}, shown: [], heat: {}, heatT: 0, lost: 0, savedAt: clock(), offline: null, away: null, flipT: {}, clerkT: 0, skills: {}, packsBy: {}, miss: {}, ach: {}, feat: {}, branch: { n: 0, fame: 0, got: 0, life: 0, perks: {} },
     debt: DEBT0, owe: DEBT0, loan: 0, week: 1, shopT: 0, billsPaid: 0, loans: [], overdue: null, best: 0, weekRev0: 0, wreck: null, gallery: Array(ROOM_SLOTS).fill(null), galleryAcc: 0, extra: { tickets: 0, idle: 0, offline: 0 }, comm: null, commAt: 0, commPaid: 0, v: SAVE_V });
 
-  let migrated = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
+  let migrated = false, badSave = false, state = load(), luckCache: Luck | null = null, lastTick = state.savedAt, vnow = lastTick, dexN: Record<string, number> | null = null, handN: Record<string, Set<string>> | null = null; // dexN: per-set dex counts, cleared when dexSeen changes // first tick after load credits the time the tab was closed
   // 暂停 (pause): while a story scene plays the shop clock stands still (no walk-ins, no sales, no bill clock, no clerk round, no 行情
   // reroll), unlike 离开, which is the shop trading without you. Set by pause(true) and read only by tick(); not saved.
   let pausedAt: number | null = null;
@@ -375,8 +375,18 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
     return c && typeof c.set === 'string' && typeof c.n === 'string' && typeof c.kind === 'string' && typeof c.r === 'string' && typeof c.name === 'string' && c.key === `${c.set}|${c.n}|${c.kind}` && Number.isFinite(c.price) && c.price! >= 0 ? c as Exhibit : null;
   }
   function fin(v: unknown) { return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0; } // a saved amount of money: a finite number from zero up, or nothing. A declaration: load() runs before any const below it
+  // A save that can't be read is copied to SAVE_KEY.bad before the fresh shop's first save writes over it, and badSave tells the
+  // page (the 存档 panel offers the copy for download). Load runs before any const below, so parse only uses declarations.
   function load(): State {
-    try { const s = JSON.parse(store.getItem(SAVE_KEY)!); if (s && typeof s.cash === 'number') {
+    const raw = store.getItem(SAVE_KEY), st = parse(raw);
+    if (st) return st;
+    if (raw) { badSave = true; try { store.setItem(SAVE_KEY + '.bad', raw); } catch {} }
+    return fresh();
+  }
+  // A save's text → a current State (every older version migrated), or null. strict: an imported file must also be a real save
+  // (it carries savedAt), not any JSON with a cash field.
+  function parse(raw: string | null, strict = false): State | null {
+    try { const s = JSON.parse(raw!); if (s && typeof s.cash === 'number' && Number.isFinite(s.cash) && (!strict || typeof s.savedAt === 'number')) {
         const st = { ...fresh(), ...s };
         if (!s.shelves) {
           let old = s.shelf;
@@ -407,7 +417,7 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
         for (const c of [...st.hits, ...Object.values(st.singles), ...st.shown, ...st.gallery.filter(Boolean)] as { set: string; n: string; name: string }[]) { const d = DATA[c.set]?.cards.find(x => x.n === c.n); if (d) c.name = d.name; } // saves from before the Chinese card names carry the English one
         return st;
       } } catch {}
-    return fresh();
+    return null;
   }
   // Pre-统一货架 saves had one shelf per set ({ qty, pct }) and a 货架 level that deepened all of them. Each set that was on sale
   // gets a shelf of its own (货架 level = sets − RACK_BASE), the old level becomes 加层, and packs that do not fit go to the back room,
@@ -1230,10 +1240,20 @@ export function createGame({ now: clock = Date.now, random = Math.random, storag
   }
 
   function reset() { state = fresh(); luckCache = null; dexN = handN = null; emit(); }
+  // 存档 export/import (the footer's 存档 panel). Export is the save as stored. readSave checks a text without touching the shop, so the
+  // panel can show what is in it first; useSave puts it in place as of now: the time between export and import is not credited as
+  // time away (a restored backup is not a closed tab).
+  function exportSave() { save(); return JSON.stringify(state); }
+  function readSave(text: string) { const m = migrated, st = parse(text, true); migrated = m; return st; }
+  function useSave(st: State) {
+    state = st; luckCache = null; dexN = handN = null; listedRun = 0; pending = []; commHeld = false; badSave = false;
+    lastTick = vnow = clock(); if (pausedAt !== null) pausedAt = lastTick; save(); emit();
+  }
+  const badCopy = () => store.getItem(SAVE_KEY + '.bad'); // the unreadable save's text, kept by the load that couldn't read it
 
   return {
     get state() { return state; }, on: (f: (ev?: GameEvent) => void) => listeners.push(f), now: clock, bonus,
-    ackCardSale,
+    ackCardSale, exportSave, readSave, useSave, badCopy, loadFailed: () => badSave,
     buy, shelve, unshelve, place, setPrice, setCardPrice, open, sell, collect, missing, master, setAuto, dexCount, dexTotal, dexBonusOf, handCount, handDone, handMissing, handFame, cardOdds, HAND_FAME, dexBonus, sellBulk, bulkValue, tick, luck, expectedTally, reset, wholesale, setById,
     list, unlist, fillCase, caseMoves, setCasePct, casePct, setBuyPct, buyPct, binderN, BUY_MIN, BUY_MAX, COUNTER_OPEN, SELLER, BUY_PCT, BINDER, SEEK_N, BILL_KEEP, upgrade, upgradeCost, canUpgrade, growthLock, cardBranchReady, peek, spare, refundable, refundBlock, refundTo, refund, REFUND, ackOffline, leave, back, learn, skill, skillCost, skillMax, canLearn, luckMult, offlineCap,
     clerkNeed, clerkNow, clerkShort, clerkKeep, clerkBudget, clerkRoundSecs, loanFloat, loanWeeks, nextBill, payBill, takeLoan, repay, bankrupt, ackWreck, credit, creditLimit, loanRate, debt0, dueIn, installment,
