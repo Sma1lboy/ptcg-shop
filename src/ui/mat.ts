@@ -236,8 +236,10 @@ const on3D = {
   onLost() {
     table = null; mat.m3d = false; renderMat();
     if (batch()) revealBatch(mat); else if (mat.cards && mat.up.size === mat.cards.length) finish();
+    else if (mat.mode === 'pack' && asked === mat) document.querySelector<HTMLElement>('#mat .pack')?.click(); // the tear asked of the 3D table as it gave up: the 2D pack tears now (the first Space was lost, M3 review)
   },
 };
+let asked: Mat | null = null; // the pack whose tear the 3D table was asked for (Space / Enter / Z), so a fallback mid-tear finishes it
 // Returns false when the 3D table can't run (no WebGL, three.js not loaded yet or at all, reduced motion): the caller draws the 2D mat.
 function mat3D(el: HTMLElement) {
   if (!table) {
@@ -644,7 +646,7 @@ export function bindMatInput() {
       && !t.closest('input, textarea, select, [contenteditable]') && !document.querySelector('dialog:modal, [popover]:not([popover="manual"]):popover-open') && !$('mat').closest('[hidden]')) { e.preventDefault(); putBack(); return; }
     if ((e.code !== 'Space' && !a) || t.closest('input, textarea') || $('mat').closest('[hidden]')) return; // not while another page is showing
     FX.unlock();
-    if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) table!.flip(0); else document.querySelector<HTMLElement>('.pack')?.click(); }
+    if (mat.mode === 'pack') { e.preventDefault(); if (mat.m3d) { asked = mat; table!.flip(0); } else document.querySelector<HTMLElement>('.pack')?.click(); }
     else if (mat.mode === 'cards' && (mat.m3d ? !mat.finished : mat.up.size < mat.cards.length)) { e.preventDefault(); advance(); }
     else if (batch() && mat.m3d && !mat.finished) { e.preventDefault(); if (!run) table!.flip(mat.up.size); }
     else if (held >= 0 && mat.m3d && !t.closest('button, a')) { e.preventDefault(); putBack(); } // a held card: Space / Enter / Z are a tap on the table
