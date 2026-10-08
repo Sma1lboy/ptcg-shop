@@ -7,6 +7,7 @@ import * as FX from '../fx.ts';
 import { html, render } from 'lit-html';
 import { SETS, LOOK } from '../sets.ts';
 import { G, $, money, imgUrl, logoUrl, rar, rarLabel, batchBtn } from './common.ts';
+import { remote } from '../assets.ts';
 import { face, backFace, cap, mark, toHTML } from './card.ts';
 import { showPack } from './share.ts';
 import { mountTable, packFront, ready as threeReady } from '../table3d.js';
@@ -497,8 +498,9 @@ function revealBatch(tok: Mat) {
 }
 
 // ---------- actions (called from events.ts) ----------
-// Warm the cache before the flips (CORS mode, so the share poster can reuse it).
-const warm = (cards: Pull[]) => cards.forEach(c => { if (c.r !== 'E') for (const size of ['low', 'high']) { const i = new Image(); i.crossOrigin = 'anonymous'; i.src = imgUrl(c, size); } });
+// Warm the cache before the flips: the scans the 2D faces show, loaded the way card.ts loads them (CORS mode on the mirror, so
+// the share poster can reuse them; a plain load off it, where the CDN's double CORS header would refuse some, assets.ts).
+const warm = (cards: Pull[]) => cards.forEach(c => { if (c.r !== 'E') for (const size of ['low', 'high']) { const i = new Image(); if (!remote) i.crossOrigin = 'anonymous'; i.src = imgUrl(c, size); } });
 // A pack started from lower down the page (the rail's 进 1 包就开 reached with the keys, which scroll it into view) left the
 // table's head under the sticky top bar: bring the whole table back into view, under the bar.
 function frameMat() {

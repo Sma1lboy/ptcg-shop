@@ -5,7 +5,7 @@
 // images built here, so the mat, the share canvas (share.ts drawImage) and the 3D table (table3d.js, as textures) draw the same picture.
 import { html, svg, render, nothing, type TemplateResult } from 'lit-html';
 import type { Pull } from '../sim.ts';
-import { card as scan } from '../assets.ts';
+import { card as scan, remote } from '../assets.ts';
 import { money, rarLabel } from './common.ts';
 
 type Card = Pick<Pull, 'set' | 'n' | 'name' | 'r' | 'kind'>;
@@ -115,7 +115,7 @@ export function stock(name: string) {
 export function face(c: Card, size: Size, alt = false) {
   const foil = FOIL[c.kind]?.[0], e = c.r === 'E';
   return html`<span class="cf cf-${size}${foil ? ` f-${foil}` : ''}" role=${alt ? 'img' : nothing} aria-label=${alt ? c.name : nothing}>
-    <img class="cf-art" src=${e ? energy(c.name) : scan(c.set, c.n, size === 'big' ? 'high' : 'low')} alt="" crossorigin=${e ? nothing : 'anonymous'}
+    <img class="cf-art" src=${e ? energy(c.name) : scan(c.set, c.n, size === 'big' ? 'high' : 'low')} alt="" crossorigin=${e || remote ? nothing : 'anonymous'}
       decoding="async" loading=${size === 'show' || size === 'list' ? 'lazy' : 'eager'}><span class="cf-miss" aria-hidden="true">${c.name}<small>卡图没加载出来</small></span>${foil ? html`<i class="cf-foil"></i>` : nothing}</span>`;
 }
 export const backFace = () => html`<span class="cf cf-back"><img class="cf-art" src=${back()} alt=""></span>`;

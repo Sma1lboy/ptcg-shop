@@ -1,5 +1,5 @@
 // Share images: the 欧气鉴定 card (欧气 page) and the per-pack poster (开包 table), both drawn on a canvas in the Black/White DS look and shown in one <dialog>. The card is the page's trainer card (sky-blue face, blue title band, the facts on white strips, the verdict word, the owner's portrait, barcode and ID) with BW windows under it (the distribution, the priciest card); the pack poster is one BW window titled with the set. Pixel type at weight 400 with a hard shadow, the White theme's colours whatever theme the viewer has on.
-import { card } from '../assets.ts';
+import { art } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, rarLabel, RAR } from './common.ts';
@@ -49,7 +49,7 @@ export const hits = () => { const t = G.state.tally; return (['MHR', 'SIR', 'HR'
 // Local mirror art is same-origin; the CDN fallback (file://, CodePen) needs a CORS-mode load to keep the canvas exportable.
 const loadOne = (url: string) => new Promise<HTMLImageElement | null>(res => { const i = new Image(); i.crossOrigin = 'anonymous'; i.onload = () => res(i); i.onerror = () => res(null); setTimeout(() => res(null), 5000); i.src = url; });
 async function loadArt(c: { set: string; n: string; name: string }) {
-  for (const size of ['high', 'low']) { const i = await loadOne(card(c.set, c.n, size)); if (i) return i; }
+  for (const size of ['high', 'low']) { const i = await loadOne(art(c.set, c.n, size)); if (i) return i; }
   return loadOne(stock(c.name)); // offline: card.ts's blank stock with the name, the same picture as the 3D table's
 }
 const roundRect = (x: CanvasRenderingContext2D, px: number, y: number, w: number, h: number, r: number) => { x.beginPath(); x.roundRect(px, y, w, h, r); };

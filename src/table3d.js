@@ -201,7 +201,7 @@ function packArt(setId) {
   let logo = null, art = null;
   const paint = () => { drawFront(cv[0].getContext('2d'), look, set, logo, art); drawBack(cv[1].getContext('2d'), look, set, logo); tx[0].needsUpdate = tx[1].needsUpdate = true; };
   paint();
-  Promise.all([loadImg(ASSETS.logo(setId)).then(i => { logo = i; }), loadImg(ASSETS.card(setId, look.chase, 'high')).then(i => { art = i; }), fonts()]).then(paint);
+  Promise.all([loadImg(ASSETS.logo(setId)).then(i => { logo = i; }), loadImg(ASSETS.art(setId, look.chase, 'high')).then(i => { art = i; }), fonts()]).then(paint);
   const mk = (map, orm) => new T.MeshPhysicalMaterial({ map, metalnessMap: orm, roughnessMap: orm, metalness: 1, roughness: 1,
     normalMap: shared.crinkle, normalScale: new T.Vector2(.5, .5), clearcoat: .35, clearcoatRoughness: .22 });
   const dim = mk(tx[0], tx[2]); dim.color.set(0x4B5264); dim.clearcoat = .1; // a pack on the shelf that can't be opened yet: in the lamp's shadow
@@ -214,7 +214,7 @@ const fronts = {};
 export function packFront(setId, w = 240) {
   return (fronts[setId + '@' + w] ||= (async () => {
     const look = LOOK[setId] || LOOK.sv08, set = SETS.find(s => s.id === setId), big = canvasOf(768, Math.round(PH * K));
-    const [logo, art] = await Promise.all([loadImg(ASSETS.logo(setId)), loadImg(ASSETS.card(setId, look.chase, 'high')), fonts()]);
+    const [logo, art] = await Promise.all([loadImg(ASSETS.logo(setId)), loadImg(ASSETS.art(setId, look.chase, 'high')), fonts()]);
     drawFront(big.getContext('2d'), look, set, logo, art);
     const c = canvasOf(w, Math.round(w * big.height / big.width)); c.getContext('2d').drawImage(big, 0, 0, c.width, c.height);
     try { return c.toDataURL('image/webp', .85); } catch { return null; }
@@ -411,7 +411,7 @@ async function svgTex(url) {
 async function loadFace(c) {
   if (c.r === 'E') return svgTex(energySVG(c.name));
   for (const size of ['high', 'low']) {
-    const img = await loadImg(ASSETS.card(c.set, c.n, size));
+    const img = await loadImg(ASSETS.art(c.set, c.n, size)); // textures need CORS: assets.ts art(), not card()
     if (img) { const t = new T.Texture(img); t.colorSpace = T.SRGBColorSpace; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); t.needsUpdate = true; renderer.initTexture(t); return t; }
   }
   const t = await svgTex(stockSVG(c.name)); t.userData.stock = true; return t;
@@ -1653,8 +1653,8 @@ function world() {
     slabs.setMatrixAt(i, m4.compose(at, q, new V3(1, 1, 1)));
     const ins = new T.Mesh(new T.PlaneGeometry(6.8, 10.7), new T.MeshStandardMaterial({ map: t, roughness: .6, envMapIntensity: .3 }));
     ins.position.copy(at).add(new V3(0, 0, .02)); ins.quaternion.copy(q); show.add(ins);
-    // off the CDN (file://, pen) one scan's response carries its CORS header twice and the browser refuses it as a texture: try the other size before leaving the insert blank
-    loadImg(ASSETS.card(set, n, 'low')).then(img => img || loadImg(ASSETS.card(set, n, 'high'))).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
+    // a scan that won't load as a texture (offline; the CDN's double CORS header, assets.ts): try the other size before leaving the insert blank
+    loadImg(ASSETS.art(set, n, 'low')).then(img => img || loadImg(ASSETS.art(set, n, 'high'))).then(img => { if (img) { t.image = slabCanvas(img, grade); t.needsUpdate = true; wake(100); } });
   });
   show.add(slabs, led, new T.Mesh(pane, [glass])); // an array, or three draws the whole box and ignores the groups
 
@@ -1675,7 +1675,7 @@ function world() {
   const kept = new T.Texture(),  inTop = new T.Mesh(new T.PlaneGeometry(CW, CH), new T.MeshStandardMaterial({ map: kept, roughness: .5, envMapIntensity: .4 }));
   inTop.rotation.x = -Math.PI / 2; inTop.position.set(0, .1 + 6 * .16 + .02, 0); tl.add(inTop);
   kept.colorSpace = T.SRGBColorSpace; kept.anisotropy = renderer.capabilities.getMaxAnisotropy(); // no image until the scan loads (an 8×8 stand-in fixed the GPU texture at 8×8: the card came out a grey square)
-  loadImg(ASSETS.card('sv08', '219', 'low')).then(img => { if (img) { kept.image = img; kept.needsUpdate = true; wake(100); } });
+  loadImg(ASSETS.art('sv08', '219', 'low')).then(img => { if (img) { kept.image = img; kept.needsUpdate = true; wake(100); } });
   const slvC = canvasOf(256, 340), slvMap = canvasTex(slvC), slvSide = new T.MeshStandardMaterial({ color: css('--stock'), transparent: true, opacity: .5, roughness: .3 });
   place(new T.Mesh(new T.BoxGeometry(7.2, 1.1, 9.6), [slvSide, slvSide, new T.MeshStandardMaterial({ map: slvMap, roughness: .45, envMapIntensity: .4 }), slvSide, slvSide, slvSide]), 33, TOP + .55, -45, .45);
 

@@ -119,7 +119,7 @@ let seek = 0; // until when a new step may still scroll its button into view
 function place() {
   const pop = $('coach');
   if (!pop.matches(':popover-open') || !anchor) return;
-  const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav');
+  const onMat = !!anchor.closest('#mat'), tab = !!anchor.closest('.nav, .subnav'); // 货柜's 货架/展示柜 sub-tabs too: a 300×310 box from 定价 lay over 展示柜's keys (M3 review 2)
   // before measuring: the strips are shorter, the side popover wider. A tab (the step is on another page) only needs its heading,
   // 「测欧气：到「欧气」页」, on every screen: the full text under a tab covered what the player was reading on this page (成长's
   // 账本, 成就's totals, the 开包 title) and had nothing to do with it.
@@ -174,7 +174,8 @@ function place() {
   // A phone's box over the page's own keys looked like it broke them (账单's and 测欧气's boxes lay over a pack's 再开一包 / 分享, M3
   // review). A box pointing elsewhere (a tab, the bill chip) folds to the one-line strip over the bottom tabs, the one a step on
   // another page uses: the table ends above it and the page's end scrolls clear of it. Hiding the box instead meant 账单 was never seen.
-  if (phone() && !onMat && (tab || anchor.matches('#due')) && pop.dataset.strip !== 'tab' && covers(y, h)) {
+  // A strip under a summary's button folds too (测欧气 on 分享这次开包 lay over 进 1 包马上开, M3 review 2).
+  if (phone() && (tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && pop.dataset.strip !== 'tab' && covers(y, h)) {
     pop.dataset.strip = 'tab'; w = pop.offsetWidth; h = pop.offsetHeight;
     pop.style.left = `${(vw - w) / 2}px`; pop.style.top = `${vh - h - 8}px`; pop.dataset.side = 'free';
   }
