@@ -108,7 +108,7 @@ function normalMap(h, W, H, s, wrap) {
 }
 // Foil crinkles: random short creases, mostly across the pack like a squeezed bag, plus the crimp ridges.
 function crinkleTex() {
-  const W = 512, H = Math.round(W * PH / PW), c = canvasOf(W, H), x = c.getContext('2d');
+  const W = 512, H = Math.round(W * PH / PW), c = canvasOf(W, H), x = c.getContext('2d', { willReadFrequently: true }); // read back below: a CPU canvas, and no console warning
   x.fillStyle = '#808080'; x.fillRect(0, 0, W, H); x.lineCap = 'round';
   for (let i = 0; i < 260; i++) {
     let px = Math.random() * W, py = Math.random() * H, a = (Math.random() - .5) * 1.3 + (Math.random() < .25 ? Math.PI / 2 : 0);
@@ -1515,7 +1515,7 @@ function relayout() {
 // None of the props casts a shadow; the whole world is ~16 draw calls.
 let world0 = null; // theme-dependent textures: { laminate canvas, mat canvas, binder canvas, materials }
 function drawMat(c) {
-  const x = c.getContext('2d'), W = c.width, H = c.height, s = W / MW, ink = css('--mat-ink'), line = a => rgba(ink, a);
+  const x = c.getContext('2d', { willReadFrequently: true }), W = c.width, H = c.height, s = W / MW, ink = css('--mat-ink'), line = a => rgba(ink, a); // redrawn on a theme change, read back each time
   x.fillStyle = css('--mat'); x.fillRect(0, 0, W, H);
   const img = x.getImageData(0, 0, W, H), d = img.data; // rubber grain
   for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 9; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
@@ -1570,7 +1570,7 @@ function drawSleeves(c) {
 // The showcase's deck: card-back felt, lit by the LED strip under the front of the lid, so the pool is brightest at the front edge
 // and behind the slabs, fading to the back corners.
 function drawDeck(c) {
-  const x = c.getContext('2d'), W = c.width, H = c.height;
+  const x = c.getContext('2d', { willReadFrequently: true }), W = c.width, H = c.height;
   x.fillStyle = css('--back-2'); x.fillRect(0, 0, W, H);
   const img = x.getImageData(0, 0, W, H), d = img.data; // felt
   for (let i = 0; i < d.length; i += 4) { const n = (Math.random() - .5) * 7; d[i] += n; d[i + 1] += n; d[i + 2] += n; }
