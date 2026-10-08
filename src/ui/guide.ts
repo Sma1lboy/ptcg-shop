@@ -167,9 +167,28 @@ function place() {
   const top = (onMat && phone() ? anchor : anchor.closest('.summary') ?? anchor).getBoundingClientRect().top;
   const below = !free && (a.bottom + gap + h <= vh - 8 || top - gap - h < 8); // phones: the tabs sit at the bottom, so tab steps open upward
   const x = free ? (vw - w) / 2 : clamp(a.left + a.width / 2 - w / 2, 8, vw - w - 8);
-  pop.style.left = `${x}px`; pop.style.top = `${free ? vh - h - 8 : below ? a.bottom + gap : top - gap - h}px`;
+  let y = free ? vh - h - 8 : below ? a.bottom + gap : top - gap - h;
+  pop.style.left = `${x}px`; pop.style.top = `${y}px`;
   pop.dataset.side = free ? 'free' : below ? 'below' : 'above'; // free: no arrow (the button is up on the page, the box at the bottom; the dashed ring shows which)
   pop.style.setProperty('--ax', `${clamp(a.left + a.width / 2 - x, 16, w - 16)}px`);
+  // A phone's box over the page's own keys looked like it broke them (账单's and 测欧气's boxes lay over a pack's 再开一包 / 分享, M3
+  // review). A box pointing elsewhere (a tab, the bill chip) folds to the one-line strip over the bottom tabs, the one a step on
+  // another page uses: the table ends above it and the page's end scrolls clear of it. Hiding the box instead meant 账单 was never seen.
+  if (phone() && !onMat && (tab || anchor.matches('#due')) && pop.dataset.strip !== 'tab' && covers(y, h)) {
+    pop.dataset.strip = 'tab'; w = pop.offsetWidth; h = pop.offsetHeight;
+    pop.style.left = `${(vw - w) / 2}px`; pop.style.top = `${vh - h - 8}px`; pop.dataset.side = 'free';
+  }
+  // a box at the bottom of a phone: the page's end gets its height, so the footer (存档, 清空存档) scrolls clear of it
+  document.documentElement.style.setProperty('--coach-h', `${pop.dataset.side === 'free' || pop.dataset.strip ? pop.offsetHeight : 0}px`);
+}
+// Whether a box at [y, y + h) across the screen would lie over a key the player can press (not the step's own).
+function covers(y: number, h: number) {
+  for (const el of document.querySelectorAll<HTMLElement>('main :is(button, a[href], input, select, summary), .foot :is(button, summary), .pops :is(button, a[href])')) {
+    if (el === anchor || el.contains(anchor) || el.closest('[inert], [hidden]') || (el as HTMLButtonElement).disabled) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width && r.bottom > y + 4 && r.top < y + h - 4) return true;
+  }
+  return false;
 }
 
 // the 3D table moves its labels with an inline transform, after this renders and whenever the camera settles: follow them

@@ -629,6 +629,9 @@ button:disabled { cursor: not-allowed; }
 .pops::before { content: ""; position: absolute; z-index: 1; top: 0; left: -8px; right: -8px; height: 12px; box-sizing: border-box; border: 2px solid #101318;
   border-radius: 6px; background: linear-gradient(#050608, #050608) center / calc(100% - 16px) 2px no-repeat, var(--hud); box-shadow: 0 3px 0 rgba(0, 0, 0, .14);
   animation: slot .28s cubic-bezier(.23, 1, .32, 1) backwards; }
+/* the slot is for paper only: 店里的话 alone, or paper moved out of the slot by the rules below, left a bare dark bar reviewers read as a
+   broken widget (M3 review) */
+.pops:not(:has(> :is(#notice, #slip, #ach-pop):not([hidden])))::before { display: none; }
 /* the closing report is the register's end-of-day receipt: white thermal paper in both themes (like the mat stays dark), torn edge, no box */
 :is(.notice, .slip) { --ink: var(--paper-ink); --muted: var(--paper-muted); --gain: var(--paper-gain); --loss: var(--paper-loss); --line-strong: rgba(20, 32, 58, .34); --hover: rgba(20, 32, 58, .05); color: var(--ink); }
 :is(.notice, .slip)[hidden] { display: none; }
@@ -1613,7 +1616,7 @@ button:disabled { cursor: not-allowed; }
   /* the guide's strip over the bottom tabs (a step on another page) sits where the table's summary keys are: the table ends above it */
   :root:has(#coach[data-strip="tab"]:popover-open) .mat { height: calc(100dvh - var(--top-h) - var(--nav-h) - env(safe-area-inset-bottom) - 24px - 64px); }
   /* and the page's end scrolls clear of the strip (it lay over 清空存档) */
-  :root:has(#coach[data-strip]:popover-open) body { padding-bottom: 64px; }
+  :root:has(#coach:popover-open) body { padding-bottom: calc(var(--coach-h, 0px) + 16px); } /* its measured height at the bottom (guide.ts place); keyed on the var, not on data-side, which place() resets while it measures (the page snapped back 158px) */
   /* Long paper scrolls with the page. Achievement labels remain briefly visible under the top bar. */
   .pops:has(> #notice:not([hidden])) > .ach-pop:not([hidden]),
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])) > .ach-pop:not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 8px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
@@ -1708,7 +1711,11 @@ button:disabled { cursor: not-allowed; }
   :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { display: block; height: var(--memo-h, 160px); }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) { position: absolute; z-index: 9; top: var(--lane-top); left: var(--gap); right: var(--gap); width: auto; max-width: 400px; margin-inline: auto; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 132px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])):has(> #notice:not([hidden])) > #ach-pop:not([hidden]) { top: calc(var(--top-h) + 8px); }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: calc(var(--top-h) + 8px); } /* under the bar, not over the cards just turned */
+  :root[data-page="open"] .pops:has(> #memo:not([hidden]))::before { display: none; } /* everything that prints went fixed: the slot would hang over the box alone */
+  :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])):not(:has(> :is(#notice, #slip):not([hidden])))::before { display: none; } /* the label went fixed under the bar: the box alone has no slot */
+  /* a label on the 开包 page (no box): under the top bar, over the table's heading row, not the first row of cards just turned (M3 review) */
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: calc(var(--top-h) + 4px); }
 }
 @media (orientation: landscape) and (max-height: 520px) {
   /* the row gap is 12 here and the slot's own padding 8 */
