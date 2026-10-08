@@ -25,6 +25,10 @@ const nick = () => store.name || `店长${String(parseInt(store.id.slice(0, 6), 
 let msg: { ok: boolean; text: string } | null = null, msgT = 0;
 let shown: { label: string; text: string } | null = null; // the last thing copied or shared: kept in a field the player can select when the browser refuses to copy
 let selectShown = false;
+// 邀请: a friend's link opened on a shop that hasn't sold or opened anything is the newcomer's first look at the game. The board would
+// show them their own row of zeros; a box on top says what the game is, who invited them, and which key starts it. Gone once they trade.
+let invite = '';
+const fresh = () => !G.revenue() && !Object.values(G.state.opened).some(n => n > 0) && !Object.keys(G.state.ach).length && !G.state.branch.life && !G.state.billsPaid; // a shop gone bankrupt or branched starts at zero too: not a newcomer
 
 function note(ok: boolean, text: string) {
   msg = { ok, text }; clearTimeout(msgT);
@@ -121,9 +125,17 @@ function board(me: B.Snap) {
     <p class="bd-note">榜上的数字都是各人自己报的，只在这台设备上排，不会上传。</p></section>`;
 }
 
+function hello() {
+  if (!invite || !fresh()) return nothing;
+  return html`<section class="bd-hi"><h2>${invite} 邀你来比开卡店</h2>
+    <p>这是一个宝可梦卡牌店的经营小游戏：你接手一家欠着债的卡店，进货、标价把整包卖给客人，也能自己拆包碰运气。概率按真实开包统计，卡价按市价。</p>
+    <p>营业额、欧气、图鉴这几项会和 ${invite} 排在下面的榜上。第一步：去「货柜」进货上架。</p>
+    <p class="bd-btns"><button type="button" class="primary" @click=${() => go('shelf')}>去货柜进货</button></p></section>`;
+}
+
 function draw() {
   const me = own();
-  render(html`${card(me)}
+  render(html`${hello()}${card(me)}
     <section class="bd-in"><h2>导入好友</h2>
       <form class="bd-form" @submit=${(e: SubmitEvent) => {
         e.preventDefault();
@@ -145,7 +157,7 @@ export function initBoard() {
   addEventListener('hashchange', renderBoard);
   const url = new URL(location.href), q = url.searchParams.get('board');
   if (q !== null) {
-    take(q);
+    if (take(q) && fresh()) { const d = B.decode(q); invite = d.ok ? d.snap.name : ''; }
     url.searchParams.delete('board');
     try { history.replaceState(null, '', url.pathname + url.search + url.hash); } catch { /* a sandboxed frame: the link stays, importing it again just replaces the same entry */ }
     if (currentPage() !== 'board') go('board');

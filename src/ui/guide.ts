@@ -182,7 +182,8 @@ export function renderGuide() {
   // an achievement label printing (4.8 s, #ach-pop) has the floor too: the bubble lay over it on 货柜; on a phone the shop's message box too,
   // but only while it is on screen (it hangs at the top of the page and scrolls away: the bubble used to vanish with the box far above)
   memoSeen = memoOnScreen();
-  const printing = document.getElementById('ach-pop')?.hidden === false || memoSeen;
+  // 排行's invite box (board.ts, a friend's link on a new shop) already says the first step with its own yellow key: the bubble covered its heading
+  const printing = document.getElementById('ach-pop')?.hidden === false || memoSeen || (page() === 'board' && !!document.querySelector('#board .bd-hi'));
   // 账单's 8 s count only while its bubble is up: hidden behind the pack, an achievement label or the phone's box they ran out unseen and a
   // fresh-save reviewer never read the bill step at all (it gave way to 补货 on the first empty shelf)
   const unseen = () => { if (step?.h === '账单') billAt = 0; };

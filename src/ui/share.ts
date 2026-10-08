@@ -300,8 +300,9 @@ async function pop(draw: () => Promise<string>, text: string, file: string) {
   const url = await draw(), png = new File([await (await fetch(url)).blob()], file, { type: 'image/png' });
   const canShare = !!navigator.canShare?.({ files: [png] }), touch = matchMedia('(pointer: coarse)').matches;
   dlg.innerHTML = `<img src="${url}" alt="${text}"><div class="btns">${canShare ? '<button type="button" class="primary" id="pop-share">分享图片</button>' : ''}${canShare && touch ? '' : `<a class="dl${canShare ? '' : ' primary'}" href="${url}" download="${file}">下载 PNG</a>`}<button type="button" id="pop-copy">复制文字</button><button type="button" class="ghost" data-close="1">关闭</button></div>${touch ? '<p class="muted pop-hint">也可以长按图片保存到相册</p>' : ''}`;
-  $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + location.href).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
-  if (canShare) $('pop-share').onclick = () => navigator.share({ files: [png], text }).catch(() => null); // cancelled sheet rejects; nothing to do
+  const home = location.href.split(/[?#]/)[0]; // where the game is: the native sheet carried only the picture and the line, and whoever got it couldn't find the game
+  $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + home).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
+  if (canShare) $('pop-share').onclick = () => navigator.share({ files: [png], text: `${text} ${home}` }).catch(() => null); // cancelled sheet rejects; nothing to do
 }
 export const showPack = (d: ShareSpec) => pop(() => drawPack(d), `我在 PTCG卡店模拟器 开出了 ${d.best.name}（${money(d.best.price)}）；${d.n > 1 ? '其中最好的一包' : '这包'}${d.rank}`, 'ptcg-shop-pack.png');
 export const showLuck = () => {
