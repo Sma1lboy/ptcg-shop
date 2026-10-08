@@ -174,8 +174,10 @@ function place() {
   // A phone's box over the page's own keys looked like it broke them (账单's and 测欧气's boxes lay over a pack's 再开一包 / 分享, M3
   // review). A box pointing elsewhere (a tab, the bill chip) folds to the one-line strip over the bottom tabs, the one a step on
   // another page uses: the table ends above it and the page's end scrolls clear of it. Hiding the box instead meant 账单 was never seen.
-  // A strip under a summary's button folds too (测欧气 on 分享这次开包 lay over 进 1 包马上开, M3 review 2).
-  if (phone() && (tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && pop.dataset.strip !== 'tab' && covers(y, h)) {
+  // A strip under a summary's button folds too (测欧气 on 分享这次开包 lay over 进 1 包马上开, M3 review 2). So does any box whose button
+  // the player has scrolled away from (a 300×266 box from 测欧气 lay over the footer's 存档 at the page's end, M3 review 3): it points at nothing.
+  const away = a.bottom < 0 || a.top > vh;
+  if (phone() && pop.dataset.strip !== 'tab' && (away || ((tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && covers(y, h)))) {
     pop.dataset.strip = 'tab'; w = pop.offsetWidth; h = pop.offsetHeight;
     pop.style.left = `${(vw - w) / 2}px`; pop.style.top = `${vh - h - 8}px`; pop.dataset.side = 'free';
   }

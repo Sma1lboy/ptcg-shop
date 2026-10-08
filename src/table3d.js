@@ -1407,16 +1407,18 @@ function tap(e) {
 // raf is -1 while a frame runs, so a wake() from inside it (particles spawned by a show) doesn't queue a second one; a frame
 // that throws still hands the loop back (the error surfaces in the console, the next wake() starts it again).
 // 太卡就换 2D (M3): the gaps between frames of a running loop (not the first SLOW_SKIP after it starts, which compile shaders and
-// upload textures; not while the page is hidden or the table scrolled away; not a gap over 250 ms, which is the browser pausing
+// upload textures; not while the page is hidden or the table scrolled away; not a gap over 1.5 s, which is the browser pausing
 // us) are kept for the last SLOW_N frames. If their median is under SLOW_FPS the table gives up the way a lost context does:
-// the 2D mat takes the pack where it is and keeps the table for the rest of the session.
-const SLOW_N = 90, SLOW_SKIP = 20, SLOW_FPS = 30;
+// the 2D mat takes the pack where it is and keeps the table for the rest of the session. A table under 10 fps (software
+// WebGL: 2.5 fps, 400 ms a frame, which the old 250 ms cut-off threw away as pauses, M3 review 3) gives up after SLOW_Q frames.
+const SLOW_N = 90, SLOW_Q = 15, SLOW_SKIP = 20, SLOW_FPS = 30;
 let prevT = 0, warmN = 0, gaps = [];
+const median = n => { const s = gaps.slice(-n).sort((a, b) => a - b); return s[s.length >> 1]; };
 function slow(t) {
   if (!prevT || document.hidden || !seen || ++warmN <= SLOW_SKIP) return false;
-  const g = t - prevT; if (g > 250) return false;
+  const g = t - prevT; if (g > 1500) return false;
   gaps.push(g); if (gaps.length > SLOW_N) gaps.shift();
-  return gaps.length === SLOW_N && [...gaps].sort((a, b) => a - b)[SLOW_N >> 1] > 1000 / SLOW_FPS + 1; // +1: a 30 Hz screen's 33.3 ms passes
+  return (gaps.length >= SLOW_Q && median(SLOW_Q) > 100) || (gaps.length === SLOW_N && median(SLOW_N) > 1000 / SLOW_FPS + 1); // +1: a 30 Hz screen's 33.3 ms passes
 }
 function frame(t) {
   raf = -1; let again = false;

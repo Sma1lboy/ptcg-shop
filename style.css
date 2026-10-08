@@ -1715,8 +1715,12 @@ button:disabled { cursor: not-allowed; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: calc(var(--top-h) + 8px); } /* under the bar, not over the cards just turned */
   :root[data-page="open"] .pops:has(> #memo:not([hidden]))::before { display: none; } /* everything that prints went fixed: the slot would hang over the box alone */
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])):not(:has(> :is(#notice, #slip):not([hidden])))::before { display: none; } /* the label went fixed under the bar: the box alone has no slot */
-  /* a label on the 开包 page (no box): under the top bar, over the table's heading row, not the first row of cards just turned (M3 review) */
-  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: calc(var(--top-h) + 4px); }
+  /* a label on the 开包 page (no box): a small toast over the bottom tabs for its 4.8 s. Under the top bar it lay over the first row of
+     cards just turned (M3 review), and on the 2D mat over the stage card the page had scrolled up to (M3 review 3); the tabs are not
+     what anyone presses while a pack's result is being read */
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) { top: auto; bottom: env(safe-area-inset-bottom); padding-top: 0; }
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden])))::before { display: none; }
+  :root[data-page="open"] .pops:not(:has(> :is(#memo, #notice, #slip):not([hidden]))) > #ach-pop { zoom: .6; } /* no taller than the tabs (56px): the rail's 开 1 包 sits right above them */
 }
 @media (orientation: landscape) and (max-height: 520px) {
   /* the row gap is 12 here and the slot's own padding 8 */
