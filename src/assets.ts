@@ -6,6 +6,9 @@
 // of those fails. A plain <img> makes no CORS check: card.ts and mat.ts's warm-up load remote art that way (`remote`).
 declare const __REMOTE_ASSETS__: boolean;
 export const remote = __REMOTE_ASSETS__ || location.protocol === 'file:';
+// Where the game lives, for share text and 排行 links: a double-clicked dist or the pen has no address to send (file:///Users/…), so
+// the public one (public/CNAME) stands in
+export const home = () => remote ? 'https://pcards.sma1lboy.me/' : location.href.split(/[?#]/)[0];
 // The CDN files each set under its series, which is the set id's letter prefix (sv08 → sv, me01 → me); the mirror has no series level.
 const base = (set: string) => remote ? `https://assets.tcgdex.net/en/${set.match(/^[a-z]+/)![0]}/` : 'assets/tcg/';
 // The CDN has no file for these two (404, swept 2026-10-08; the mirror has them): off the mirror the other size stands in

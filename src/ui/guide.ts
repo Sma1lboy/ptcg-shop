@@ -177,7 +177,7 @@ function place() {
   // A strip under a summary's button folds too (测欧气 on 分享这次开包 lay over 进 1 包马上开, M3 review 2). So does any box whose button
   // the player has scrolled away from (a 300×266 box from 测欧气 lay over the footer's 存档 at the page's end, M3 review 3): it points at nothing.
   const away = a.bottom < 0 || a.top > vh;
-  if (phone() && pop.dataset.strip !== 'tab' && (away || ((tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && covers(y, h)))) {
+  if (phone() && (pop.dataset.strip !== 'tab' || (away && anchor.closest('.subnav'))) && (away || ((tab || anchor.matches('#due') || pop.dataset.strip === 'mat') && covers(y, h)))) { // 货柜's sub-tab scrolls with the page, its strip went with it (M3 review 4)
     pop.dataset.strip = 'tab'; w = pop.offsetWidth; h = pop.offsetHeight;
     pop.style.left = `${(vw - w) / 2}px`; pop.style.top = `${vh - h - 8}px`; pop.dataset.side = 'free';
   }

@@ -1712,7 +1712,8 @@ button:disabled { cursor: not-allowed; }
   :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { display: block; height: var(--memo-h, 160px); }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) { position: absolute; z-index: 9; top: var(--lane-top); left: var(--gap); right: var(--gap); width: auto; max-width: 400px; margin-inline: auto; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { position: fixed; z-index: 16; top: calc(var(--top-h) + 132px); left: 16px; right: 16px; max-width: 400px; margin-inline: auto; }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: calc(var(--top-h) + 8px); } /* under the bar, not over the cards just turned */
+  /* the label: the bottom toast below, box or no box (the first pack always has 第一笔生意 up: under the bar it still lay over the 2D stage card, M3 review 4) */
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > #ach-pop:not([hidden]) { top: auto; bottom: env(safe-area-inset-bottom); left: 16px; right: 16px; zoom: .6; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden]))::before { display: none; } /* everything that prints went fixed: the slot would hang over the box alone */
   :root:not([data-page="open"]) .pops:has(> #memo:not([hidden])):not(:has(> :is(#notice, #slip):not([hidden])))::before { display: none; } /* the label went fixed under the bar: the box alone has no slot */
   /* a label on the 开包 page (no box): a small toast over the bottom tabs for its 4.8 s. Under the top bar it lay over the first row of
@@ -1725,7 +1726,7 @@ button:disabled { cursor: not-allowed; }
 @media (orientation: landscape) and (max-height: 520px) {
   /* the row gap is 12 here and the slot's own padding 8 */
   :root[data-page="open"]:has(#memo:not([hidden])) .page-open::before { height: calc(var(--memo-h, 160px) + 8px); }
-  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { top: calc(var(--top-h) + 8px); right: calc(clamp(200px, 30vw, 280px) + 14px); left: auto; width: min(300px, 42vw); max-width: none; margin: 0; }
+  :root[data-page="open"] .pops:has(> #memo:not([hidden])) > :is(#notice, #slip, #ach-pop):not([hidden]) { top: calc(var(--top-h) + 8px); bottom: auto; right: calc(clamp(200px, 30vw, 280px) + 14px); left: auto; width: min(300px, 42vw); max-width: none; margin: 0; zoom: 1; }
   :root[data-page="open"] .pops:has(> #memo:not([hidden])):has(> #ach-pop:not([hidden])) > :is(#notice, #slip):not([hidden]) { top: calc(var(--top-h) + 108px); }
 }
 

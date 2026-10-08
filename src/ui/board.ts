@@ -6,6 +6,7 @@ import { html, render, nothing } from 'lit-html';
 import { SETS } from '../sets.ts';
 import { ACH } from '../achievements.ts';
 import * as B from '../board.ts';
+import { home } from '../assets.ts';
 import { G, $, money } from './common.ts';
 import { currentPage, go } from './layout.ts';
 
@@ -74,10 +75,10 @@ async function copy(text: string, label: string) {
 
 const own = () => B.snapshot(G, store.id, nick());
 const code = () => B.encode(own());
-const linkOf = () => B.link(location.href, code());
+const linkOf = () => B.link(home(), code());
 
 function share() {
-  const c = code(), url = B.link(location.href, c);
+  const c = code(), url = B.link(home(), c);
   navigator.share({ title: 'PTCG卡店 排行', text: `${nick()} 的 PTCG卡店 排行码：${c}`, url }).catch((e: unknown) => { if ((e as Error)?.name !== 'AbortError') copy(url, '链接'); });
 }
 

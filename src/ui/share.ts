@@ -1,5 +1,5 @@
 // Share images: the 欧气鉴定 card (欧气 page) and the per-pack poster (开包 table), both drawn on a canvas in the Black/White DS look and shown in one <dialog>. The card is the page's trainer card (sky-blue face, blue title band, the facts on white strips, the verdict word, the owner's portrait, barcode and ID) with BW windows under it (the distribution, the priciest card); the pack poster is one BW window titled with the set. Pixel type at weight 400 with a hard shadow, the White theme's colours whatever theme the viewer has on.
-import { art } from '../assets.ts';
+import { art, home as where } from '../assets.ts';
 import { SETS } from '../sets.ts';
 import * as S from '../sim.ts';
 import { G, $, money, rarLabel, RAR } from './common.ts';
@@ -300,7 +300,7 @@ async function pop(draw: () => Promise<string>, text: string, file: string) {
   const url = await draw(), png = new File([await (await fetch(url)).blob()], file, { type: 'image/png' });
   const canShare = !!navigator.canShare?.({ files: [png] }), touch = matchMedia('(pointer: coarse)').matches;
   dlg.innerHTML = `<img src="${url}" alt="${text}"><div class="btns">${canShare ? '<button type="button" class="primary" id="pop-share">分享图片</button>' : ''}${canShare && touch ? '' : `<a class="dl${canShare ? '' : ' primary'}" href="${url}" download="${file}">下载 PNG</a>`}<button type="button" id="pop-copy">复制文字</button><button type="button" class="ghost" data-close="1">关闭</button></div>${touch ? '<p class="muted pop-hint">也可以长按图片保存到相册</p>' : ''}`;
-  const home = location.href.split(/[?#]/)[0]; // where the game is: the native sheet carried only the picture and the line, and whoever got it couldn't find the game
+  const home = where(); // where the game is: the native sheet carried only the picture and the line, and whoever got it couldn't find the game
   $('pop-copy').onclick = e => navigator.clipboard?.writeText(text + ' ' + home).then(() => { (e.target as HTMLElement).textContent = '已复制'; });
   if (canShare) $('pop-share').onclick = () => navigator.share({ files: [png], text: `${text} ${home}` }).catch(() => null); // cancelled sheet rejects; nothing to do
 }
